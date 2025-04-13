@@ -1,0 +1,144 @@
+x-rpc-provider: &rpc-provider
+  build:
+    context: build/repos/igra-rpc-provider
+    dockerfile: ../../Dockerfile.rpc-provider
+  image: rpc-provider
+  environment:
+    - RUST_LOG=debug
+  expose:
+    - "8535"
+  networks:
+    - igra-network
+    - traefik-network
+  logging:
+    driver: "syslog"
+    options:
+      tag: "rpc-provider/{{.ImageName}}/{{.Name}}/{{.ID}}"
+  labels:
+    - "traefik.enable=true"
+    - >
+      traefik.http.routers.rpc.rule=
+      PathPrefix(`/9fb27a48631c486b9e5937ac140829d6`) ||
+      PathPrefix(`/ad32094f78934ba484bd16c97e20f056`) ||
+      PathPrefix(`/e9c4658047e74271b58f203648ac1b3f`) ||
+      PathPrefix(`/f73ad68c74924aa9b3e9a12058cf294f`) ||
+      PathPrefix(`/17abe38d29cf4037b7045ea621c97f50`) ||
+      PathPrefix(`/49df2873ab7946598e0f1ac65b02d14e`) ||
+      PathPrefix(`/a2e19f37d58648c9b71c3a5f902d140e`) ||
+      PathPrefix(`/c4201b9fea7a4a5f801d2394876e39b4`) ||
+      PathPrefix(`/2b8d3945f0174ac8ae9c470d2856e90c`) ||
+      PathPrefix(`/85740ace9d164ba59e0c1f39d72b16a3`)
+    - "traefik.http.routers.rpc.entrypoints=rpc"
+    - "traefik.http.routers.rpc.middlewares=strip-token"
+    - "traefik.http.services.rpc.loadbalancer.server.port=8535"
+
+x-kaswallet: &kaswallet
+  build:
+    context: build/repos/kaswallet
+    dockerfile: ../../Dockerfile.kaswallet
+  image: kaswallet
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  environment:
+    - RUST_LOG=debug
+  expose:
+    - "8082"
+  command: ["--devnet", "--logs-level=debug", "--keys-file", "/app/keys.json", "--server", "ws://host.docker.internal:17610", "--listen", "0.0.0.0:8082"]
+  networks:
+    - igra-network
+  logging:
+    driver: "syslog"
+    options:
+      tag: "kaswallet/{{.ImageName}}/{{.Name}}/{{.ID}}"
+
+services:
+
+  rpc-provider-0:
+    <<: *rpc-provider
+    container_name: rpc-provider-0
+    environment:
+      - KASWALLET_PASSWORD=''
+    depends_on:
+      - kaswallet-0
+
+  kaswallet-0:
+    <<: *kaswallet
+    container_name: kaswallet-0
+    volumes:
+      - ./keys/keys.kaswallet-0.json:/app/keys.json
+
+  rpc-provider-1:
+    <<: *rpc-provider
+    container_name: rpc-provider-1
+    environment:
+      - KASWALLET_PASSWORD=''
+    depends_on:
+      - kaswallet-1
+
+  kaswallet-1:
+    <<: *kaswallet
+    container_name: kaswallet-1
+    volumes:
+      - ./keys/keys.kasswallet-1.json:/app/keys.json
+
+  rpc-provider-2:
+    <<: *rpc-provider
+    container_name: rpc-provider-2
+    environment:
+      - KASWALLET_PASSWORD=''
+    depends_on:
+      - kaswallet-2
+
+  kaswallet-2:
+    <<: *kaswallet
+    container_name: kaswallet-2
+    volumes:
+      - ./keys/keys.kasswallet-2.json:/app/keys.json
+
+  rpc-provider-3:
+    <<: *rpc-provider
+    container_name: rpc-provider-3
+    environment:
+      - KASWALLET_PASSWORD=''
+    depends_on:
+      - kaswallet-3
+
+  kaswallet-3:
+    <<: *kaswallet
+    container_name: kaswallet-3
+    volumes:
+      - ./keys/keys.kasswallet-3.json:/app/keys.json
+
+  rpc-provider-4:
+    <<: *rpc-provider
+    container_name: rpc-provider-4
+    environment:
+      - KASWALLET_PASSWORD=''
+    depends_on:
+      - kaswallet-4
+
+  kaswallet-4:
+    <<: *kaswallet
+    container_name: kaswallet-4
+    volumes:
+      - ./keys/keys.kasswallet-4.json:/app/keys.json
+
+  rpc-provider-5:
+    <<: *rpc-provider
+    container_name: rpc-provider-5
+    environment:
+      - KASWALLET_PASSWORD=''
+    depends_on:
+      - kaswallet-5
+
+  kaswallet-5:
+    <<: *kaswallet
+    container_name: kaswallet-5
+    volumes:
+      - ./keys/keys.kasswallet-5.json:/app/keys.json
+
+networks:
+  igra-network:
+    external: true
+  traefik-network:
+    external: true

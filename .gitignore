@@ -1,3 +1,6 @@
 repos/
 jwt.hex
 keys.json
+
+keys/
+!keys/readme.txt

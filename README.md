@@ -2,24 +2,34 @@
 
 ## Overview
 
-Igra Orchestra is a system that orchestrates the following services:
-- **block-builder**: A custom block builder service ([GitHub](https://github.com/IgraLabs/block-builder))
-- **execution-layer**: A reth-based execution layer ([GitHub](https://github.com/IgraLabs/execution-layer))
-- **kaswallet**: An internal wallet service for Igra L1 ([GitHub](https://github.com/IgraLabs/kaswallet))
-- **rpc-provider**: RPC provider for client interactions ([GitHub](https://github.com/IgraLabs/igra-rpc-provider))
-- **viaduct**: A service that monitors Kaspa L1, extracts L2-relevant data, and ensures reliable transmission to the L2 network ([GitHub](https://github.com/IgraLabs/rusty-kaspa-private))
+IGRA Orchestra orchestrates a modular system of services that together support the IGRA Devnet protocol. It includes:
 
-This guide explains how to set up and run the system locally for development.
+### 🧠 IGRA Core Services
+- **block-builder** — L2 block producer ([GitHub](https://github.com/IgraLabs/block-builder))
+- **execution-layer** — reth-based L2 execution layer ([GitHub](https://github.com/IgraLabs/execution-layer))
+- **rpc-provider** — RPC provider for user interactions ([GitHub](https://github.com/IgraLabs/igra-rpc-provider))
+- **kaswallet** — L1 wallet acting as transaction relayer ([GitHub](https://github.com/IgraLabs/kaswallet))
+- **viaduct** — extracts L2-relevant data from L1  ([GitHub](https://github.com/IgraLabs/rusty-kaspa-private))
+
+### 🔌 Extensions (Optional)
+- **KASPA Explorer** — set of services of the L1 block explorer
+- **Dynamic workers** — additional `rpc-provider + kaswallet` instances
+
+This guide explains how to set up and run the full system in a local development environment.
+
+---
 
 ## Prerequisites
 
 - Git
-- Docker & Docker Compose
-- SSH access to GitHub repositories
+- Docker & Docker Compose v2+
+- SSH access to Igralabs GitHub repositories
 
-## Setup Process
+---
 
-### 1. Clone This Repository
+## Setup
+
+### 1. Clone the Repository
 
 ```bash
 git clone git@github.com:IgraLabs/igra-orchestra.git
@@ -28,130 +38,129 @@ cd igra-orchestra
 
 ### 2. Create JWT Secret
 
-The JWT secret is used for secure communication between services:
+Used for authentication between block-builder and execution-layer.
 
 ```bash
-# Generate JWT secret
-openssl rand -hex 32 > jwt.hex
-
-# Set proper permissions
-chmod 600 jwt.hex
+mkdir -p keys
+openssl rand -hex 32 > keys/jwt.hex
+chmod 600 keys/jwt.hex
 ```
 
-### 3. Run Setup Script
+### 3. Clone Required Repositories
 
-This script clones the service repositories and checks out specified branches:
+Run the setup script to clone dependent services repos.
 
 ```bash
-# Make script executable
+cd build/
 chmod +x setup-repos.sh
 
-# Run with default branches
+# Use default branches ..
 ./setup-repos.sh
 
-# Or specify custom branches (in order: block-builder, execution-layer, kaswallet, igra-rpc-provider, rusty-kaspa)
-./setup-repos.sh main main main branch_name another_branch
+# .. or specific branches
+# for: block-builder, execution-layer, kaswallet, igra-rpc-provider, rusty-kaspa
+./setup-repos.sh main main main dev featureX
 ```
 
-### 4. Setup Wallet Keys
+---
 
-The system uses a keys.json file for the kaswallet service. A default one is provided, but you can create your own if needed.
+## Configuration
 
-### 5. Build and Run Services
+### 🔐 Wallet Key Files
+
+Each `kaswallet` instance (core or worker) requires a distinct JSON key file:
+
+- **Core** wallet: `keys.core.json`
+- **Worker 1** wallet: `keys.worker1.json`
+- and so on...
+
+Each is mounted as `/app/keys.json` inside the container.
+
+Default keys are provided, but you can create and fund with KAS your own if needed.
+
+---
+
+## Running Services
+
+### 🔧 Start Core Services
 
 ```bash
-# Start the services
-docker compose up
-
-# Or run in detached mode
-docker compose up -d
-
-# To rebuild containers
-docker compose up --build
+scripts/dev.sh up
 ```
 
-## Component Details
+This launches all core components: `execution-layer`, `block-builder`, `viaduct`, `rpc-provider`, `kaswallet`, `traefik`.
 
-### JWT Authentication
-
-JWT is used for secure authentication between the block-builder and execution-layer. The same JWT secret must be mounted to both services.
-
-- In block-builder: `/app/jwt.hex`
-- In execution-layer: `/root/reth/jwt.hex`
-
-### Block Builder
-
-- Built from source in the block-builder repository
-- Connects to the execution layer using the JWT for secure communication
-- Listens on port 8561
-
-### Execution Layer
-
-- Uses the ghcr.io/paradigmxyz/reth image
-- Runs with a custom genesis configuration
-- Uses a startup script from the repository
-- Exposes port 9001 for metrics
-
-### RPC Provider
-
-- Provides RPC endpoints for client interaction
-- Listens on port 8535
-- Depends on kaswallet service
-
-### Kaswallet
-
-- Handles key management
-- Uses a keys.json file for storing keys
-- Listens on port 8082 (temporary until we fix access to the kaswallet service inside the docker network)
-
-### Viaduct
-
-- Built from rusty-kaspa
-- Provides connectivity to the Kaspa network
-- Uses persistent storage for blockchain data
-
-## Maintenance
-
-### Updating Repositories
-
-To update repositories to the latest code:
+### 🔁 Start With N Workers
 
 ```bash
-# Pull latest changes for all components (using their default branches)
-./setup-repos.sh
+scripts/dev.sh with-workers 1 2 3
 ```
 
-### Cleaning Up
+This brings up additional `rpc-provider-N` + `kaswallet-N` containers behind the load balancer.
+
+### 🧼 Stop Everything
 
 ```bash
-# Stop and remove containers
-docker compose down
-
-# Remove volumes as well
-docker compose down -v
+scripts/dev.sh down
 ```
+
+Or to clean all containers/volumes:
+
+```bash
+scripts/dev.sh clean
+```
+
+---
+
+## Access Control & Routing
+
+### 🔑 Access Tokens
+
+RPC requests URLs must begin with a valid access token, e.g.:
+
+```
+http://localhost:8545/9fb27a48631c486b9e5937ac140829d6/eth_call
+```
+
+There are 10 supported tokens. Traefik strips the token and forwards the request to an available worker.
+
+---
+
+## Component Overview
+
+- **execution-layer**: reth node with custom genesis, JWT-auth secured
+- **block-builder**: signs L2 blocks using `jwt.hex`, exposed on port 8561
+- **rpc-provider**: validates transactions and proxies Ethereum RPC
+- **kaswallet**: submits valid transactions to L1 via WebSocket
+- **viaduct**: tracks KASPA DAG and drives forward sync
+- **traefik**: validates token routes and balances requests
+- **KASPA explorer** *(optional)*: browser frontend and REST/WS backend
+
+---
 
 ## Troubleshooting
 
-### Container Name Conflicts
-
-If you encounter container name conflicts:
+### 🚫 Missing Keys
 
 ```bash
-# Remove existing containers
-docker rm -f block-builder execution-layer rpc-provider kaswallet viaduct
-
-# Then try again
-docker compose up
+scripts/dev.sh with-workers 1 2
+# => ❌ Missing key file: ../keys.worker2.json
 ```
 
-### Volume Mount Issues
+Each `kaswallet` must have its corresponding key file.
 
-If you have problems with volume mounts:
+Ensure `jwt.hex` has the mode 600.
 
-1. Ensure files exist and have proper permissions
-2. For jwt.hex, ensure it has mode 600
-3. Check that paths in docker-compose.yml match your directory structure
+Check files exist, they are accessible, files paths in `docker-compose.*.yml` files match your directory structure.
+
+
+### 🔄 Volume Mount Issues
+
+- Ensure `keys/*.json` and `keys/jwt.hex` exist
+- Use absolute or relative paths properly
+- `chmod 600 keys/jwt.hex`
+
+---
 
 ## License
 

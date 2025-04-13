@@ -1,0 +1,79 @@
+services:
+  execution-layer:
+    container_name: execution-layer
+    image: ghcr.io/paradigmxyz/reth
+    entrypoint: /root/reth/run-igra-dev-el.sh
+    expose:
+      - "8545"
+      - "8546"
+      - "8551"
+      - "9001"
+    environment:
+      - RUST_LOG=info,sync::stages=trace,downloaders=trace,debug
+    networks:
+      - igra-network
+    volumes:
+      - ./keys/jwt.hex:/root/reth/jwt.hex
+      - ./build/repos/execution-layer/genesis.json:/root/reth/genesis.json
+      - ./build/repos/execution-layer/run-igra-dev-el.sh:/root/reth/run-igra-dev-el.sh
+    logging:
+      driver: "syslog"
+      options:
+        tag: "execution-layer/{{.ImageName}}/{{.Name}}/{{.ID}}"
+
+  block-builder:
+    container_name: block-builder
+    build:
+      context: build/repos/block-builder
+      dockerfile: ../../Dockerfile.block-builder
+    image: block-builder
+    command: /app/jwt.hex http://execution-layer
+    expose:
+      - "8561"
+    environment:
+      - RUST_LOG=debug
+    networks:
+      - igra-network
+    volumes:
+      - ./keys/jwt.hex:/app/jwt.hex:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - execution-layer
+    logging:
+      driver: "syslog"
+      options:
+        tag: "block-builder/{{.ImageName}}/{{.Name}}/{{.ID}}"
+
+  viaduct:
+    container_name: viaduct
+    build:
+      context: build/repos/rusty-kaspa-private
+      dockerfile: ../../Dockerfile.viaduct
+    image: viaduct
+    environment:
+      - RUST_LOG=debug
+      - REPLAY_ON_ERROR=-1
+      - SYNC_THREADS=64
+      - MAGIC_HASH=000000000000000000000000000000000000000000000000000000000000000a
+    volumes:
+      - viaduct_data:/app/storage
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - igra-network
+    command: ["--ip-port=host.docker.internal:17610", "--bb-ip-port=block-builder:8561"]
+    depends_on:
+      - block-builder
+    logging:
+      driver: "syslog"
+      options:
+        tag: "viaduct/{{.ImageName}}/{{.Name}}/{{.ID}}"
+
+volumes:
+  viaduct_data:
+
+networks:
+  igra-network:
+    external: true
+  traefik-network:
+    external: true

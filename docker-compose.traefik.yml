@@ -1,0 +1,29 @@
+services:
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.rpc.address=:8545"
+      - "--entrypoints.explorer_http.address=:8000"
+      - "--entrypoints.explorer_ws.address=:8001"
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      - "8545:8545"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.strip-token.stripprefixregex.regex=^/([a-f0-9]{32})"
+
+networks:
+  igra-network:
+    external: true
+  traefik-network:
+    external: true
