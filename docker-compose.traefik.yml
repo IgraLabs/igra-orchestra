@@ -3,10 +3,11 @@ services:
     image: traefik:v3.0
     container_name: traefik
     command:
-      - "--api.dashboard=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
+      - "--api.dashboard=true" # Enable the dashboard (default: http://<container_IP>:8080/dashboard/)
+      - "--api.insecure=true" # Allow dashboard access w/o authentication
+      - "--providers.docker=true" # Enable Docker as a provider
+      - "--providers.docker.exposedbydefault=false" # Only expose containers explicitly
+      - "--entrypoints.web.address=:80" # HTTP entrypoint for handling public traffic
       - "--entrypoints.rpc.address=:8545"
       - "--entrypoints.explorer_http.address=:8000"
       - "--entrypoints.explorer_ws.address=:8001"
@@ -14,8 +15,9 @@ services:
       - "8000:8000"
       - "8001:8001"
       - "8545:8545"
+      # No port binding for dashboard (8080 is not exposed to the host)
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro" # Allow Traefik to access Docker
     networks:
       - traefik-network
     labels:

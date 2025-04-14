@@ -5,6 +5,7 @@ print_help() {
   echo "Usage: $0 [--dry-run] <compose-command> --all|<services>"
   echo
   echo "--dry-run           Print only (don't run) docker command"
+  echo "--all               Same as 'traefik core workers kaspa-explorer'"
   echo
   echo "Compose Commands:"
   echo "  up -d            Start services in background"
@@ -16,12 +17,15 @@ print_help() {
   echo "  stats            Report statistics"
   echo "  build            Build containers"
   echo
-  echo "Service:"
-  echo "  core             execution-layer, block-builder, viaduct"
-  echo "                   Alternatively, specify any of them"
-  echo "  workers <ids>    One or more dynamic workers (e.g. 0 1 2);"
+  echo "Service:           (combination of the following words)"
+  echo "  core             Same as 'execution-layer block-builder viaduct'"
+  echo "  execution-layer  Selects this service only"
+  echo "  block-builder    -''-"
+  echo "  viaduct          -''-"
+  echo "  workers <ids>    Adds one or more dynamic workers (e.g. 0 1 2);"
   echo "                   defaults to all (0 1 2 3 4 5) if no ids given"
-  echo "  kaspa-explorer   KASPA Explorer stack"
+  echo "  traefik          Adds traefik proxy"
+  echo "  kaspa-explorer   Selects all KASPA Explorer stack"
   echo
   echo "Example:"
   echo "  $0 up -d traefik core workers 1 2 kaspa-explorer"
@@ -157,6 +161,7 @@ COMPOSE_FILES=
 
 echo "Running:"
 echo "docker compose ${COMPOSE_FILES} ${joined_cmd} ${SERVICES}"
+echo
 
 if [ -z "${DRY_RUN}" ]; then
   docker compose ${COMPOSE_FILES} ${joined_cmd} ${SERVICES}

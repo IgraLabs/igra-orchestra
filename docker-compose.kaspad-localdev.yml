@@ -1,0 +1,41 @@
+services:
+  kaspad:
+    container_name: kaspad
+    build:
+      context: build/repos/rusty-kaspa
+      dockerfile: ../../Dockerfile.kaspad
+    image: kaspad-devnet
+    environment:
+      - RUST_LOG=debug
+      - REPLAY_ON_ERROR=-1
+      - SYNC_THREADS=64
+    expose:
+      - "16610"
+      - "16611"
+      - "17610"
+    command: [
+      "--utxoindex",
+      "--rpclisten-borsh=0.0.0.0",
+      "--rpclisten-json",
+      "--devnet",
+      "--enable-unsynced-mining",
+      "--disable-upnp"
+    ]
+    volumes:
+      - kaspad_localdev:/app/data/
+    networks:
+      - igra-network
+      - kaspa-explorer-network
+    logging:
+      driver: "syslog"
+      options:
+        tag: "kaspad/{{.ImageName}}/{{.Name}}/{{.ID}}"
+
+volumes:
+  kaspad_localdev:
+
+networks:
+  igra-network:
+    external: true
+  kaspa-explorer-network:
+    external: true

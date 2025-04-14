@@ -1,0 +1,29 @@
+FROM rust:slim AS builder
+
+WORKDIR /app
+
+# Install OpenSSL and Protocol Buffers compiler
+RUN apt-get update && \
+    apt-get install -y pkg-config libssl-dev protobuf-compiler libclang-dev build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install rustfmt
+RUN rustup component add rustfmt
+
+COPY . .
+
+RUN cargo build --bin kaspad --release
+
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y libssl-dev openssl && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/target/release/kaspad /app/
+
+# RUN openssl rand -hex 32 > jwt.hex
+
+ENTRYPOINT ["/app/kaspad"]

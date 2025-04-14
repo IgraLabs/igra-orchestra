@@ -61,7 +61,11 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - igra-network
-    command: ["--ip-port=host.docker.internal:17610", "--bb-ip-port=block-builder:8561"]
+    command: [
+      # Env params are evaluated on the host rather than in the container
+      "--ip-port=${KASPAD_HOST:-host.docker.internal}:${KASPAD_PORT:-17610}",
+      "--bb-ip-port=block-builder:8561"
+    ]
     depends_on:
       - block-builder
     logging:
@@ -74,6 +78,4 @@ volumes:
 
 networks:
   igra-network:
-    external: true
-  traefik-network:
     external: true

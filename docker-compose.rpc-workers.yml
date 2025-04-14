@@ -43,7 +43,17 @@ x-kaswallet: &kaswallet
     - RUST_LOG=debug
   expose:
     - "8082"
-  command: ["--devnet", "--logs-level=debug", "--keys-file", "/app/keys.json", "--server", "ws://host.docker.internal:17610", "--listen", "0.0.0.0:8082"]
+  command: [
+    "--devnet",
+    "--logs-level=debug",
+    "--keys-file",
+    "/app/keys.json",
+    "--server",
+    # Env params are evaluated on the host rather than in the container
+    "ws://${KASPAD_HOST:-host.docker.internal}:${KASPAD_PORT:-17610}",
+    "--listen",
+    "0.0.0.0:8082"
+  ]
   networks:
     - igra-network
   logging:
@@ -79,7 +89,7 @@ services:
     <<: *kaswallet
     container_name: kaswallet-1
     volumes:
-      - ./keys/keys.kasswallet-1.json:/app/keys.json
+      - ./keys/keys.kaswallet-1.json:/app/keys.json
 
   rpc-provider-2:
     <<: *rpc-provider
@@ -93,7 +103,7 @@ services:
     <<: *kaswallet
     container_name: kaswallet-2
     volumes:
-      - ./keys/keys.kasswallet-2.json:/app/keys.json
+      - ./keys/keys.kaswallet-2.json:/app/keys.json
 
   rpc-provider-3:
     <<: *rpc-provider
@@ -107,7 +117,7 @@ services:
     <<: *kaswallet
     container_name: kaswallet-3
     volumes:
-      - ./keys/keys.kasswallet-3.json:/app/keys.json
+      - ./keys/keys.kaswallet-3.json:/app/keys.json
 
   rpc-provider-4:
     <<: *rpc-provider
@@ -121,7 +131,7 @@ services:
     <<: *kaswallet
     container_name: kaswallet-4
     volumes:
-      - ./keys/keys.kasswallet-4.json:/app/keys.json
+      - ./keys/keys.kaswallet-4.json:/app/keys.json
 
   rpc-provider-5:
     <<: *rpc-provider
@@ -135,7 +145,7 @@ services:
     <<: *kaswallet
     container_name: kaswallet-5
     volumes:
-      - ./keys/keys.kasswallet-5.json:/app/keys.json
+      - ./keys/keys.kaswallet-5.json:/app/keys.json
 
 networks:
   igra-network:
