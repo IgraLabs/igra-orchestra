@@ -20,6 +20,13 @@ services:
       driver: "syslog"
       options:
         tag: "execution-layer/{{.ImageName}}/{{.Name}}/{{.ID}}"
+    healthcheck:
+      # Verifies if the container is accepting TCP connections on port 8545
+      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/$$HOSTNAME/8545"]
+      interval: 10s       # Check every 10 seconds
+      timeout: 2s         # Mark as failed if the command takes more than 2 seconds
+      retries: 3          # Consider the service unhealthy after 3 failed attempts
+      start_period: 5s    # Wait 5 seconds before starting health checks
 
   block-builder:
     container_name: block-builder
@@ -38,11 +45,19 @@ services:
       - ./keys/jwt.hex:/app/jwt.hex:ro
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
-      - execution-layer
+      execution-layer:
+        condition: service_healthy
     logging:
       driver: "syslog"
       options:
         tag: "block-builder/{{.ImageName}}/{{.Name}}/{{.ID}}"
+    healthcheck:
+      # Verifies if the container is accepting TCP connections on port 8561
+      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/$$HOSTNAME/8561"]
+      interval: 10s       # Check every 10 seconds
+      timeout: 2s         # Mark as failed if the command takes more than 2 seconds
+      retries: 3          # Consider the service unhealthy after 3 failed attempts
+      start_period: 5s    # Wait 5 seconds before starting health checks
 
   viaduct:
     container_name: viaduct

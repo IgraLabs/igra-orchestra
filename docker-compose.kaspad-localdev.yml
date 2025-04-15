@@ -10,13 +10,18 @@ services:
       - REPLAY_ON_ERROR=-1
       - SYNC_THREADS=64
     expose:
-      - "16610"
-      - "16611"
-      - "17610"
+      - "16610" # GRPC Server
+      - "16611" # P2P Server
+      - "17610" # WRPC (borsh) Server
+      - "18610" # WRPC (json) Server
+    ports:
+      - "16610:16610" # Work around for "connection refused"
     command: [
+      "--loglevel=debug",
       "--utxoindex",
-      "--rpclisten-borsh=0.0.0.0",
-      "--rpclisten-json",
+      "--rpclisten=0.0.0.0:16610",
+      "--rpclisten-borsh=0.0.0.0:17610",
+      "--rpclisten-json=0.0.0.0:18610",
       "--devnet",
       "--enable-unsynced-mining",
       "--disable-upnp"
@@ -30,6 +35,46 @@ services:
       driver: "syslog"
       options:
         tag: "kaspad/{{.ImageName}}/{{.Name}}/{{.ID}}"
+    healthcheck:
+      # Verifies if the container is accepting TCP connections on port 16610
+      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/kaspad/16610"]
+      interval: 10s       # Check every 10 seconds
+      timeout: 2s         # Mark as failed if the command takes more than 2 seconds
+      retries: 3          # Consider the service unhealthy after 3 failed attempts
+      start_period: 5s    # Wait 5 seconds before starting health checks
+
+  kaspa-miner:
+    container_name: kaspa-miner
+    build:
+      context: build/repos/kaspa-miner
+      dockerfile: ../../Dockerfile.kaspa-miner
+    image: kaspa-miner
+    environment:
+      - RUST_LOG=debug
+      - REPLAY_ON_ERROR=-1
+      - SYNC_THREADS=64
+    # This command resolves the kaspad hostname to its IP address, as --kaspad-address requires the IP.
+    entrypoint: >
+      sh -c '
+      KASPAD=$(getent ahostsv4 kaspad | grep kaspad | grep -Eo "\\b([0-9]{1,3}\\.){3}[0-9]{1,3}\\b") &&
+      exec /app/kaspa-miner
+      --mining-address kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s
+      --kaspad-address $$KASPAD
+      --port 16610
+      --threads 2
+      --mine-when-not-synced
+      '
+    networks:
+      - igra-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: "syslog"
+      options:
+        tag: "kaspad/{{.ImageName}}/{{.Name}}/{{.ID}}"
+    depends_on:
+      kaspad:
+        condition: service_healthy
 
 volumes:
   kaspad_localdev:

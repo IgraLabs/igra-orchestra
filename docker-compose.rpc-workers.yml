@@ -27,10 +27,33 @@ x-rpc-provider: &rpc-provider
       PathPrefix(`/a2e19f37d58648c9b71c3a5f902d140e`) ||
       PathPrefix(`/c4201b9fea7a4a5f801d2394876e39b4`) ||
       PathPrefix(`/2b8d3945f0174ac8ae9c470d2856e90c`) ||
-      PathPrefix(`/85740ace9d164ba59e0c1f39d72b16a3`)
+      PathPrefix(`/85740ace9d164ba59e0c1f39d72b16a3`) ||
+      PathPrefix(`/fb8d7c877f0ff3f032143f9dbcc3840a`) ||
+      PathPrefix(`/5510d7cfbfc5eb986e0575a3b0496d53`) ||
+      PathPrefix(`/fd07318d4a567c187c893a1db9d2f94a`) ||
+      PathPrefix(`/1e75a963ab938d39aeed7c51db0be2e6`) ||
+      PathPrefix(`/b7c0d14d862d9fa4444ff9e44c731b90`) ||
+      PathPrefix(`/25f22c6c1bcadcd80ae1838528dddb8d`) ||
+      PathPrefix(`/61e697e1b3f6d2330a84fb875a4d16eb`) ||
+      PathPrefix(`/efc258967210a3b231244390dd233186`) ||
+      PathPrefix(`/ed528d1a44c0271cba4dba394682a945`) ||
+      PathPrefix(`/82d586ce355f11b190e28bb499bbd9e9`) ||
+      PathPrefix(`/d1ed97440f59cc1a4030b2c760182e7f`) ||
+      PathPrefix(`/4c7c4e51effa50dff827047f20b0bee5`) ||
+      PathPrefix(`/c24b3d68bb96f85adf5aebfdd6a409be`) ||
+      PathPrefix(`/fdeb9c0eff14aba9f4c7312d693d0f34`) ||
+      PathPrefix(`/82f14b862054bcbd45b9018f6b2b14cc`) ||
+      PathPrefix(`/fafda38366d687aba4b52a62a08b36d8`)
     - "traefik.http.routers.rpc.entrypoints=rpc"
     - "traefik.http.routers.rpc.middlewares=strip-token"
     - "traefik.http.services.rpc.loadbalancer.server.port=8535"
+  healthcheck:
+    # Verifies if the container is accepting TCP connections on port 8535
+    test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/$$HOSTNAME/8535"]
+    interval: 10s       # Check every 10 seconds
+    timeout: 2s         # Mark as failed if the command takes more than 2 seconds
+    retries: 3          # Consider the service unhealthy after 3 failed attempts
+    start_period: 5s    # Wait 5 seconds before starting health checks
 
 x-kaswallet: &kaswallet
   build:
@@ -41,25 +64,32 @@ x-kaswallet: &kaswallet
     - "host.docker.internal:host-gateway"
   environment:
     - RUST_LOG=debug
+    - KASPAD_HOST=kaspad
   expose:
     - "8082"
-  command: [
-    "--devnet",
-    "--logs-level=debug",
-    "--keys-file",
-    "/app/keys.json",
-    "--server",
-    # Env params are evaluated on the host rather than in the container
-    "ws://${KASPAD_HOST:-host.docker.internal}:${KASPAD_PORT:-17610}",
-    "--listen",
-    "0.0.0.0:8082"
-  ]
+  # This command evaluates env variables at run time in the container.
+  entrypoint: >
+    sh -c '
+    exec /app/kaswallet-daemon
+    --devnet
+    --logs-level=debug
+    --keys-file /app/keys.json
+    --server ws://$${KASPAD_HOST:-host.docker.internal}:$${KASPAD_PORT:-17610}
+    --listen 0.0.0.0:8082
+    '
   networks:
     - igra-network
   logging:
     driver: "syslog"
     options:
       tag: "kaswallet/{{.ImageName}}/{{.Name}}/{{.ID}}"
+  healthcheck:
+    # Verifies if the container is accepting TCP connections on port 8082
+    test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/$$HOSTNAME/8082"]
+    interval: 10s       # Check every 10 seconds
+    timeout: 2s         # Mark as failed if the command takes more than 2 seconds
+    retries: 3          # Consider the service unhealthy after 3 failed attempts
+    start_period: 5s    # Wait 5 seconds before starting health checks
 
 services:
 
@@ -69,7 +99,8 @@ services:
     environment:
       - KASWALLET_PASSWORD=''
     depends_on:
-      - kaswallet-0
+      kaswallet-0:
+        condition: service_healthy
 
   kaswallet-0:
     <<: *kaswallet
@@ -83,7 +114,8 @@ services:
     environment:
       - KASWALLET_PASSWORD=''
     depends_on:
-      - kaswallet-1
+      kaswallet-1:
+        condition: service_healthy
 
   kaswallet-1:
     <<: *kaswallet
@@ -97,7 +129,8 @@ services:
     environment:
       - KASWALLET_PASSWORD=''
     depends_on:
-      - kaswallet-2
+      kaswallet-2:
+        condition: service_healthy
 
   kaswallet-2:
     <<: *kaswallet
@@ -111,7 +144,8 @@ services:
     environment:
       - KASWALLET_PASSWORD=''
     depends_on:
-      - kaswallet-3
+      kaswallet-3:
+        condition: service_healthy
 
   kaswallet-3:
     <<: *kaswallet
@@ -125,7 +159,8 @@ services:
     environment:
       - KASWALLET_PASSWORD=''
     depends_on:
-      - kaswallet-4
+      kaswallet-4:
+        condition: service_healthy
 
   kaswallet-4:
     <<: *kaswallet
@@ -139,7 +174,8 @@ services:
     environment:
       - KASWALLET_PASSWORD=''
     depends_on:
-      - kaswallet-5
+      kaswallet-5:
+        condition: service_healthy
 
   kaswallet-5:
     <<: *kaswallet

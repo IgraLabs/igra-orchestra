@@ -1,6 +1,45 @@
 #!/bin/bash
 # setup-repos.sh - Clone and setup repositories for Igra Orchestra
 
+# Function to print help information
+function print_help() {
+    echo "Usage: ./setup-repos.sh [--dev]"
+    echo ""
+    echo "Description:"
+    echo "  This script clones and configures repositories for Igra Orchestra."
+    echo "  It sets up each repository in the list with the appropriate branches."
+    echo ""
+    echo "Options:"
+    echo "  --dev    Use this flag for the development environment. Adds 'kaspad' and 'kaspa-miner' repositories to the setup."
+    echo "  (empty)  Run the script without any arguments for the standard setup without dev-specific repositories."
+    echo ""
+    echo "Environment Variables:"
+    echo "  You can override the default branches for each repository by setting the following environment variables:"
+    echo "    BLOCK_BUILDER_BRANCH"
+    echo "    EXECUTION_LAYER_BRANCH"
+    echo "    KASWALLET_BRANCH"
+    echo "    IGRA_RPC_PROVIDER_BRANCH"
+    echo "    VIADUCT_BRANCH"
+    echo "    KASPAD_BRANCH"
+    echo "    KASPA_MINER_BRANCH"
+    echo ""
+    echo "Examples:"
+    echo "  ./setup-repos.sh           # Standard setup."
+    echo "  ./setup-repos.sh --dev     # Development setup with additional repositories."
+    echo ""
+    echo "  # Example with environment variables:"
+    echo "  KASWALLET_BRANCH=my-branch ./setup-repos.sh --dev"
+    echo ""
+    echo "Notes:"
+    echo "  - Ensure you have the required permissions and SSH key set up to clone from private repositories."
+    echo "  - Environment variables must be set before calling the script to take effect."
+}
+
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    print_help
+    exit 0
+fi
+
 # Function for timestamped log messages
 function log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $@"
@@ -8,25 +47,25 @@ function log() {
 
 function panic() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $@" >&2
+    echo >&2
+    echo "Try './setup-repos.sh --help'" >&2
     exit 1
 }
 
 # Function to clone a repository if it doesn't exist
 function clone_repo() {
-    local repo_name=$1
-    local repo_url=$2
+    local repo_url=$1
+    # Extract, e.g. kaspa-miner from git@github.com:elichai/kaspa-miner.git
+    local folder=$(basename -s .git "$repo_url")
 
-    log "Setting up $repo_name repository"
-    if [ ! -d "repos/$repo_name" ]; then
-        log "Cloning $repo_name repository..."
-        git clone $repo_url repos/$repo_name
-        if [ $? -eq 0 ]; then
-            log "Successfully cloned $repo_name repository"
-        else
-            panic "Failed to clone $repo_name repository"
-        fi
+    log "Setting up $folder repository"
+    if [[ -d "repos/$folder" ]]; then
+        log "$folder repository already exists, skipping clone"
     else
-        log "$repo_name repository already exists, skipping clone"
+        log "Cloning $folder repository..."
+        git clone $repo_url repos/$folder \
+            && log "Successfully cloned $folder repository" \
+            || panic "Failed to clone $folder repository"
     fi
 }
 
@@ -57,15 +96,25 @@ function configure_repo() {
     cd ../..
 }
 
-log "Starting repository setup"
+is_dev_env=
+if [[ $# -gt 0 ]]; then
+    if [[ $# -gt 1 || "$1" != "--dev" ]]; then
+        panic "Unexpected parameter(s) $@"
+    fi
+    is_dev_env="Y"
+    shift
+fi
 
 # Default branches
-BLOCK_BUILDER_BRANCH=${1:-main}
-EXECUTION_LAYER_BRANCH=${2:-main}
-KASWALLET_BRANCH=${3:-main}
-IGRA_RPC_PROVIDER_BRANCH=${4:-igor/fix/docker-workaround}
-VIADUCT_BRANCH=${5:-new_BB_syntax_rebased_to_v1}
-KASPAD_BRANCH=${5:-for-wallet}
+BLOCK_BUILDER_BRANCH=${BLOCK_BUILDER_BRANCH:-main}
+EXECUTION_LAYER_BRANCH=${EXECUTION_LAYER_BRANCH:-main}
+KASWALLET_BRANCH=${KASWALLET_BRANCH:-main}
+IGRA_RPC_PROVIDER_BRANCH=${IGRA_RPC_PROVIDER_BRANCH:-main}
+VIADUCT_BRANCH=${VIADUCT_BRANCH:-new_BB_syntax_rebased_to_v1}
+KASPAD_BRANCH=${KASPAD_BRANCH:-for-wallet}
+KASPA_MINER_BRANCH=${KASPA_MINER_BRANCH:-main}
+
+log "Starting repository setup"
 
 # Repository information
 REPOS=(
@@ -74,8 +123,14 @@ REPOS=(
     "kaswallet        "
     "igra-rpc-provider"
     "viaduct          "
-    "kaspad           "
 )
+if [[ ${is_dev_env} == "Y" ]]; then
+    REPOS+=(
+      "kaspad           "
+      "kaspa-miner      "
+    )
+fi
+
 URLS=(
     "git@github.com:IgraLabs/block-builder.git"
     "git@github.com:IgraLabs/execution-layer.git"
@@ -83,6 +138,7 @@ URLS=(
     "git@github.com:IgraLabs/igra-rpc-provider.git"
     "git@github.com:IgraLabs/rusty-kaspa-private.git"
     "git@github.com:IgraLabs/rusty-kaspa.git"
+    "git@github.com:elichai/kaspa-miner.git"
 )
 BRANCHES=(
     "$BLOCK_BUILDER_BRANCH"
@@ -91,12 +147,13 @@ BRANCHES=(
     "$IGRA_RPC_PROVIDER_BRANCH"
     "$VIADUCT_BRANCH"
     "$KASPAD_BRANCH"
+    "$KASPA_MINER_BRANCH"
 )
 
 # Log branch information
 log "Using repos and branches:"
 for i in "${!REPOS[@]}"; do
-  log "  - ${REPOS[$i]} > ${URLS[$i]} > ${BRANCHES[$i]}"
+  log "  - ${REPOS[$i]} - ${URLS[$i]}::${BRANCHES[$i]}"
 done
 
 # Create repos directory
@@ -110,7 +167,7 @@ fi
 
 # Clone and configure repositories
 for i in "${!REPOS[@]}"; do
-    clone_repo "${REPOS[$i]}" "${URLS[$i]}"
+    clone_repo "${URLS[$i]}"
     configure_repo "${REPOS[$i]}" "${BRANCHES[$i]}"
 done
 
