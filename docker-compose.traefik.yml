@@ -17,7 +17,7 @@ services:
       - "8545:8545"
       # No port binding for dashboard (8080 is not exposed to the host)
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro" # Allow Traefik to access Docker
+      - "${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro" # Allow Traefik to access Docker
     networks:
       - traefik-network
     labels:

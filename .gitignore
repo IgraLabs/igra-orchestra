@@ -4,3 +4,7 @@ keys.json
 
 keys/
 !keys/readme.txt
+
+.env.local
+.env.stage
+.env.prod

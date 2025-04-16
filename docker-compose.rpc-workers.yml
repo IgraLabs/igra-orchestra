@@ -64,19 +64,16 @@ x-kaswallet: &kaswallet
     - "host.docker.internal:host-gateway"
   environment:
     - RUST_LOG=debug
-    - KASPAD_HOST=kaspad
+    - LOG_LEVEL=debug
   expose:
     - "8082"
   # This command evaluates env variables at run time in the container.
-  entrypoint: >
-    sh -c '
-    exec /app/kaswallet-daemon
+  command: >
     --devnet
-    --logs-level=debug
+    --logs-level=${LOG_LEVEL}
     --keys-file /app/keys.json
-    --server ws://$${KASPAD_HOST:-host.docker.internal}:$${KASPAD_PORT:-17610}
+    --server ws://${KASPAD_HOST}:${KASPAD_BORSH_PORT}
     --listen 0.0.0.0:8082
-    '
   networks:
     - igra-network
   logging:

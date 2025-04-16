@@ -70,17 +70,17 @@ services:
       - REPLAY_ON_ERROR=-1
       - SYNC_THREADS=64
       - MAGIC_HASH=000000000000000000000000000000000000000000000000000000000000000b
-    volumes:
-      - viaduct_data:/app/storage
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    networks:
-      - igra-network
     command: [
       # Env params are evaluated on the host rather than in the container
-      "--ip-port=${KASPAD_HOST:-host.docker.internal}:${KASPAD_PORT:-17610}",
+      "--ip-port=${KASPAD_HOST}:${KASPAD_BORSH_PORT}",
       "--bb-ip-port=block-builder:8561"
     ]
+    volumes:
+      - viaduct_data:/app/storage
+    networks:
+      - igra-network
     depends_on:
       - block-builder
     logging:

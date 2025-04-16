@@ -7,8 +7,8 @@ services:
       - "8080"
     environment:
       REACT_APP_NETWORK: "Igra Devnet"
-      API_URI: "http://devnet.igralabs.com:8000"
-      API_WS_URI: "ws://devnet.igralabs.com:8001"
+      API_URI: "${KASPA_EXPLORER_API_URI}"
+      API_WS_URI: "${KASPA_EXPLORER_WS_URI}"
     networks:
       - kaspa-explorer-network
       - traefik-network
@@ -26,7 +26,7 @@ services:
       - "8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: "-n devnet -x 20 -s ws://${KASPAD_HOST:-host.docker.internal}:${KASPAD_PORT:-17610}"
+    command: "-n devnet -x 20 -s ws://${KASPAD_HOST}:${KASPAD_BORSH_PORT}"
     networks:
       - kaspa-explorer-network
       - traefik-network
@@ -48,7 +48,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      KASPAD_HOST_1: "${KASPAD_HOST:-host.docker.internal}:${KASPAD_PORT:-17610}"
+      KASPAD_HOST_1: "${KASPAD_HOST}:${KASPAD_BORSH_PORT}"
       SQL_URI: "postgresql+asyncpg://postgres:postgres@kaspa_db:5432/postgres"
     networks:
       - kaspa-explorer-network
@@ -57,9 +57,11 @@ services:
     image: supertypo/simply-kaspa-indexer:latest
     container_name: simply_kaspa_indexer
     restart: unless-stopped
+    environment:
+      SQL_URI: "postgresql://postgres:postgres@kaspa_db:5432/postgres"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: "-n devnet -u -s ws://${KASPAD_HOST:-host.docker.internal}:${KASPAD_PORT:-17610} -d postgresql://postgres:postgres@kaspa_db:5432/postgres"
+    command: "-n devnet -u -s ws://${KASPAD_HOST}:${KASPAD_BORSH_PORT} -d $${SQL_URI}"
     networks:
       - kaspa-explorer-network
 
@@ -81,6 +83,6 @@ services:
 
 networks:
   kaspa-explorer-network:
-    external: true
+    name: kaspa-explorer-network
   traefik-network:
     external: true
