@@ -118,15 +118,15 @@ log "Starting repository setup"
 
 # Repository information
 REPOS=(
-    "block-builder    "
-    "execution-layer  "
-    "kaswallet        "
-    "igra-rpc-provider"
-    "viaduct          "
+    "block-builder      "
+    "execution-layer    "
+    "kaswallet          "
+    "igra-rpc-provider  "
+    "rusty-kaspa-private"
 )
 if [[ ${is_dev_env} == "Y" ]]; then
     REPOS+=(
-      "kaspad           "
+      "rusty-kaspa      "
       "kaspa-miner      "
     )
 fi
