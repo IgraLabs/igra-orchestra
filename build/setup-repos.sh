@@ -72,10 +72,12 @@ function clone_repo() {
 # Function to configure a repository
 function configure_repo() {
     local repo_name=$1
-    local branch=$2
+    local repo_url=$2
+    local branch=$3
 
     log "Configuring $repo_name repository"
-    cd repos/$repo_name
+    local folder=$(basename -s .git "$repo_url")
+    cd repos/$folder
     log "Current directory: $(pwd)"
 
     log "Fetching latest changes..."
@@ -118,15 +120,15 @@ log "Starting repository setup"
 
 # Repository information
 REPOS=(
-    "block-builder      "
-    "execution-layer    "
-    "kaswallet          "
-    "igra-rpc-provider  "
-    "rusty-kaspa-private"
+    "block-builder    "
+    "execution-layer  "
+    "kaswallet        "
+    "igra-rpc-provider"
+    "viaduct          "
 )
 if [[ ${is_dev_env} == "Y" ]]; then
     REPOS+=(
-      "rusty-kaspa      "
+      "kaspad           "
       "kaspa-miner      "
     )
 fi
@@ -168,7 +170,7 @@ fi
 # Clone and configure repositories
 for i in "${!REPOS[@]}"; do
     clone_repo "${URLS[$i]}"
-    configure_repo "${REPOS[$i]}" "${BRANCHES[$i]}"
+    configure_repo "${REPOS[$i]}" "${URLS[$i]}" "${BRANCHES[$i]}"
 done
 
 log
