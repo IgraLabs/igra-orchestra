@@ -22,4 +22,4 @@ RUN apt-get update && \
 COPY --from=builder /app/target/release/igra-rpc-provider /app/
 COPY --from=builder /app/config.toml /app/
 
-ENTRYPOINT ["sh", "-c", "KASWALLET_PASSWORD='' /app/igra-rpc-provider"]
+ENTRYPOINT [/app/igra-rpc-provider]

@@ -40,6 +40,7 @@ print_help() {
   echo "  traefik          Add traefik proxy"
   echo "  kaspa            KASPAD and kaspa-miner (e.g. or local env)"
   echo "  kaspa-explorer   Select all KASPA Explorer stack"
+  echo "  utils            Yacht (container managing tool)"
   echo
   echo "Example:"
   echo "  $0 --env local up -d traefik core workers 1 2 kaspa-explorer"
@@ -89,7 +90,7 @@ fi
 COMPOSE_CMD=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --all|--all-kaspa|block-builder|core|execution-layer|kaspa|kaspa-explorer|traefik|workers|viaduct)
+    --all|--all-kaspa|block-builder|core|execution-layer|kaspa|kaspa-explorer|utils|traefik|workers|viaduct)
       break
       ;;
     *)
@@ -116,10 +117,10 @@ IS_TRAEF=
 IS_WORKERS=
 IS_KASPA=
 IS_KEXPL=
+IS_UTILS=
 SERVICES=
 
 # Check if --all or --all-kaspa is given
-echo "*** DEBUG '$1'"
 if [[ "$1" == "--all" || "$1" == "--all-kaspa" ]]; then
   [ "$1" == "--all-kaspa" ] && IS_KASPA=Y
   shift
@@ -134,6 +135,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     core)
       IS_CORE=Y
+      SERVICES+=" execution-layer block-builder viaduct"
       shift
       ;;
 
@@ -145,6 +147,7 @@ while [[ $# -gt 0 ]]; do
 
     traefik)
       IS_TRAEF=Y
+      SERVICES+=" traefik"
       shift
       ;;
 
@@ -172,11 +175,19 @@ while [[ $# -gt 0 ]]; do
     kaspa)
       shift
       IS_KASPA=Y
+      SERVICES+=" kaspad kaspa-miner"
       ;;
 
     kaspa-explorer)
       shift
       IS_KEXPL=Y
+      SERVICES+=" kaspa_explorer simply_kaspa_socket_server kaspa_rest_server simply_kaspa_indexer kaspa_db"
+      ;;
+
+    utils)
+      shift
+      IS_UTILS=Y
+      SERVICES+=" yacht"
       ;;
 
     *)
@@ -186,6 +197,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 COMPOSE_FILES=
+[ -z ${IS_UTILS} ]   || COMPOSE_FILES+=" -f docker-compose.utils.yml"
 [ -z ${IS_KASPA} ]   || COMPOSE_FILES+=" -f docker-compose.kaspad.local.yml"
 [ -z ${IS_CORE} ]    || COMPOSE_FILES+=" -f docker-compose.core.yml"
 [ -z ${IS_TRAEF} ]   || COMPOSE_FILES+=" -f docker-compose.traefik.yml"
@@ -197,11 +209,9 @@ COMPOSE_FILES=
 case "${ENV}" in
   local)
     env_file=".env.local"
-    COMPOSE_FILES="-f docker-compose.networks.local.yml ${COMPOSE_FILES}"
     ;;
   stage)
     env_file=".env.stage"
-    COMPOSE_FILES+=" -f docker-compose.networks.stage.yml"
     ;;
   prod)
     panic "PROD environment is not yet coded"
@@ -210,10 +220,15 @@ esac
 
 [ -z "${env_file}" ] && panic "Unknown --env: ${ENV}"
 
-echo "Running:"
+if [[ ! "${DRY_RUN}" == "Y" ]]; then
+  echo "Running:"
+else
+  echo "NOT Running (DRY RUN):"
+fi
+
 echo "docker compose --env-file "${env_file}" ${COMPOSE_FILES} ${joined_cmd} ${SERVICES}"
 echo
 
-if [[ ! "${DRY_RUN}" == "true" ]]; then
+if [[ ! "${DRY_RUN}" == "Y" ]]; then
   docker compose --env-file "${env_file}" ${COMPOSE_FILES} ${joined_cmd} ${SERVICES}
 fi

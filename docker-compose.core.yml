@@ -9,7 +9,7 @@ services:
       - "8551"
       - "9001"
     environment:
-      - RUST_LOG=info,sync::stages=trace,downloaders=trace,debug
+      - RUST_LOG=${RUST_LOG}
     networks:
       - igra-network
     volumes:
@@ -38,7 +38,7 @@ services:
     expose:
       - "8561"
     environment:
-      - RUST_LOG=debug
+      - RUST_LOG=${RUST_LOG}
     networks:
       - igra-network
     volumes:
@@ -47,6 +47,8 @@ services:
     depends_on:
       execution-layer:
         condition: service_healthy
+      viaduct:
+        condition: service_started
     logging:
       driver: "syslog"
       options:
@@ -66,7 +68,7 @@ services:
       dockerfile: ../../Dockerfile.viaduct
     image: viaduct
     environment:
-      - RUST_LOG=debug
+      - RUST_LOG=${RUST_LOG}
       - REPLAY_ON_ERROR=-1
       - SYNC_THREADS=64
       - MAGIC_HASH=000000000000000000000000000000000000000000000000000000000000000b
@@ -81,16 +83,26 @@ services:
       - viaduct_data:/app/storage
     networks:
       - igra-network
-    depends_on:
-      - block-builder
     logging:
       driver: "syslog"
       options:
         tag: "viaduct/{{.ImageName}}/{{.Name}}/{{.ID}}"
+    healthcheck:
+      # Verifies if the container can connect to `kaspad`
+      test: [
+        "CMD",
+        "bash",
+        "-c",
+        "echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}"
+      ]
+      interval: 10s       # Check every 10 seconds
+      timeout: 2s         # Mark as failed if the command takes more than 2 seconds
+      retries: 3          # Consider the service unhealthy after 3 failed attempts
+      start_period: 5s    # Wait 5 seconds before starting health checks
 
 volumes:
   viaduct_data:
 
 networks:
   igra-network:
-    external: true
+    name: igra-network

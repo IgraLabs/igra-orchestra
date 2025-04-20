@@ -6,7 +6,7 @@ services:
       dockerfile: ../../Dockerfile.kaspad
     image: kaspad-devnet
     environment:
-      - RUST_LOG=debug
+      - RUST_LOG=${RUST_LOG}
       - REPLAY_ON_ERROR=-1
       - SYNC_THREADS=64
     expose:
@@ -50,7 +50,7 @@ services:
       dockerfile: ../../Dockerfile.kaspa-miner
     image: kaspa-miner
     environment:
-      - RUST_LOG=debug
+      - RUST_LOG=${RUST_LOG}
       - REPLAY_ON_ERROR=-1
       - SYNC_THREADS=64
     # This command resolves the kaspad hostname to its IP address, as --kaspad-address requires the IP.
@@ -81,6 +81,6 @@ volumes:
 
 networks:
   igra-network:
-    external: true
+    name: igra-network
   kaspa-explorer-network:
-    external: true
+    name: kaspa-explorer-network

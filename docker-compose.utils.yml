@@ -1,5 +1,6 @@
 services:
   yacht:
+    # Default "fresh" login / path: admin@yacht.local / pass
     container_name: yacht
     image: selfhostedpro/yacht
     expose:

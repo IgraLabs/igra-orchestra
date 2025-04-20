@@ -26,6 +26,6 @@ services:
 
 networks:
   igra-network:
-    external: true
+    name: igra-network
   traefik-network:
-    external: true
+    name: traefik-network

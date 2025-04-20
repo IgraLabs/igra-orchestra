@@ -1,5 +1,0 @@
-networks:
-  igra-network:
-    name: igra-network
-  traefik-network:
-    name: traefik-network
