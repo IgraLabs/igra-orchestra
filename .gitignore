@@ -8,3 +8,5 @@ keys/
 .env.local
 .env.stage
 .env.prod
+
+.DS_Store

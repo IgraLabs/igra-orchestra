@@ -51,7 +51,6 @@ chmod 600 keys/jwt.hex
 Run the setup script to clone dependent services repos.
 
 ```bash
-cd build/
 chmod +x setup-repos.sh
 
 # Use default branches ..
@@ -71,8 +70,9 @@ chmod +x setup-repos.sh
 Each `kaswallet` instance (core or worker) requires a distinct JSON key file:
 
 - **Core** wallet: `keys.core.json`
-- **Worker 1** wallet: `keys.worker1.json`
-- and so on...
+- **Worker 1** wallet: `keys.kaswallet-0.json`
+- **Worker 2** wallet: `keys.kaswallet-1.json`
+- **Worker 3** wallet: `keys.kaswallet-2.json` (and so on)
 
 Each is mounted as `/app/keys.json` inside the container.
 
@@ -85,7 +85,7 @@ Default keys are provided, but you can create and fund with KAS your own if need
 ### 🔧 Start Core Services
 
 ```bash
-scripts/dev.sh up
+devnet.sh up
 ```
 
 This launches all core components: `execution-layer`, `block-builder`, `viaduct`, `rpc-provider`, `kaswallet`, `traefik`.
@@ -93,7 +93,7 @@ This launches all core components: `execution-layer`, `block-builder`, `viaduct`
 ### 🔁 Start With N Workers
 
 ```bash
-scripts/dev.sh with-workers 1 2 3
+devnet.sh with-workers 1 2 3
 ```
 
 This brings up additional `rpc-provider-N` + `kaswallet-N` containers behind the load balancer.
@@ -101,13 +101,13 @@ This brings up additional `rpc-provider-N` + `kaswallet-N` containers behind the
 ### 🧼 Stop Everything
 
 ```bash
-scripts/dev.sh down
+devnet.sh down
 ```
 
 Or to clean all containers/volumes:
 
 ```bash
-scripts/dev.sh clean
+devnet.sh clean
 ```
 
 ---
@@ -143,7 +143,7 @@ There are 10 supported tokens. Traefik strips the token and forwards the request
 ### 🚫 Missing Keys
 
 ```bash
-scripts/dev.sh with-workers 1 2
+devnet.sh with-workers 1 2
 # => ❌ Missing key file: ../keys.worker2.json
 ```
 

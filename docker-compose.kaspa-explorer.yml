@@ -52,6 +52,11 @@ services:
       SQL_URI: "postgresql+asyncpg://postgres:postgres@kaspa_db:5432/postgres"
     networks:
       - kaspa-explorer-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
 
   simply_kaspa_indexer:
     image: supertypo/simply-kaspa-indexer:latest
@@ -64,6 +69,11 @@ services:
     command: "-n devnet -u -s ws://${KASPAD_HOST}:${KASPAD_BORSH_PORT} -d $${SQL_URI}"
     networks:
       - kaspa-explorer-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
 
   kaspa_db:
     image: postgres:16-alpine
@@ -80,6 +90,11 @@ services:
       - "/var/kaspa_db/:/var/lib/postgresql/data/"
     networks:
       - kaspa-explorer-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
 
 networks:
   kaspa-explorer-network:

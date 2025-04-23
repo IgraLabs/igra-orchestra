@@ -17,9 +17,10 @@ services:
       - ./build/repos/execution-layer/genesis.json:/root/reth/genesis.json
       - ./build/repos/execution-layer/run-igra-dev-el.sh:/root/reth/run-igra-dev-el.sh
     logging:
-      driver: "syslog"
+      driver: "json-file"
       options:
-        tag: "execution-layer/{{.ImageName}}/{{.Name}}/{{.ID}}"
+        max-size: "100m"
+        max-file: "5"
     healthcheck:
       # Verifies if the container is accepting TCP connections on port 8545
       test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/$$HOSTNAME/8545"]
@@ -50,9 +51,10 @@ services:
       viaduct:
         condition: service_started
     logging:
-      driver: "syslog"
+      driver: "json-file"
       options:
-        tag: "block-builder/{{.ImageName}}/{{.Name}}/{{.ID}}"
+        max-size: "100m"
+        max-file: "5"
     healthcheck:
       # Verifies if the container is accepting TCP connections on port 8561
       test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/$$HOSTNAME/8561"]
@@ -84,9 +86,10 @@ services:
     networks:
       - igra-network
     logging:
-      driver: "syslog"
+      driver: "json-file"
       options:
-        tag: "viaduct/{{.ImageName}}/{{.Name}}/{{.ID}}"
+        max-size: "100m"
+        max-file: "5"
     healthcheck:
       # Verifies if the container can connect to `kaspad`
       test: [

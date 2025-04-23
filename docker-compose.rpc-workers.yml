@@ -18,9 +18,10 @@ x-rpc-provider: &rpc-provider
     - igra-network
     - traefik-network
   logging:
-    driver: "syslog"
+    driver: "json-file"
     options:
-      tag: "rpc-provider/{{.ImageName}}/{{.Name}}/{{.ID}}"
+      max-size: "100m"
+      max-file: "5"
   labels:
     - "traefik.enable=true"
     - >
@@ -94,9 +95,10 @@ x-kaswallet: &kaswallet
   networks:
     - igra-network
   logging:
-    driver: "syslog"
+    driver: "json-file"
     options:
-      tag: "kaswallet/{{.ImageName}}/{{.Name}}/{{.ID}}"
+      max-size: "100m"
+      max-file: "5"
   healthcheck:
     # Verifies if the container is accepting TCP connections on port 8082 and can connect to `kaspad`
     test: [

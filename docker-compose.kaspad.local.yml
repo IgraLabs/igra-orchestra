@@ -32,9 +32,10 @@ services:
       - igra-network
       - kaspa-explorer-network
     logging:
-      driver: "syslog"
+      driver: "json-file"
       options:
-        tag: "kaspad/{{.ImageName}}/{{.Name}}/{{.ID}}"
+        max-size: "100m"
+        max-file: "5"
     healthcheck:
       # Verifies if the container is accepting TCP connections on port 16610
       test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/kaspad/16610"]
@@ -69,9 +70,10 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
-      driver: "syslog"
+      driver: "json-file"
       options:
-        tag: "kaspad/{{.ImageName}}/{{.Name}}/{{.ID}}"
+        max-size: "100m"
+        max-file: "5"
     depends_on:
       kaspad:
         condition: service_healthy

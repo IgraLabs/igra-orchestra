@@ -59,11 +59,11 @@ function clone_repo() {
     local folder=$(basename -s .git "$repo_url")
 
     log "Setting up $folder repository"
-    if [[ -d "repos/$folder" ]]; then
+    if [[ -d "build/repos/$folder" ]]; then
         log "$folder repository already exists, skipping clone"
     else
         log "Cloning $folder repository..."
-        git clone $repo_url repos/$folder \
+        git clone $repo_url build/repos/$folder \
             && log "Successfully cloned $folder repository" \
             || panic "Failed to clone $folder repository"
     fi
@@ -77,7 +77,7 @@ function configure_repo() {
 
     log "Configuring $repo_name repository"
     local folder=$(basename -s .git "$repo_url")
-    cd repos/$folder
+    cd build/repos/$folder
     log "Current directory: $(pwd)"
 
     log "Fetching latest changes..."
