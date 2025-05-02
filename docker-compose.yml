@@ -1,174 +1,665 @@
-services:
-  block-builder:
-    container_name: block-builder
-    build:
-      context: ${PWD}/repos/block-builder
-      dockerfile: ${PWD}/Dockerfile.block-builder
-    image: block-builder
-    command: /app/jwt.hex http://execution-layer
-    expose:
-      - "8561"
-    environment:
-      - RUST_LOG=debug
-    networks:
-      - igra-network
-    volumes:
-      - ${PWD}/jwt.hex:/app/jwt.hex
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ${PWD}/logs/block-builder:/var/log/container
-    depends_on:
-      - execution-layer
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "5"
+name: igra-orchestra-devnet
 
+volumes:
+  kaspad_data:
+  viaduct_data:
+  kaspa_explorer_db_data:
+  yacht_data:
+networks:
+  igra-network:
+  kaspa-explorer-network:
+  traefik-network:
+
+
+x-default-logging: &default-logging
+  driver: "${LOGGING_DRIVER:-syslog}"
+  options:
+    tag: "igra-orchestra-devnet/{{.Name}}/{{.ID}}"
+
+x-default-healthcheck: &default-healthcheck
+  interval: 10s
+  timeout: 2s
+  retries: 3
+  start_period: 5s
+
+x-default-service: &default-service
+  restart: unless-stopped
+  networks:
+    - igra-network
+  logging: *default-logging
+
+x-rpc-provider-base: &rpc-provider-base
+  <<: *default-service
+  build:
+    context: build/repos/igra-rpc-provider
+    dockerfile: ../../Dockerfile.rpc-provider
+  image: rpc-provider
+  environment:
+    - RUST_LOG=${RUST_LOG}
+    - SERVER_HOST=0.0.0.0
+    - SERVER_PORT=8535
+    - EL_URL=http://execution-layer:8545
+    - SECURITY_ENABLE_WHITELIST=true
+  expose:
+    - "8535"
+  entrypoint: ["/app/igra-rpc-provider"]
+  networks:
+    - igra-network
+    - traefik-network
+  labels:
+    - "traefik.enable=true"
+    - >
+      traefik.http.routers.rpc0.rule=
+      PathPrefix(`/${RPC_ACCESS_TOKEN_1}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_2}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_3}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_4}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_5}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_6}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_7}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_8}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_9}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_10}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_11}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_12}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_13}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_14}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_15}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_16}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_17}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_18}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_19}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_20}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_21}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_22}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_23}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_24}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_25}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_26}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_27}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_28}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_29}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_30}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_31}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_32}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_33}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_34}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_35}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_36}`)))
+    - "traefik.http.routers.rpc0.entrypoints=rpc"
+    - "traefik.http.routers.rpc0.middlewares=strip-token"
+    - "traefik.http.services.rpc0.loadbalancer.server.port=8535"
+  depends_on:
+    execution-layer:
+      condition: service_healthy
+
+x-kaswallet-base: &kaswallet-base
+  <<: *default-service
+  build:
+    context: build/repos/kaswallet
+    dockerfile: ../../Dockerfile.kaswallet
+  image: kaswallet
+  expose:
+    - "8082"
+  environment:
+    - RUST_LOG
+    - LOG_LEVEL
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  command: >
+    --devnet
+    --logs-level=${LOG_LEVEL}
+    --keys /app/keys.json
+    --server ws://${KASPAD_HOST}:${KASPAD_BORSH_PORT}
+    --listen 0.0.0.0:8082
+
+services:
+  # CORE SERVICES
   execution-layer:
+    <<: *default-service
     container_name: execution-layer
     image: ghcr.io/paradigmxyz/reth
     entrypoint: /root/reth/run-igra-dev-el.sh
+    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5"]
     expose:
       - "8545"
       - "8546"
       - "8551"
       - "9001"
-    ports:
-      - "127.0.0.1:9545:8545" # Expose as a temporary solution for blockscout
-      - "127.0.0.1:9546:8546" # Expose as a temporary solution for blockscout
     environment:
-      - RUST_LOG=info,sync::stages=trace,downloaders=trace,debug
-    networks:
-      - igra-network
+      - RUST_LOG
     volumes:
-      - ./jwt.hex:/root/reth/jwt.hex
-      - ./repos/execution-layer/genesis.json:/root/reth/genesis.json
-      - ./repos/execution-layer/run-igra-dev-el.sh:/root/reth/run-igra-dev-el.sh
-      - ${PWD}/logs/execution-layer:/var/log/container
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "5"
+      - ./keys/jwt.hex:/root/reth/jwt.hex
+      - ./build/repos/execution-layer/genesis.json:/root/reth/genesis.json
+      - ./build/repos/execution-layer/run-igra-dev-el.sh:/root/reth/run-igra-dev-el.sh
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/$$HOSTNAME/8545"]
 
-  rpc-provider:
-    container_name: rpc-provider
+  block-builder:
+    <<: *default-service
     build:
-      context: ${PWD}/repos/igra-rpc-provider
-      dockerfile: ${PWD}/Dockerfile.rpc-provider
-    image: rpc-provider
-    environment:
-      - RUST_LOG=debug
-      - KASWALLET_PASSWORD=''
-    networks:
-      - igra-network
-    depends_on:
-      - kaswallet
-    ports:
-      - "127.0.0.1:8535:8535"
+      context: build/repos/block-builder
+      dockerfile: ../../Dockerfile.block-builder
+    image: block-builder
+    command: /app/jwt.hex http://execution-layer
+    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5"]
+    container_name: block-builder
     expose:
-      - "8535"
-    volumes:
-      - ${PWD}/logs/rpc-provider:/var/log/container
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "5"
-
-  kaswallet:
-    container_name: kaswallet
-    build:
-      context: ${PWD}/repos/kaswallet
-      dockerfile: ${PWD}/Dockerfile.kaswallet
-    image: kaswallet
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "8561"
     environment:
-      - RUST_LOG=debug
-    networks:
-      - igra-network
+      - RUST_LOG
     volumes:
-      - ${PWD}/keys.json:/app/keys.json
-      - ${PWD}/logs/kaswallet:/var/log/container
-    command: ["--devnet", "--logs-level=debug", "--keys", "/app/keys.json", "--server", "ws://host.docker.internal:17610", "--listen", "0.0.0.0:8082"]
-    expose:
-      - "8082"
-    ports:
-      - "127.0.0.1:8082:8082"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "5"
-
-  viaduct:
-    container_name: viaduct
-    build:
-      context: ${PWD}/repos/rusty-kaspa-private
-      dockerfile: ${PWD}/Dockerfile.viaduct
-    image: viaduct
-    environment:
-      - RUST_LOG=debug
-      - REPLAY_ON_ERROR=-1
-      - SYNC_THREADS=64
-      - MAGIC_HASH=000000000000000000000000000000000000000000000000000000000000000b
-    volumes:
-      - viaduct_data:/app/storage
-      - ${PWD}/logs/viaduct:/var/log/container
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - igra-network
-    command: ["--ip-port=host.docker.internal:17610", "--bb-ip-port=block-builder:8561"]
+      - ./keys/jwt.hex:/app/jwt.hex:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/$$HOSTNAME/8561"]
     depends_on:
-      - block-builder
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "5"
-
-  nginx:
-    image: nginx
-    volumes:
-      - ./proxy/nginx.conf:/etc/nginx/nginx.conf:ro
-      - cert_data:/etc/letsencrypt
-      - webroot_data:/var/www/certbot
-      - ./proxy/options-ssl-nginx.conf:/etc/letsencrypt/options-ssl-nginx.conf:ro
-      - ./proxy/ssl-dhparams.pem:/etc/letsencrypt/ssl-dhparams.pem:ro
-      - ${PWD}/logs/nginx:/var/log/nginx
-    ports:
-      - "80:80"
-      - "8000:8000"
-      - "8001:8001"
-      - "8545:8545"
-    networks:
-      - igra-network
-      - kaspa-explorer-nginx-network
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "5"
-    depends_on:
-      rpc-provider:
+      execution-layer:
+        condition: service_healthy
+      viaduct:
         condition: service_started
 
-  certbot:
-    image: certbot/certbot
+  viaduct:
+    <<: *default-service
+    build:
+      context: build/repos/rusty-kaspa-private
+      dockerfile: ../../Dockerfile.viaduct
+    image: viaduct
+    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5"]
+    container_name: viaduct
+    environment:
+      - RUST_LOG
+      - REPLAY_ON_ERROR
+      - SYNC_THREADS
+      - MAGIC_HASH
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["--ip-port=${KASPAD_HOST}:${KASPAD_BORSH_PORT}", "--bb-ip-port=block-builder:8561"]
     volumes:
-      - cert_data:/etc/letsencrypt
-      - webroot_data:/var/www/certbot
+      - viaduct_data:/app/storage
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}"]
+
+  # TRAEFIK SERVICE
+  traefik:
+    <<: *default-service
+    image: traefik:v3.0
+    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5", "kaspa-explorer"]
+    container_name: traefik
+    command:
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.rpc.address=:8545"
+      - "--entrypoints.explorer_http.address=:8008"
+      - "--entrypoints.explorer_ws.address=:8001"
+      - "--entrypoints.explorer_rest.address=:8010"
+      - "--entrypoints.kaspad_grpc.address=:16610"
+      - "--entrypoints.kaspad_borsh.address=:17610"
+      - "--entrypoints.kaspad_json.address=:18610"
+      - "--log.level=DEBUG"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+      - "8008:8008"
+      - "8001:8001"
+      - "8010:8010"
+      - "8545:8545"
+      - "17611:17610"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/traefik:/etc/traefik
+    networks:
+      - igra-network
+      - traefik-network
+      - kaspa-explorer-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.strip-token.stripprefixregex.regex=^/([a-f0-9]{32})"
+      - "traefik.http.middlewares.cors.headers.accesscontrolallowmethods=GET,OPTIONS,PUT,POST,DELETE"
+      - "traefik.http.middlewares.cors.headers.accesscontrolalloworiginlist=*"
+      - "traefik.http.middlewares.cors.headers.accesscontrolallowheaders=*"
+      - "traefik.http.middlewares.cors.headers.accesscontrolmaxage=100"
+      - "traefik.http.middlewares.cors.headers.addvaryheader=true"
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD", "wget", "--spider", "http://localhost:8080"]
+      timeout: 5s
+
+  # WORKER SERVICES
+  rpc-provider-0:
+    <<: *rpc-provider-base
+    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5"]
+    container_name: rpc-provider-0
+    environment:
+      - WALLET_DAEMON_URI=http://kaswallet-0:8082
+      - WALLET_TO_ADDRESS=${W0_WALLET_TO_ADDRESS}
+      - KASWALLET_PASSWORD=${W0_KASWALLET_PASSWORD}
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
+          echo hello > /dev/tcp/execution-layer/8545 && \
+          echo hello > /dev/tcp/kaswallet-0/8082",
+        ]
     depends_on:
-      - nginx
+      kaswallet-0:
+        condition: service_healthy
+      execution-layer:
+        condition: service_healthy
 
-networks:
-  igra-network:
-  kaspa-explorer-nginx-network:
-    external: true
+  kaswallet-0:
+    <<: *kaswallet-base
+    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5"]
+    container_name: kaswallet-0
+    volumes:
+      - ./keys/keys.kaswallet-0.json:/app/keys.json
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+        ]
 
-volumes:
-  viaduct_data:
-  cert_data:
-  webroot_data:
+  # Additional workers
+  rpc-provider-1:
+    <<: *rpc-provider-base
+    profiles: ["igra-w2", "igra-w3", "igra-w4", "igra-w5"]
+    container_name: rpc-provider-1
+    environment:
+      - WALLET_DAEMON_URI=http://kaswallet-1:8082
+      - WALLET_TO_ADDRESS=${W1_WALLET_TO_ADDRESS}
+      - KASWALLET_PASSWORD=${W1_KASWALLET_PASSWORD}
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
+          echo hello > /dev/tcp/execution-layer/8545 && \
+          echo hello > /dev/tcp/kaswallet-1/8082",
+        ]
+    depends_on:
+      kaswallet-1:
+        condition: service_healthy
+      execution-layer:
+        condition: service_healthy
+
+  kaswallet-1:
+    <<: *kaswallet-base
+    profiles: ["igra-w2", "igra-w3", "igra-w4", "igra-w5"]
+    container_name: kaswallet-1
+    volumes:
+      - ./keys/keys.kaswallet-1.json:/app/keys.json
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+        ]
+
+  # Worker 3
+  rpc-provider-2:
+    <<: *rpc-provider-base
+    profiles: ["igra-w3", "igra-w4", "igra-w5"]
+    container_name: rpc-provider-2
+    environment:
+      - WALLET_DAEMON_URI=http://kaswallet-2:8082
+      - WALLET_TO_ADDRESS=${W2_WALLET_TO_ADDRESS}
+      - KASWALLET_PASSWORD=${W2_KASWALLET_PASSWORD}
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
+          echo hello > /dev/tcp/execution-layer/8545 && \
+          echo hello > /dev/tcp/kaswallet-2/8082",
+        ]
+    depends_on:
+      kaswallet-2:
+        condition: service_healthy
+      execution-layer:
+        condition: service_healthy
+
+  kaswallet-2:
+    <<: *kaswallet-base
+    profiles: ["igra-w3", "igra-w4", "igra-w5"]
+    container_name: kaswallet-2
+    volumes:
+      - ./keys/keys.kaswallet-2.json:/app/keys.json
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+        ]
+
+  # Worker 4
+  rpc-provider-3:
+    <<: *rpc-provider-base
+    profiles: ["igra-w4", "igra-w5"]
+    container_name: rpc-provider-3
+    environment:
+      - WALLET_DAEMON_URI=http://kaswallet-3:8082
+      - WALLET_TO_ADDRESS=${W3_WALLET_TO_ADDRESS}
+      - KASWALLET_PASSWORD=${W3_KASWALLET_PASSWORD}
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
+          echo hello > /dev/tcp/execution-layer/8545 && \
+          echo hello > /dev/tcp/kaswallet-3/8082",
+        ]
+    depends_on:
+      kaswallet-3:
+        condition: service_healthy
+      execution-layer:
+        condition: service_healthy
+
+  kaswallet-3:
+    <<: *kaswallet-base
+    profiles: ["igra-w4", "igra-w5"]
+    container_name: kaswallet-3
+    volumes:
+      - ./keys/keys.kaswallet-3.json:/app/keys.json
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+        ]
+
+  # Worker 5
+  rpc-provider-4:
+    <<: *rpc-provider-base
+    profiles: ["igra-w5"]
+    container_name: rpc-provider-4
+    environment:
+      - WALLET_DAEMON_URI=http://kaswallet-4:8082
+      - WALLET_TO_ADDRESS=${W4_WALLET_TO_ADDRESS}
+      - KASWALLET_PASSWORD=${W4_KASWALLET_PASSWORD}
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
+          echo hello > /dev/tcp/execution-layer/8545 && \
+          echo hello > /dev/tcp/kaswallet-4/8082",
+        ]
+    depends_on:
+      kaswallet-4:
+        condition: service_healthy
+      execution-layer:
+        condition: service_healthy
+
+  kaswallet-4:
+    <<: *kaswallet-base
+    profiles: ["igra-w5"]
+    container_name: kaswallet-4
+    volumes:
+      - ./keys/keys.kaswallet-4.json:/app/keys.json
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+        ]
+
+  # KASPA SERVICES
+  kaspad:
+    <<: *default-service
+    build:
+      context: build/repos/rusty-kaspa
+      dockerfile: ../../Dockerfile.kaspad
+    image: kaspad-devnet
+    profiles: ["kaspad"]
+    container_name: kaspad
+    expose:
+      - "16610" # GRPC Server
+      - "16611" # P2P Server
+      - "17610" # WRPC (borsh) Server
+      - "18610" # WRPC (json) Server
+    ports:
+      - "17610:17610"
+    environment:
+      - RUST_LOG
+      - REPLAY_ON_ERROR
+      - SYNC_THREADS
+    command:
+      [
+        "--loglevel=debug",
+        "--utxoindex",
+        "--rpclisten=0.0.0.0:16610",
+        "--rpclisten-borsh=0.0.0.0:17610",
+        "--rpclisten-json=0.0.0.0:18610",
+        "--devnet",
+        "--enable-unsynced-mining",
+        "--disable-upnp",
+        "--appdir=/app/data",
+      ]
+    volumes:
+      - kaspad_data:/app/data/
+    networks:
+      - igra-network
+      - kaspa-explorer-network
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.kaspad-grpc.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.kaspad-grpc.entrypoints=kaspad_grpc"
+      - "traefik.tcp.routers.kaspad-grpc.service=kaspad-grpc-svc"
+      - "traefik.tcp.services.kaspad-grpc-svc.loadbalancer.server.port=16610"
+      - "traefik.tcp.routers.kaspad-json.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.kaspad-json.entrypoints=kaspad_json"
+      - "traefik.tcp.routers.kaspad-json.service=kaspad-json-svc"
+      - "traefik.tcp.services.kaspad-json-svc.loadbalancer.server.port=18610"
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/kaspad/16610"]
+
+  kaspa-miner:
+    <<: *default-service
+    build:
+      context: build/repos/kaspa-miner
+      dockerfile: ../../Dockerfile.kaspa-miner
+    image: kaspa-miner
+    profiles: ["kaspad"]
+    container_name: kaspa-miner
+    environment:
+      - RUST_LOG
+      - REPLAY_ON_ERROR
+      - SYNC_THREADS
+    entrypoint: >
+      sh -c '
+      KASPAD=$(getent ahostsv4 kaspad | grep kaspad | grep -Eo "\\b([0-9]{1,3}\\.){3}[0-9]{1,3}\\b") &&
+      exec /app/kaspa-miner
+      --mining-address ${MINING_ADDRESS}
+      --kaspad-address $$KASPAD
+      --port 16610
+      --threads ${MINING_THREADS}
+      --mine-when-not-synced
+      '
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      kaspad:
+        condition: service_healthy
+
+  # KASPA EXPLORER SERVICES
+  kaspa_explorer:
+    <<: *default-service
+    image: supertypo/kaspa-explorer:latest
+    profiles: ["kaspa-explorer"]
+    container_name: kaspa_explorer
+    expose:
+      - "8080"
+    command: ["/bin/sh", "-c", "sed -i 's/localhost/0.0.0.0/g' /app/server.js && node /app/server.js"]
+    environment:
+      REACT_APP_NETWORK: "devnet"
+      API_URI: "http://localhost:8010"
+      API_WS_URI: "ws://localhost:8001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - kaspa-explorer-network
+      - traefik-network
+    depends_on:
+      - kaspa_rest_server
+      - simply_kaspa_socket_server
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.explorer.rule=Host(`localhost`)"
+      - "traefik.http.routers.explorer.entrypoints=explorer_http"
+      - "traefik.http.services.explorer.loadbalancer.server.port=8080"
+
+  simply_kaspa_socket_server:
+    <<: *default-service
+    image: supertypo/simply-kaspa-socket-server:unstable
+    profiles: ["kaspa-explorer"]
+    container_name: simply_kaspa_socket_server
+    expose:
+      - "8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: "-n devnet -x 20 -s ws://kaspad:17610"
+    networks:
+      - kaspa-explorer-network
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.socket.rule=Host(`localhost`)"
+      - "traefik.http.routers.socket.entrypoints=explorer_ws"
+      - "traefik.http.services.socket.loadbalancer.server.port=8000"
+      - "traefik.http.routers.socket.middlewares=ws-headers"
+      - "traefik.http.middlewares.ws-headers.headers.customrequestheaders.Connection=upgrade"
+      - "traefik.http.middlewares.ws-headers.headers.customrequestheaders.Upgrade=websocket"
+
+  kaspa_rest_server:
+    <<: *default-service
+    image: kaspanet/kaspa-rest-server:latest
+    profiles: ["kaspa-explorer"]
+    container_name: kaspa_rest_server
+    expose:
+      - "8000"
+    environment:
+      KASPAD_HOST_1: "kaspad:17610"
+      SQL_URI: "postgresql+asyncpg://postgres:postgres@kaspa_db:5432/postgres"
+      CORS_ORIGINS: "*"
+      CORS_ALLOW_METHODS: "GET,POST,OPTIONS,PUT,DELETE"
+      CORS_ALLOW_HEADERS: "*"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - kaspa-explorer-network
+      - traefik-network
+    depends_on:
+      kaspa_db:
+        condition: service_started
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rest.rule=Host(`localhost`)"
+      - "traefik.http.routers.rest.entrypoints=explorer_rest"
+      - "traefik.http.services.rest.loadbalancer.server.port=8000"
+      - "traefik.http.routers.rest.middlewares=restcors"
+      - "traefik.http.middlewares.restcors.headers.accesscontrolallowmethods=GET,OPTIONS,PUT,POST,DELETE"
+      - "traefik.http.middlewares.restcors.headers.accesscontrolalloworiginlist=*"
+      - "traefik.http.middlewares.restcors.headers.accesscontrolallowheaders=*"
+      - "traefik.http.middlewares.restcors.headers.accesscontrolmaxage=100"
+      - "traefik.http.middlewares.restcors.headers.addvaryheader=true"
+      - "traefik.http.middlewares.restcors.headers.accesscontrolallowcredentials=true"
+
+  simply_kaspa_indexer:
+    <<: *default-service
+    image: supertypo/simply-kaspa-indexer:latest
+    profiles: ["kaspa-explorer"]
+    container_name: simply_kaspa_indexer
+    environment:
+      SQL_URI: "postgresql://postgres:postgres@kaspa_db:5432/postgres"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: "-n devnet -u -s ws://kaspad:17610 -d postgresql://postgres:postgres@kaspa_db:5432/postgres"
+    networks:
+      - kaspa-explorer-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+    depends_on:
+      kaspa_db:
+        condition: service_healthy
+
+  kaspa_db:
+    <<: *default-service
+    image: postgres:16-alpine
+    profiles: ["kaspa-explorer"]
+    container_name: kaspa_db
+    shm_size: 4G
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+      POSTGRES_DB: "postgres"
+    expose:
+      - "5432"
+    volumes:
+      - kaspa_explorer_db_data:/var/lib/postgresql/data/
+    networks:
+      - kaspa-explorer-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # UTILITY SERVICES
+  yacht:
+    <<: *default-service
+    image: selfhostedpro/yacht:latest
+    profiles: ["utils"]
+    container_name: yacht
+    ports:
+      - "8000:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - yacht_data:/config
+    networks:
+      - igra-network
+

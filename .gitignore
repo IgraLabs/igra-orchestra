@@ -2,3 +2,14 @@ repos/
 jwt.hex
 keys.json
 logs/
+keys/
+!keys/readme.txt
+
+data/
+
+# .env.local
+# .env.stage
+# .env.prod
+
+.DS_Store
+.env
