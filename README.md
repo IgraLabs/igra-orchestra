@@ -41,17 +41,17 @@ The environment uses Docker Compose profiles for flexible deployment:
 openssl rand -hex 32 > ./keys/jwt.hex
 
 # 3. Start Kaspa services first
-docker compose --profile kaspad up -d
+docker compose -f docker-compose.kaspa.yml --profile kaspad up -d
 
 # 4. Start the Explorer (optional)
-docker compose --profile kaspa-explorer up -d
+docker compose -f docker-compose.kaspa.yml --profile kaspa-explorer up -d
 
 # 5. Start worker services based on your needs
-docker compose --profile igra-w1 up -d  # 1 worker
+docker compose -f docker-compose.core.yml --profile igra-w1 up -d  # 1 worker
 # OR
-docker compose --profile igra-w2 up -d  # 2 workers
+docker compose -f docker-compose.core.yml --profile igra-w2 up -d  # 2 workers
 # OR
-docker compose --profile igra-w3 up -d  # 3 workers
+docker compose -f docker-compose.core.yml --profile igra-w3 up -d  # 3 workers
 ```
 
 ## Initial Setup
@@ -88,6 +88,10 @@ Follow these steps before the first run:
 
 4.  **Create worker keys:**
     Generate the necessary key files for the wallet services. At minimum, you need `keys.kaswallet-0.json` for one worker. Additional workers require corresponding files (e.g., `keys.kaswallet-1.json`, `keys.kaswallet-2.json`).
+
+## Docker Compose Configuration
+
+The Docker Compose configuration uses a single docker-compose.yml file with multiple profiles for flexible deployment.
 
 ## Docker Compose Services
 
@@ -215,3 +219,5 @@ The syslog tagging format allows for easy filtering by service name, making it p
 4. **Permission issues**: Check data directory permissions
 5. **Profile dependencies**: Make sure to start profiles in the correct order (kaspad → explorer → workers)
 6. **Missing JWT file**: Ensure you've created the JWT file before starting services
+7. **Network issues between compose files**: When running services from separate compose files, ensure they can properly connect by using the `-f` flag with multiple compose files
+```
