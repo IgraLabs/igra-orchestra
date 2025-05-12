@@ -5,6 +5,7 @@ volumes:
   viaduct_data:
   kaspa_explorer_db_data:
   yacht_data:
+  traefik_certs:
 networks:
   igra-network:
   kaspa-explorer-network:
@@ -50,7 +51,7 @@ x-rpc-provider-base: &rpc-provider-base
     - "traefik.enable=true"
     - >
       traefik.http.routers.rpc0.rule=
-      PathPrefix(`/${RPC_ACCESS_TOKEN_1}`) ||
+      (Host(`${IGRA_ORCHESTRA_DOMAIN}`) && (PathPrefix(`/${RPC_ACCESS_TOKEN_1}`) ||
       PathPrefix(`/${RPC_ACCESS_TOKEN_2}`) ||
       PathPrefix(`/${RPC_ACCESS_TOKEN_3}`) ||
       PathPrefix(`/${RPC_ACCESS_TOKEN_4}`) ||
@@ -87,6 +88,8 @@ x-rpc-provider-base: &rpc-provider-base
       PathPrefix(`/${RPC_ACCESS_TOKEN_35}`) ||
       PathPrefix(`/${RPC_ACCESS_TOKEN_36}`)))
     - "traefik.http.routers.rpc0.entrypoints=rpc"
+    - "traefik.http.routers.rpc0.tls=true"
+    - "traefik.http.routers.rpc0.tls.certresolver=myresolver"
     - "traefik.http.routers.rpc0.middlewares=strip-token"
     - "traefik.http.services.rpc0.loadbalancer.server.port=8535"
   depends_on:
@@ -195,6 +198,7 @@ services:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
       - "--entrypoints.rpc.address=:8545"
       - "--entrypoints.explorer_http.address=:8008"
       - "--entrypoints.explorer_ws.address=:8001"
@@ -203,11 +207,13 @@ services:
       - "--entrypoints.kaspad_borsh.address=:17610"
       - "--entrypoints.kaspad_json.address=:18610"
       - "--log.level=DEBUG"
+      - "--certificatesresolvers.myresolver.acme.email=${IGRA_ORCHESTRA_DOMAIN_EMAIL}"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
     ports:
       - "80:80"
       - "443:443"
       - "8080:8080"
-      - "8008:8008"
       - "8001:8001"
       - "8010:8010"
       - "8545:8545"
@@ -215,6 +221,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./config/traefik:/etc/traefik
+      - traefik_certs:/letsencrypt
     networks:
       - igra-network
       - traefik-network
@@ -227,6 +234,18 @@ services:
       - "traefik.http.middlewares.cors.headers.accesscontrolallowheaders=*"
       - "traefik.http.middlewares.cors.headers.accesscontrolmaxage=100"
       - "traefik.http.middlewares.cors.headers.addvaryheader=true"
+      # Add redirect middleware for HTTP to HTTPS
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+      # Apply redirect to web entrypoint for the specified host
+      - "traefik.http.routers.web-redirect.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
+      - "traefik.http.routers.web-redirect.entrypoints=web"
+      - "traefik.http.routers.web-redirect.middlewares=redirect-to-https"
+      # Define a router for websecure (HTTPS)
+      # - "traefik.http.routers.websecure-router.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
+      # - "traefik.http.routers.websecure-router.entrypoints=websecure"
+      # - "traefik.http.routers.websecure-router.tls=true"
+      # - "traefik.http.routers.websecure-router.tls.certresolver=myresolver"
     healthcheck:
       <<: *default-healthcheck
       test: ["CMD", "wget", "--spider", "http://localhost:8080"]
@@ -528,21 +547,27 @@ services:
     command: ["/bin/sh", "-c", "sed -i 's/localhost/0.0.0.0/g' /app/server.js && node /app/server.js"]
     environment:
       REACT_APP_NETWORK: "devnet"
-      API_URI: "http://localhost:8010"
-      API_WS_URI: "ws://localhost:8001"
+      API_URI: "https://${IGRA_ORCHESTRA_DOMAIN}/api"
+      API_WS_URI: "wss://${IGRA_ORCHESTRA_DOMAIN}/socket.io/"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
       - kaspa-explorer-network
       - traefik-network
     depends_on:
-      - kaspa_rest_server
-      - simply_kaspa_socket_server
+      kaspa_rest_server:
+        condition: service_started
+      simply_kaspa_socket_server:
+        condition: service_started
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.explorer.rule=Host(`localhost`)"
-      - "traefik.http.routers.explorer.entrypoints=explorer_http"
-      - "traefik.http.services.explorer.loadbalancer.server.port=8080"
+      - "traefik.http.routers.explorer-https.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
+      - "traefik.http.routers.explorer-https.entrypoints=websecure"
+      - "traefik.http.routers.explorer-https.tls=true"
+      - "traefik.http.routers.explorer-https.tls.certresolver=myresolver"
+      - "traefik.http.routers.explorer-https.service=explorer-svc"
+      - "traefik.http.routers.explorer-https.priority=100"
+      - "traefik.http.services.explorer-svc.loadbalancer.server.port=8080"
 
   simply_kaspa_socket_server:
     <<: *default-service
@@ -559,12 +584,17 @@ services:
       - traefik-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.socket.rule=Host(`localhost`)"
-      - "traefik.http.routers.socket.entrypoints=explorer_ws"
-      - "traefik.http.services.socket.loadbalancer.server.port=8000"
-      - "traefik.http.routers.socket.middlewares=ws-headers"
-      - "traefik.http.middlewares.ws-headers.headers.customrequestheaders.Connection=upgrade"
-      - "traefik.http.middlewares.ws-headers.headers.customrequestheaders.Upgrade=websocket"
+      - "traefik.http.routers.socket-wss.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`) && PathPrefix(`/socket.io`)"
+      - "traefik.http.routers.socket-wss.entrypoints=websecure"
+      - "traefik.http.routers.socket-wss.tls=true"
+      - "traefik.http.routers.socket-wss.tls.certresolver=myresolver"
+      - "traefik.http.routers.socket-wss.service=socket-svc"
+      - "traefik.http.routers.socket-wss.priority=101"
+      - "traefik.http.middlewares.socket-strip-prefix.stripprefix.prefixes=/socket.io"
+      - "traefik.http.routers.socket-wss.middlewares=socket-strip-prefix,ws-headers-middleware"
+      - "traefik.http.middlewares.ws-headers-middleware.headers.customrequestheaders.Connection=upgrade"
+      - "traefik.http.middlewares.ws-headers-middleware.headers.customrequestheaders.Upgrade=websocket"
+      - "traefik.http.services.socket-svc.loadbalancer.server.port=8000"
 
   kaspa_rest_server:
     <<: *default-service
@@ -586,19 +616,24 @@ services:
       - traefik-network
     depends_on:
       kaspa_db:
-        condition: service_started
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.rest.rule=Host(`localhost`)"
-      - "traefik.http.routers.rest.entrypoints=explorer_rest"
-      - "traefik.http.services.rest.loadbalancer.server.port=8000"
-      - "traefik.http.routers.rest.middlewares=restcors"
-      - "traefik.http.middlewares.restcors.headers.accesscontrolallowmethods=GET,OPTIONS,PUT,POST,DELETE"
-      - "traefik.http.middlewares.restcors.headers.accesscontrolalloworiginlist=*"
-      - "traefik.http.middlewares.restcors.headers.accesscontrolallowheaders=*"
-      - "traefik.http.middlewares.restcors.headers.accesscontrolmaxage=100"
-      - "traefik.http.middlewares.restcors.headers.addvaryheader=true"
-      - "traefik.http.middlewares.restcors.headers.accesscontrolallowcredentials=true"
+      - "traefik.http.routers.rest-https.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.rest-https.entrypoints=websecure"
+      - "traefik.http.routers.rest-https.tls=true"
+      - "traefik.http.routers.rest-https.tls.certresolver=myresolver"
+      - "traefik.http.routers.rest-https.service=rest-svc"
+      - "traefik.http.routers.rest-https.priority=101"
+      - "traefik.http.middlewares.rest-strip-prefix.stripprefix.prefixes=/api"
+      - "traefik.http.routers.rest-https.middlewares=rest-strip-prefix,rest-cors-middleware"
+      - "traefik.http.middlewares.rest-cors-middleware.headers.accesscontrolallowmethods=GET,OPTIONS,PUT,POST,DELETE"
+      - "traefik.http.middlewares.rest-cors-middleware.headers.accesscontrolalloworiginlist=*"
+      - "traefik.http.middlewares.rest-cors-middleware.headers.accesscontrolallowheaders=*"
+      - "traefik.http.middlewares.rest-cors-middleware.headers.accesscontrolmaxage=100"
+      - "traefik.http.middlewares.rest-cors-middleware.headers.addvaryheader=true"
+      - "traefik.http.middlewares.rest-cors-middleware.headers.accesscontrolallowcredentials=true"
+      - "traefik.http.services.rest-svc.loadbalancer.server.port=8000"
 
   simply_kaspa_indexer:
     <<: *default-service
