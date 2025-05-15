@@ -278,7 +278,7 @@ services:
 
   kaswallet-0:
     <<: *kaswallet-base
-    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5"]
+    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5", "kaswallets"]
     container_name: kaswallet-0
     volumes:
       - ./keys/keys.kaswallet-0.json:/app/keys.json
@@ -295,7 +295,7 @@ services:
   # Additional workers
   rpc-provider-1:
     <<: *rpc-provider-base
-    profiles: ["igra-w2", "igra-w3", "igra-w4", "igra-w5"]
+    profiles: ["igra-w2", "igra-w3", "igra-w4", "igra-w5", "rpc-providers"]
     container_name: rpc-provider-1
     environment:
       - WALLET_DAEMON_URI=http://kaswallet-1:8082
@@ -319,7 +319,7 @@ services:
 
   kaswallet-1:
     <<: *kaswallet-base
-    profiles: ["igra-w2", "igra-w3", "igra-w4", "igra-w5"]
+    profiles: ["igra-w2", "igra-w3", "igra-w4", "igra-w5", "kaswallets"]
     container_name: kaswallet-1
     volumes:
       - ./keys/keys.kaswallet-1.json:/app/keys.json
@@ -336,7 +336,7 @@ services:
   # Worker 3
   rpc-provider-2:
     <<: *rpc-provider-base
-    profiles: ["igra-w3", "igra-w4", "igra-w5"]
+    profiles: ["igra-w3", "igra-w4", "igra-w5", "rpc-providers"]
     container_name: rpc-provider-2
     environment:
       - WALLET_DAEMON_URI=http://kaswallet-2:8082
@@ -360,7 +360,7 @@ services:
 
   kaswallet-2:
     <<: *kaswallet-base
-    profiles: ["igra-w3", "igra-w4", "igra-w5"]
+    profiles: ["igra-w3", "igra-w4", "igra-w5", "kaswallets"]
     container_name: kaswallet-2
     volumes:
       - ./keys/keys.kaswallet-2.json:/app/keys.json
@@ -377,7 +377,7 @@ services:
   # Worker 4
   rpc-provider-3:
     <<: *rpc-provider-base
-    profiles: ["igra-w4", "igra-w5"]
+    profiles: ["igra-w4", "igra-w5", "rpc-providers"]
     container_name: rpc-provider-3
     environment:
       - WALLET_DAEMON_URI=http://kaswallet-3:8082
@@ -401,7 +401,7 @@ services:
 
   kaswallet-3:
     <<: *kaswallet-base
-    profiles: ["igra-w4", "igra-w5"]
+    profiles: ["igra-w4", "igra-w5", "kaswallets"]
     container_name: kaswallet-3
     volumes:
       - ./keys/keys.kaswallet-3.json:/app/keys.json
@@ -418,7 +418,7 @@ services:
   # Worker 5
   rpc-provider-4:
     <<: *rpc-provider-base
-    profiles: ["igra-w5"]
+    profiles: ["igra-w5", "rpc-providers"]
     container_name: rpc-provider-4
     environment:
       - WALLET_DAEMON_URI=http://kaswallet-4:8082
@@ -442,7 +442,7 @@ services:
 
   kaswallet-4:
     <<: *kaswallet-base
-    profiles: ["igra-w5"]
+    profiles: ["igra-w5", "kaswallets"]
     container_name: kaswallet-4
     volumes:
       - ./keys/keys.kaswallet-4.json:/app/keys.json
