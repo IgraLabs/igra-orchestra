@@ -90,7 +90,7 @@ x-rpc-provider-base: &rpc-provider-base
     - "traefik.http.routers.rpc0.entrypoints=rpc"
     - "traefik.http.routers.rpc0.tls=true"
     - "traefik.http.routers.rpc0.tls.certresolver=myresolver"
-    - "traefik.http.routers.rpc0.middlewares=strip-token"
+    - "traefik.http.routers.rpc0.middlewares=strip-token,cors"
     - "traefik.http.services.rpc0.loadbalancer.server.port=8535"
   depends_on:
     execution-layer:
