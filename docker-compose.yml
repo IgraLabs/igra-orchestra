@@ -86,7 +86,17 @@ x-rpc-provider-base: &rpc-provider-base
       PathPrefix(`/${RPC_ACCESS_TOKEN_33}`) ||
       PathPrefix(`/${RPC_ACCESS_TOKEN_34}`) ||
       PathPrefix(`/${RPC_ACCESS_TOKEN_35}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_36}`)))
+      PathPrefix(`/${RPC_ACCESS_TOKEN_36}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_37}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_38}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_39}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_40}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_41}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_42}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_43}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_44}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_45}`) ||
+      PathPrefix(`/${RPC_ACCESS_TOKEN_46}`)))
     - "traefik.http.routers.rpc0.entrypoints=rpc"
     - "traefik.http.routers.rpc0.tls=true"
     - "traefik.http.routers.rpc0.tls.certresolver=myresolver"
