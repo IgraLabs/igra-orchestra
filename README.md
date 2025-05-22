@@ -18,7 +18,7 @@ The `setup-repos.sh` script clones the necessary repositories into the `build/re
 
 *   `build/repos/execution-layer` - Ethereum-compatible execution layer (repo: `IgraLabs/execution-layer`)
 *   `build/repos/block-builder` - Block builder service (repo: `IgraLabs/block-builder`)
-*   `build/repos/rusty-kaspa-private` - Contains the Viaduct component (repo: `IgraLabs/rusty-kaspa-private`)
+*   `build/repos/viaduct` - Contains the Viaduct component (repo: `IgraLabs/viaduct`)
 *   `build/repos/igra-rpc-provider` - RPC provider for handling API requests (repo: `IgraLabs/igra-rpc-provider`)
 *   `build/repos/kaswallet` - Wallet service for relaying transactions (repo: `IgraLabs/kaswallet`)
 
@@ -67,7 +67,7 @@ Follow these steps before the first run:
     # EXECUTION_LAYER_BRANCH=main
     # KASWALLET_BRANCH=feature/new-api
     # IGRA_RPC_PROVIDER_BRANCH=main
-    # VIADUCT_BRANCH=updated_storage_tests
+    # VIADUCT_BRANCH=master
     # KASPAD_BRANCH=for-wallet # Used only if --dev flag is set
     # KASPA_MINER_BRANCH=main  # Used only if --dev flag is set
     ```

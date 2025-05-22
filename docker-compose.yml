@@ -180,7 +180,7 @@ services:
   viaduct:
     <<: *default-service
     build:
-      context: build/repos/rusty-kaspa-private
+      context: build/repos/viaduct
       dockerfile: ../../Dockerfile.viaduct
     image: viaduct
     profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5"]
