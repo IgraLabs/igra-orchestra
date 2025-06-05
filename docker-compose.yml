@@ -131,7 +131,7 @@ services:
   execution-layer:
     <<: *default-service
     container_name: execution-layer
-    image: ghcr.io/paradigmxyz/reth
+    image: igralabscom/reth:v1.4.8
     entrypoint: /root/reth/run-igra-dev-el.sh
     profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5"]
     expose:
@@ -180,8 +180,10 @@ services:
   viaduct:
     <<: *default-service
     build:
-      context: build/repos/rusty-kaspa-private
+      context: build/repos/viaduct
       dockerfile: ../../Dockerfile.viaduct
+      ssh:
+        - default
     image: viaduct
     profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5"]
     container_name: viaduct
@@ -190,6 +192,7 @@ services:
       - REPLAY_ON_ERROR
       - SYNC_THREADS
       - MAGIC_HASH
+      - DELAY_BLOCKS
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["--ip-port=${KASPAD_HOST}:${KASPAD_BORSH_PORT}", "--bb-ip-port=block-builder:8561"]
@@ -473,7 +476,7 @@ services:
   kaspad:
     <<: *default-service
     build:
-      context: build/repos/rusty-kaspa
+      context: build/repos/rusty-kaspa-private
       dockerfile: ../../Dockerfile.kaspad
     image: kaspad-devnet
     profiles: ["kaspad"]
@@ -485,20 +488,27 @@ services:
       - "18610" # WRPC (json) Server
     ports:
       - "17610:17610"
+      - "16611:16611"
+      # - "17611:17611"
+      # - "18611:18611"
     environment:
       - RUST_LOG
       - REPLAY_ON_ERROR
       - SYNC_THREADS
     command:
       [
-        "--loglevel=debug",
-        "--utxoindex",
-        "--rpclisten=0.0.0.0:16610",
-        "--rpclisten-borsh=0.0.0.0:17610",
-        "--rpclisten-json=0.0.0.0:18610",
         "--devnet",
-        "--enable-unsynced-mining",
         "--disable-upnp",
+        "--nodnsseed",
+        "--rpclisten-borsh=0.0.0.0",
+        "--rpclisten=0.0.0.0",
+        "--rpclisten-json=0.0.0.0",
+        "--listen=0.0.0.0",
+        "--loglevel=info",
+        "--utxoindex",
+        "--enable-unsynced-mining",
+        # "--rpclisten=0.0.0.0:16610",
+        # "--listen-borsh=0.0.0.0",
         "--appdir=/app/data",
       ]
     volumes:

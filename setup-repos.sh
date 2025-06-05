@@ -127,8 +127,8 @@ BLOCK_BUILDER_BRANCH=${BLOCK_BUILDER_BRANCH:-main}
 EXECUTION_LAYER_BRANCH=${EXECUTION_LAYER_BRANCH:-main}
 KASWALLET_BRANCH=${KASWALLET_BRANCH:-main}
 IGRA_RPC_PROVIDER_BRANCH=${IGRA_RPC_PROVIDER_BRANCH:-main}
-VIADUCT_BRANCH=${VIADUCT_BRANCH:-updated_storage_tests}
-KASPAD_BRANCH=${KASPAD_BRANCH:-for-wallet}
+VIADUCT_BRANCH=${VIADUCT_BRANCH:-main}
+KASPAD_BRANCH=${KASPAD_BRANCH:-main}
 KASPA_MINER_BRANCH=${KASPA_MINER_BRANCH:-main}
 
 log "Starting repository setup"
@@ -153,8 +153,8 @@ URLS=(
     "git@github.com:IgraLabs/execution-layer.git"
     "git@github.com:IgraLabs/kaswallet.git"
     "git@github.com:IgraLabs/igra-rpc-provider.git"
+    "git@github.com:IgraLabs/viaduct.git"
     "git@github.com:IgraLabs/rusty-kaspa-private.git"
-    "git@github.com:IgraLabs/rusty-kaspa.git"
     "git@github.com:elichai/kaspa-miner.git"
 )
 BRANCHES=(

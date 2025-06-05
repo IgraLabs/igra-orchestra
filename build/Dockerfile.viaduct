@@ -1,18 +1,24 @@
+# syntax=docker/dockerfile:1
 FROM rust:slim AS builder
 
 WORKDIR /app
 
 # Install OpenSSL and Protocol Buffers compiler
 RUN apt-get update && \
-    apt-get install -y pkg-config libssl-dev protobuf-compiler libclang-dev build-essential && \
+    apt-get install -y pkg-config libssl-dev protobuf-compiler libclang-dev build-essential git openssh-client && \
     rm -rf /var/lib/apt/lists/*
 
 # Install rustfmt
 RUN rustup component add rustfmt
 
+# Configure git to use SSH
+RUN mkdir -p -m 0600 ~/.ssh && \
+    ssh-keyscan github.com >> ~/.ssh/known_hosts
+
 COPY . .
 
-RUN cargo build --bin viaduct --release
+# Use BuildKit SSH mount for cargo build
+RUN --mount=type=ssh cargo build --release
 
 FROM debian:bookworm-slim
 
