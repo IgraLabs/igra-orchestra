@@ -133,7 +133,7 @@ services:
     container_name: execution-layer
     image: igralabscom/reth:v1.4.8
     entrypoint: /root/reth/run-igra-dev-el.sh
-    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5"]
+    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5", "igra-backend"]
     expose:
       - "8545"
       - "8546"
@@ -159,7 +159,7 @@ services:
       dockerfile: ../../Dockerfile.block-builder
     image: block-builder
     command: /app/jwt.hex http://execution-layer
-    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5"]
+    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5", "igra-backend"]
     container_name: block-builder
     expose:
       - "8561"
@@ -185,7 +185,7 @@ services:
       ssh:
         - default
     image: viaduct
-    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5"]
+    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5", "igra-backend"]
     container_name: viaduct
     environment:
       - RUST_LOG
@@ -495,22 +495,17 @@ services:
       - RUST_LOG
       - REPLAY_ON_ERROR
       - SYNC_THREADS
-    command:
-      [
-        "--devnet",
-        "--disable-upnp",
-        "--nodnsseed",
-        "--rpclisten-borsh=0.0.0.0",
-        "--rpclisten=0.0.0.0",
-        "--rpclisten-json=0.0.0.0",
-        "--listen=0.0.0.0",
-        "--loglevel=info",
-        "--utxoindex",
-        "--enable-unsynced-mining",
-        # "--rpclisten=0.0.0.0:16610",
-        # "--listen-borsh=0.0.0.0",
-        "--appdir=/app/data",
-      ]
+      - KASPAD_ADD_PEER
+    entrypoint: |
+      sh -c '
+      ARGS="--devnet --disable-upnp --nodnsseed --rpclisten-borsh=0.0.0.0 --rpclisten=0.0.0.0 --rpclisten-json=0.0.0.0 --listen=0.0.0.0 --loglevel=info --utxoindex --appdir=/app/data"
+      if [ -n "$$KASPAD_ADD_PEER" ]; then
+        ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
+      else
+        ARGS="$$ARGS --enable-unsynced-mining"
+      fi
+      exec /app/kaspad $$ARGS
+      '
     volumes:
       - kaspad_data:/app/data/
     networks:
