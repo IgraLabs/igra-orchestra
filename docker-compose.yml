@@ -131,7 +131,7 @@ services:
   execution-layer:
     <<: *default-service
     container_name: execution-layer
-    image: igralabscom/reth:v1.4.8
+    image: ghcr.io/paradigmxyz/reth:latest
     entrypoint: /root/reth/run-igra-dev-el.sh
     profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5", "igra-backend"]
     expose:
