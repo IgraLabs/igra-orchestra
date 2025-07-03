@@ -67,7 +67,7 @@ Follow these steps before the first run:
     # EXECUTION_LAYER_BRANCH=main
     # KASWALLET_BRANCH=feature/new-api
     # IGRA_RPC_PROVIDER_BRANCH=main
-    # VIADUCT_BRANCH=updated_storage_tests
+    # VIADUCT_BRANCH=main
     # KASPAD_BRANCH=for-wallet # Used only if --dev flag is set
     # KASPA_MINER_BRANCH=main  # Used only if --dev flag is set
     ```

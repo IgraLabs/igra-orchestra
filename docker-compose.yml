@@ -191,7 +191,8 @@ services:
       - RUST_LOG
       - REPLAY_ON_ERROR
       - SYNC_THREADS
-      - MAGIC_HASH
+      - IGRA_LAUNCH_DAA_SCORE
+      - MAGIC_SPK
       - DELAY_BLOCKS
     extra_hosts:
       - "host.docker.internal:host-gateway"
