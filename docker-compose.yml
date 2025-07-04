@@ -29,18 +29,21 @@ x-default-service: &default-service
     - igra-network
   logging: *default-logging
 
+x-rpc-provider-environment: &rpc-provider-environment
+  RUST_LOG: ${RUST_LOG}
+  SERVER_HOST: "0.0.0.0"
+  SERVER_PORT: 8535
+  EL_URL: http://execution-layer:8545
+  SECURITY_ENABLE_WHITELIST: "true"
+  GAS_MIN_BASE_FEE_GWEI: ${GAS_MIN_BASE_FEE_GWEI}
+
 x-rpc-provider-base: &rpc-provider-base
   <<: *default-service
   build:
     context: build/repos/igra-rpc-provider
     dockerfile: ../../Dockerfile.rpc-provider
   image: rpc-provider
-  environment:
-    - RUST_LOG=${RUST_LOG}
-    - SERVER_HOST=0.0.0.0
-    - SERVER_PORT=8535
-    - EL_URL=http://execution-layer:8545
-    - SECURITY_ENABLE_WHITELIST=true
+  environment: *rpc-provider-environment
   expose:
     - "8535"
   entrypoint: ["/app/igra-rpc-provider"]
@@ -164,7 +167,8 @@ services:
     expose:
       - "8561"
     environment:
-      - RUST_LOG
+      RUST_LOG: ${RUST_LOG:-info}
+      GAS_MIN_BASE_FEE_GWEI: ${GAS_MIN_BASE_FEE_GWEI}
     volumes:
       - ./keys/jwt.hex:/app/jwt.hex:ro
       - /var/run/docker.sock:/var/run/docker.sock
@@ -274,9 +278,10 @@ services:
     profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5"]
     container_name: rpc-provider-0
     environment:
-      - WALLET_DAEMON_URI=http://kaswallet-0:8082
-      - WALLET_TO_ADDRESS=${W0_WALLET_TO_ADDRESS}
-      - KASWALLET_PASSWORD=${W0_KASWALLET_PASSWORD}
+      <<: *rpc-provider-environment
+      WALLET_DAEMON_URI: http://kaswallet-0:8082
+      WALLET_TO_ADDRESS: ${W0_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W0_KASWALLET_PASSWORD}
     healthcheck:
       <<: *default-healthcheck
       test: [
@@ -315,9 +320,10 @@ services:
     profiles: ["igra-w2", "igra-w3", "igra-w4", "igra-w5", "rpc-providers"]
     container_name: rpc-provider-1
     environment:
-      - WALLET_DAEMON_URI=http://kaswallet-1:8082
-      - WALLET_TO_ADDRESS=${W1_WALLET_TO_ADDRESS}
-      - KASWALLET_PASSWORD=${W1_KASWALLET_PASSWORD}
+      <<: *rpc-provider-environment
+      WALLET_DAEMON_URI: http://kaswallet-1:8082
+      WALLET_TO_ADDRESS: ${W1_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W1_KASWALLET_PASSWORD}
     healthcheck:
       <<: *default-healthcheck
       test: [
@@ -356,9 +362,10 @@ services:
     profiles: ["igra-w3", "igra-w4", "igra-w5", "rpc-providers"]
     container_name: rpc-provider-2
     environment:
-      - WALLET_DAEMON_URI=http://kaswallet-2:8082
-      - WALLET_TO_ADDRESS=${W2_WALLET_TO_ADDRESS}
-      - KASWALLET_PASSWORD=${W2_KASWALLET_PASSWORD}
+      <<: *rpc-provider-environment
+      WALLET_DAEMON_URI: http://kaswallet-2:8082
+      WALLET_TO_ADDRESS: ${W2_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W2_KASWALLET_PASSWORD}
     healthcheck:
       <<: *default-healthcheck
       test: [
@@ -397,9 +404,10 @@ services:
     profiles: ["igra-w4", "igra-w5", "rpc-providers"]
     container_name: rpc-provider-3
     environment:
-      - WALLET_DAEMON_URI=http://kaswallet-3:8082
-      - WALLET_TO_ADDRESS=${W3_WALLET_TO_ADDRESS}
-      - KASWALLET_PASSWORD=${W3_KASWALLET_PASSWORD}
+      <<: *rpc-provider-environment
+      WALLET_DAEMON_URI: http://kaswallet-3:8082
+      WALLET_TO_ADDRESS: ${W3_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W3_KASWALLET_PASSWORD}
     healthcheck:
       <<: *default-healthcheck
       test: [
@@ -438,9 +446,10 @@ services:
     profiles: ["igra-w5", "rpc-providers"]
     container_name: rpc-provider-4
     environment:
-      - WALLET_DAEMON_URI=http://kaswallet-4:8082
-      - WALLET_TO_ADDRESS=${W4_WALLET_TO_ADDRESS}
-      - KASWALLET_PASSWORD=${W4_KASWALLET_PASSWORD}
+      <<: *rpc-provider-environment
+      WALLET_DAEMON_URI: http://kaswallet-4:8082
+      WALLET_TO_ADDRESS: ${W4_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W4_KASWALLET_PASSWORD}
     healthcheck:
       <<: *default-healthcheck
       test: [
