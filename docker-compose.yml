@@ -144,6 +144,7 @@ services:
       - "9001"
     environment:
       - RUST_LOG
+      - GAS_MIN_BASE_FEE_GWEI
     ports:
       - "127.0.0.1:9545:8545" # Expose as a temporary solution for blockscout
       - "127.0.0.1:9546:8546" # Expose as a temporary solution for blockscout
@@ -168,7 +169,6 @@ services:
       - "8561"
     environment:
       RUST_LOG: ${RUST_LOG:-info}
-      GAS_MIN_BASE_FEE_GWEI: ${GAS_MIN_BASE_FEE_GWEI}
     volumes:
       - ./keys/jwt.hex:/app/jwt.hex:ro
       - /var/run/docker.sock:/var/run/docker.sock
