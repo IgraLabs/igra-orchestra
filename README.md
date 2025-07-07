@@ -43,15 +43,22 @@ openssl rand -hex 32 > ./keys/jwt.hex
 # 3. Start Kaspa services first
 docker compose --profile kaspad up -d
 
-# 4. Start the Explorer (optional)
+# 4. Start backend (core services)
+docker compose --profile backend up -d
+
+# 5. Start the Explorer (optional)
 docker compose --profile kaspa-explorer up -d
 
-# 5. Start worker services based on your needs
-docker compose --profile igra-w1 up -d  # 1 worker
+# 6. Start worker services based on your needs
+docker compose --profile frontend-w1 up -d  # 1 worker
 # OR
-docker compose --profile igra-w2 up -d  # 2 workers
+docker compose --profile frontend-w2 up -d  # 2 workers
 # OR
-docker compose --profile igra-w3 up -d  # 3 workers
+docker compose --profile frontend-w3 up -d  # 3 workers
+# OR
+docker compose --profile frontend-w4 up -d  # 4 workers
+# OR
+docker compose --profile frontend-w5 up -d  # 5 workers
 ```
 
 ## Initial Setup
@@ -108,11 +115,11 @@ The Docker Compose configuration uses profiles and YAML anchors for improved mai
   - `simply_kaspa_indexer` - Blockchain indexer
   - `kaspa_db` - PostgreSQL database for explorer data
 
-- **Worker Services** (profiles: `igra-w1`, `igra-w2`, `igra-w3`, `igra-w4`, `igra-w5`):
+- **Worker Services** (profiles: `frontend-w1`, `frontend-w2`, `frontend-w3`, `frontend-w4`, `frontend-w5`):
   - `rpc-provider-0` to `rpc-provider-4` - RPC endpoints for API requests
   - `kaswallet-0` to `kaswallet-4` - Wallet services for transaction relay
 
-- **Core Services** (included in worker profiles):
+- **Core Services** (profile: `backend`, automatically included when worker profiles are used):
   - `execution-layer` - Ethereum-compatible execution layer
   - `block-builder` - Block creation and publishing
   - `viaduct` - L1-L2 communication bridge
@@ -146,25 +153,36 @@ The recommended way to run the IGRA Orchestra stack is:
    docker compose --profile kaspad up -d
    ```
 
-2. **Start Explorer Services (Optional)**
+2. **Start Backend (Core Services)**
+   ```bash
+   docker compose --profile backend up -d
+   ```
+
+3. **Start Explorer Services (Optional)**
    ```bash
    docker compose --profile kaspa-explorer up -d
    ```
 
-3. **Start Worker Services**
+4. **Start Worker Services**
    Choose the profile based on how many workers you need:
    ```bash
    # For 1 worker
-   docker compose --profile igra-w1 up -d
+   docker compose --profile frontend-w1 up -d
 
    # For 2 workers
-   docker compose --profile igra-w2 up -d
+   docker compose --profile frontend-w2 up -d
 
    # For 3 workers
-   docker compose --profile igra-w3 up -d
+   docker compose --profile frontend-w3 up -d
+
+   # For 4 workers
+   docker compose --profile frontend-w4 up -d
+
+   # For 5 workers
+   docker compose --profile frontend-w5 up -d
    ```
 
-4. **Stopping Services**
+5. **Stopping Services**
    ```bash
    # Stop all services
    docker compose down

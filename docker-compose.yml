@@ -1,4 +1,4 @@
-name: igra-orchestra-devnet
+name: igra-orchestra-testnet
 
 volumes:
   kaspad_data:
@@ -15,7 +15,7 @@ networks:
 x-default-logging: &default-logging
   driver: "${LOGGING_DRIVER:-syslog}"
   options:
-    tag: "igra-orchestra-devnet/{{.Name}}/{{.ID}}"
+    tag: "igra-orchestra-testnet/{{.Name}}/{{.ID}}"
 
 x-default-healthcheck: &default-healthcheck
   interval: 10s
@@ -105,9 +105,7 @@ x-rpc-provider-base: &rpc-provider-base
     - "traefik.http.routers.rpc0.tls.certresolver=myresolver"
     - "traefik.http.routers.rpc0.middlewares=strip-token,cors"
     - "traefik.http.services.rpc0.loadbalancer.server.port=8535"
-  depends_on:
-    execution-layer:
-      condition: service_healthy
+
 
 x-kaswallet-base: &kaswallet-base
   <<: *default-service
@@ -119,12 +117,11 @@ x-kaswallet-base: &kaswallet-base
     - "8082"
   environment:
     - RUST_LOG
-    - LOG_LEVEL
   extra_hosts:
     - "host.docker.internal:host-gateway"
   command: >
-    --devnet
-    --logs-level=${LOG_LEVEL}
+    --testnet
+    --logs-level=${RUST_LOG}
     --keys /app/keys.json
     --server ws://${KASPAD_HOST}:${KASPAD_BORSH_PORT}
     --listen 0.0.0.0:8082
@@ -136,7 +133,7 @@ services:
     container_name: execution-layer
     image: ghcr.io/paradigmxyz/reth:latest
     entrypoint: /root/reth/run-igra-dev-el.sh
-    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5", "igra-backend"]
+    profiles: ["backend"]
     expose:
       - "8545"
       - "8546"
@@ -163,12 +160,14 @@ services:
       dockerfile: ../../Dockerfile.block-builder
     image: block-builder
     command: /app/jwt.hex http://execution-layer
-    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5", "igra-backend"]
+    profiles: ["backend"]
     container_name: block-builder
     expose:
       - "8561"
     environment:
       RUST_LOG: ${RUST_LOG:-info}
+      CRESCENDO_TIMESTAMP: ${CRESCENDO_TIMESTAMP}
+      CRESCENDO_DAA_SCORE: ${CRESCENDO_DAA_SCORE}
     volumes:
       - ./keys/jwt.hex:/app/jwt.hex:ro
       - /var/run/docker.sock:/var/run/docker.sock
@@ -178,8 +177,6 @@ services:
     depends_on:
       execution-layer:
         condition: service_healthy
-      viaduct:
-        condition: service_started
 
   viaduct:
     <<: *default-service
@@ -189,7 +186,7 @@ services:
       ssh:
         - default
     image: viaduct
-    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5", "igra-backend"]
+    profiles: ["backend"]
     container_name: viaduct
     environment:
       - RUST_LOG
@@ -206,12 +203,15 @@ services:
     healthcheck:
       <<: *default-healthcheck
       test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}"]
+    depends_on:
+      block-builder:
+        condition: service_healthy
 
   # TRAEFIK SERVICE
   traefik:
     <<: *default-service
     image: traefik:v3.0
-    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5", "kaspa-explorer"]
+    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "kaspa-explorer"]
     container_name: traefik
     command:
       - "--api.dashboard=true"
@@ -224,9 +224,9 @@ services:
       - "--entrypoints.explorer_http.address=:8008"
       - "--entrypoints.explorer_ws.address=:8001"
       - "--entrypoints.explorer_rest.address=:8010"
-      - "--entrypoints.kaspad_grpc.address=:16610"
-      - "--entrypoints.kaspad_borsh.address=:17610"
-      - "--entrypoints.kaspad_json.address=:18610"
+      - "--entrypoints.kaspad_grpc.address=:16210"
+      - "--entrypoints.kaspad_borsh.address=:17210"
+      - "--entrypoints.kaspad_json.address=:18210"
       - "--log.level=DEBUG"
       - "--certificatesresolvers.myresolver.acme.email=${IGRA_ORCHESTRA_DOMAIN_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
@@ -238,7 +238,7 @@ services:
       - "8001:8001"
       - "8010:8010"
       - "8545:8545"
-      - "17611:17610"
+      - "17611:17210"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./config/traefik:/etc/traefik
@@ -275,7 +275,7 @@ services:
   # WORKER SERVICES
   rpc-provider-0:
     <<: *rpc-provider-base
-    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5"]
+    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
     container_name: rpc-provider-0
     environment:
       <<: *rpc-provider-environment
@@ -295,12 +295,10 @@ services:
     depends_on:
       kaswallet-0:
         condition: service_healthy
-      execution-layer:
-        condition: service_healthy
 
   kaswallet-0:
     <<: *kaswallet-base
-    profiles: ["igra-w1", "igra-w2", "igra-w3", "igra-w4", "igra-w5", "kaswallets"]
+    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "kaswallets"]
     container_name: kaswallet-0
     volumes:
       - ./keys/keys.kaswallet-0.json:/app/keys.json
@@ -317,7 +315,7 @@ services:
   # Additional workers
   rpc-provider-1:
     <<: *rpc-provider-base
-    profiles: ["igra-w2", "igra-w3", "igra-w4", "igra-w5", "rpc-providers"]
+    profiles: ["frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "rpc-providers"]
     container_name: rpc-provider-1
     environment:
       <<: *rpc-provider-environment
@@ -337,12 +335,10 @@ services:
     depends_on:
       kaswallet-1:
         condition: service_healthy
-      execution-layer:
-        condition: service_healthy
 
   kaswallet-1:
     <<: *kaswallet-base
-    profiles: ["igra-w2", "igra-w3", "igra-w4", "igra-w5", "kaswallets"]
+    profiles: ["frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "kaswallets"]
     container_name: kaswallet-1
     volumes:
       - ./keys/keys.kaswallet-1.json:/app/keys.json
@@ -359,7 +355,7 @@ services:
   # Worker 3
   rpc-provider-2:
     <<: *rpc-provider-base
-    profiles: ["igra-w3", "igra-w4", "igra-w5", "rpc-providers"]
+    profiles: ["frontend-w3", "frontend-w4", "frontend-w5", "rpc-providers"]
     container_name: rpc-provider-2
     environment:
       <<: *rpc-provider-environment
@@ -379,12 +375,10 @@ services:
     depends_on:
       kaswallet-2:
         condition: service_healthy
-      execution-layer:
-        condition: service_healthy
 
   kaswallet-2:
     <<: *kaswallet-base
-    profiles: ["igra-w3", "igra-w4", "igra-w5", "kaswallets"]
+    profiles: ["frontend-w3", "frontend-w4", "frontend-w5", "kaswallets"]
     container_name: kaswallet-2
     volumes:
       - ./keys/keys.kaswallet-2.json:/app/keys.json
@@ -401,7 +395,7 @@ services:
   # Worker 4
   rpc-provider-3:
     <<: *rpc-provider-base
-    profiles: ["igra-w4", "igra-w5", "rpc-providers"]
+    profiles: ["frontend-w4", "frontend-w5", "rpc-providers"]
     container_name: rpc-provider-3
     environment:
       <<: *rpc-provider-environment
@@ -421,12 +415,10 @@ services:
     depends_on:
       kaswallet-3:
         condition: service_healthy
-      execution-layer:
-        condition: service_healthy
 
   kaswallet-3:
     <<: *kaswallet-base
-    profiles: ["igra-w4", "igra-w5", "kaswallets"]
+    profiles: ["frontend-w4", "frontend-w5", "kaswallets"]
     container_name: kaswallet-3
     volumes:
       - ./keys/keys.kaswallet-3.json:/app/keys.json
@@ -443,7 +435,7 @@ services:
   # Worker 5
   rpc-provider-4:
     <<: *rpc-provider-base
-    profiles: ["igra-w5", "rpc-providers"]
+    profiles: ["frontend-w5", "rpc-providers"]
     container_name: rpc-provider-4
     environment:
       <<: *rpc-provider-environment
@@ -463,12 +455,10 @@ services:
     depends_on:
       kaswallet-4:
         condition: service_healthy
-      execution-layer:
-        condition: service_healthy
 
   kaswallet-4:
     <<: *kaswallet-base
-    profiles: ["igra-w5", "kaswallets"]
+    profiles: ["frontend-w5", "kaswallets"]
     container_name: kaswallet-4
     volumes:
       - ./keys/keys.kaswallet-4.json:/app/keys.json
@@ -488,17 +478,17 @@ services:
     build:
       context: build/repos/rusty-kaspa-private
       dockerfile: ../../Dockerfile.kaspad
-    image: kaspad-devnet
+    image: kaspad-testnet
     profiles: ["kaspad"]
     container_name: kaspad
     expose:
-      - "16610" # GRPC Server
-      - "16611" # P2P Server
-      - "17610" # WRPC (borsh) Server
-      - "18610" # WRPC (json) Server
+      - "16210" # GRPC Server
+      - "16211" # P2P Server
+      - "17210" # WRPC (borsh) Server
+      - "18210" # WRPC (json) Server
     ports:
-      - "17610:17610"
-      - "16611:16611"
+      - "17210:17210"
+      - "16211:16211"
       # - "17611:17611"
       # - "18611:18611"
     environment:
@@ -508,7 +498,7 @@ services:
       - KASPAD_ADD_PEER
     entrypoint: |
       sh -c '
-      ARGS="--devnet --disable-upnp --nodnsseed --rpclisten-borsh=0.0.0.0 --rpclisten=0.0.0.0 --rpclisten-json=0.0.0.0 --listen=0.0.0.0 --loglevel=info --utxoindex --appdir=/app/data"
+      ARGS="--testnet --disable-upnp --nodnsseed --rpclisten-borsh=0.0.0.0 --rpclisten=0.0.0.0 --rpclisten-json=0.0.0.0 --listen=0.0.0.0 --loglevel=info --utxoindex --appdir=/app/data"
       if [ -n "$$KASPAD_ADD_PEER" ]; then
         ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
       else
@@ -527,14 +517,14 @@ services:
       - "traefik.tcp.routers.kaspad-grpc.rule=HostSNI(`*`)"
       - "traefik.tcp.routers.kaspad-grpc.entrypoints=kaspad_grpc"
       - "traefik.tcp.routers.kaspad-grpc.service=kaspad-grpc-svc"
-      - "traefik.tcp.services.kaspad-grpc-svc.loadbalancer.server.port=16610"
+      - "traefik.tcp.services.kaspad-grpc-svc.loadbalancer.server.port=16210"
       - "traefik.tcp.routers.kaspad-json.rule=HostSNI(`*`)"
       - "traefik.tcp.routers.kaspad-json.entrypoints=kaspad_json"
       - "traefik.tcp.routers.kaspad-json.service=kaspad-json-svc"
-      - "traefik.tcp.services.kaspad-json-svc.loadbalancer.server.port=18610"
+      - "traefik.tcp.services.kaspad-json-svc.loadbalancer.server.port=18210"
     healthcheck:
       <<: *default-healthcheck
-      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/kaspad/16610"]
+      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/kaspad/16210"]
 
   kaspa-miner:
     <<: *default-service
@@ -554,7 +544,7 @@ services:
       exec /app/kaspa-miner
       --mining-address ${MINING_ADDRESS}
       --kaspad-address $$KASPAD
-      --port 16610
+      --port 16210
       --threads ${MINING_THREADS}
       --mine-when-not-synced
       '
@@ -574,7 +564,7 @@ services:
       - "8080"
     command: ["/bin/sh", "-c", "sed -i 's/localhost/0.0.0.0/g' /app/server.js && node /app/server.js"]
     environment:
-      REACT_APP_NETWORK: "devnet"
+      REACT_APP_NETWORK: "testnet"
       API_URI: "https://${IGRA_ORCHESTRA_DOMAIN}/api"
       API_WS_URI: "wss://${IGRA_ORCHESTRA_DOMAIN}/socket.io/"
     extra_hosts:
@@ -606,7 +596,7 @@ services:
       - "8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: "-n devnet -x 20 -s ws://kaspad:17610"
+    command: "-n testnet -x 20 -s ws://kaspad:17210"
     networks:
       - kaspa-explorer-network
       - traefik-network
@@ -632,7 +622,7 @@ services:
     expose:
       - "8000"
     environment:
-      KASPAD_HOST_1: "kaspad:17610"
+      KASPAD_HOST_1: "kaspad:17210"
       SQL_URI: "postgresql+asyncpg://postgres:postgres@kaspa_db:5432/postgres"
       CORS_ORIGINS: "*"
       CORS_ALLOW_METHODS: "GET,POST,OPTIONS,PUT,DELETE"
@@ -672,7 +662,7 @@ services:
       SQL_URI: "postgresql://postgres:postgres@kaspa_db:5432/postgres"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: "-n devnet -u -s ws://kaspad:17610 -d postgresql://postgres:postgres@kaspa_db:5432/postgres"
+    command: "-n testnet -u -s ws://kaspad:17210 -d postgresql://postgres:postgres@kaspa_db:5432/postgres"
     networks:
       - kaspa-explorer-network
     logging:

@@ -110,15 +110,22 @@ Generate keys for kaswallet workers:
 
 ## Starting Core Services
 
-After mining and distributing KAS, start IGRA worker services:
+After mining and distributing KAS, start IGRA core services and workers:
 
 ```bash
-# Choose one based on how many workers you need
-docker compose --profile igra-w1 up -d  # 1 worker
+# Start backend (core services)
+docker compose --profile backend up -d
+
+# Then start workers (choose how many you need)
+docker compose --profile frontend-w1 up -d  # 1 worker
 # OR
-docker compose --profile igra-w2 up -d  # 2 workers
+docker compose --profile frontend-w2 up -d  # 2 workers
 # OR
-docker compose --profile igra-w3 up -d  # 3 workers
+docker compose --profile frontend-w3 up -d  # 3 workers
+# OR
+docker compose --profile frontend-w4 up -d  # 4 workers
+# OR
+docker compose --profile frontend-w5 up -d  # 5 workers
 ```
 
 ## Monitoring
