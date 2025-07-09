@@ -142,9 +142,6 @@ services:
     environment:
       - RUST_LOG
       - GAS_MIN_BASE_FEE_GWEI
-    ports:
-      - "127.0.0.1:9545:8545" # Expose as a temporary solution for blockscout
-      - "127.0.0.1:9546:8546" # Expose as a temporary solution for blockscout
     volumes:
       - ./keys/jwt.hex:/root/reth/jwt.hex
       - ./build/repos/execution-layer/genesis.json:/root/reth/genesis.json
