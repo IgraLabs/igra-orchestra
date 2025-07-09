@@ -473,7 +473,7 @@ services:
   kaspad:
     <<: *default-service
     build:
-      context: build/repos/rusty-kaspa-private
+      context: build/repos/rusty-kaspa
       dockerfile: ../../Dockerfile.kaspad
     image: kaspad-testnet
     profiles: ["kaspad"]
