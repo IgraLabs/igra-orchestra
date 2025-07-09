@@ -154,7 +154,7 @@ URLS=(
     "git@github.com:IgraLabs/kaswallet.git"
     "git@github.com:IgraLabs/igra-rpc-provider.git"
     "git@github.com:IgraLabs/viaduct.git"
-    "git@github.com:IgraLabs/rusty-kaspa-private.git"
+    "git@github.com:kaspanet/rusty-kaspa.git"
     "git@github.com:elichai/kaspa-miner.git"
 )
 BRANCHES=(
