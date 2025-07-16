@@ -8,9 +8,23 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
+# Source .env file if it exists
+if [ -f ".env" ]; then
+    while IFS= read -r line; do
+        # Skip empty lines and comments
+        if [[ -n "$line" && ! "$line" =~ ^[[:space:]]*# ]]; then
+            # Remove inline comments and export
+            export "${line%%#*}"
+        fi
+    done < .env
+fi
+
+# Get network from environment variable, error if not set
+NETWORK=${NETWORK:?Error: NETWORK environment variable is not set}
+
 # Configuration based on container name
 CONTAINER_NAME="$1"
-VOLUME_NAME="igra-orchestra-devnet_${CONTAINER_NAME}_data"
+VOLUME_NAME="igra-orchestra-${NETWORK}_${CONTAINER_NAME}_data"
 BACKUP_DIR="$HOME/.backups/${CONTAINER_NAME}-backups"
 
 # Function for logging/output

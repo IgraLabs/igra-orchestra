@@ -1,4 +1,4 @@
-name: igra-orchestra-testnet
+name: igra-orchestra-${NETWORK}
 
 volumes:
   kaspad_data:
@@ -15,7 +15,7 @@ networks:
 x-default-logging: &default-logging
   driver: "${LOGGING_DRIVER:-syslog}"
   options:
-    tag: "igra-orchestra-testnet/{{.Name}}/{{.ID}}"
+    tag: "igra-orchestra-${NETWORK}/{{.Name}}/{{.ID}}"
 
 x-default-healthcheck: &default-healthcheck
   interval: 10s
@@ -120,7 +120,7 @@ x-kaswallet-base: &kaswallet-base
   extra_hosts:
     - "host.docker.internal:host-gateway"
   command: >
-    --testnet
+    --${NETWORK}
     --logs-level=${RUST_LOG}
     --keys /app/keys.json
     --server ws://${KASPAD_HOST}:${KASPAD_BORSH_PORT}
@@ -475,7 +475,7 @@ services:
     build:
       context: build/repos/rusty-kaspa
       dockerfile: ../../Dockerfile.kaspad
-    image: kaspad-testnet
+    image: kaspad-${NETWORK}
     profiles: ["kaspad"]
     container_name: kaspad
     expose:
@@ -495,7 +495,7 @@ services:
       - KASPAD_ADD_PEER
     entrypoint: |
       sh -c '
-      ARGS="--testnet --disable-upnp --nodnsseed --rpclisten-borsh=0.0.0.0 --rpclisten=0.0.0.0 --rpclisten-json=0.0.0.0 --listen=0.0.0.0 --loglevel=info --utxoindex --appdir=/app/data"
+      ARGS="--${NETWORK} --disable-upnp --nodnsseed --rpclisten-borsh=0.0.0.0 --rpclisten=0.0.0.0 --rpclisten-json=0.0.0.0 --listen=0.0.0.0 --loglevel=info --utxoindex --appdir=/app/data"
       if [ -n "$$KASPAD_ADD_PEER" ]; then
         ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
       else
@@ -550,154 +550,6 @@ services:
     depends_on:
       kaspad:
         condition: service_healthy
-
-  # KASPA EXPLORER SERVICES
-  kaspa_explorer:
-    <<: *default-service
-    image: supertypo/kaspa-explorer:latest
-    profiles: ["kaspa-explorer"]
-    container_name: kaspa_explorer
-    expose:
-      - "8080"
-    command: ["/bin/sh", "-c", "sed -i 's/localhost/0.0.0.0/g' /app/server.js && node /app/server.js"]
-    environment:
-      REACT_APP_NETWORK: "testnet"
-      API_URI: "https://${IGRA_ORCHESTRA_DOMAIN}/api"
-      API_WS_URI: "wss://${IGRA_ORCHESTRA_DOMAIN}/socket.io/"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - kaspa-explorer-network
-      - traefik-network
-    depends_on:
-      kaspa_rest_server:
-        condition: service_started
-      simply_kaspa_socket_server:
-        condition: service_started
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.explorer-https.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
-      - "traefik.http.routers.explorer-https.entrypoints=websecure"
-      - "traefik.http.routers.explorer-https.tls=true"
-      - "traefik.http.routers.explorer-https.tls.certresolver=myresolver"
-      - "traefik.http.routers.explorer-https.service=explorer-svc"
-      - "traefik.http.routers.explorer-https.priority=100"
-      - "traefik.http.services.explorer-svc.loadbalancer.server.port=8080"
-
-  simply_kaspa_socket_server:
-    <<: *default-service
-    image: supertypo/simply-kaspa-socket-server:unstable
-    profiles: ["kaspa-explorer"]
-    container_name: simply_kaspa_socket_server
-    expose:
-      - "8000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: "-n testnet -x 20 -s ws://kaspad:17210"
-    networks:
-      - kaspa-explorer-network
-      - traefik-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.socket-wss.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`) && PathPrefix(`/socket.io`)"
-      - "traefik.http.routers.socket-wss.entrypoints=websecure"
-      - "traefik.http.routers.socket-wss.tls=true"
-      - "traefik.http.routers.socket-wss.tls.certresolver=myresolver"
-      - "traefik.http.routers.socket-wss.service=socket-svc"
-      - "traefik.http.routers.socket-wss.priority=101"
-      - "traefik.http.middlewares.socket-strip-prefix.stripprefix.prefixes=/socket.io"
-      - "traefik.http.routers.socket-wss.middlewares=socket-strip-prefix,ws-headers-middleware"
-      - "traefik.http.middlewares.ws-headers-middleware.headers.customrequestheaders.Connection=upgrade"
-      - "traefik.http.middlewares.ws-headers-middleware.headers.customrequestheaders.Upgrade=websocket"
-      - "traefik.http.services.socket-svc.loadbalancer.server.port=8000"
-
-  kaspa_rest_server:
-    <<: *default-service
-    image: kaspanet/kaspa-rest-server:latest
-    profiles: ["kaspa-explorer"]
-    container_name: kaspa_rest_server
-    expose:
-      - "8000"
-    environment:
-      KASPAD_HOST_1: "kaspad:17210"
-      SQL_URI: "postgresql+asyncpg://postgres:postgres@kaspa_db:5432/postgres"
-      CORS_ORIGINS: "*"
-      CORS_ALLOW_METHODS: "GET,POST,OPTIONS,PUT,DELETE"
-      CORS_ALLOW_HEADERS: "*"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - kaspa-explorer-network
-      - traefik-network
-    depends_on:
-      kaspa_db:
-        condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.rest-https.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.rest-https.entrypoints=websecure"
-      - "traefik.http.routers.rest-https.tls=true"
-      - "traefik.http.routers.rest-https.tls.certresolver=myresolver"
-      - "traefik.http.routers.rest-https.service=rest-svc"
-      - "traefik.http.routers.rest-https.priority=101"
-      - "traefik.http.middlewares.rest-strip-prefix.stripprefix.prefixes=/api"
-      - "traefik.http.routers.rest-https.middlewares=rest-strip-prefix,rest-cors-middleware"
-      - "traefik.http.middlewares.rest-cors-middleware.headers.accesscontrolallowmethods=GET,OPTIONS,PUT,POST,DELETE"
-      - "traefik.http.middlewares.rest-cors-middleware.headers.accesscontrolalloworiginlist=*"
-      - "traefik.http.middlewares.rest-cors-middleware.headers.accesscontrolallowheaders=*"
-      - "traefik.http.middlewares.rest-cors-middleware.headers.accesscontrolmaxage=100"
-      - "traefik.http.middlewares.rest-cors-middleware.headers.addvaryheader=true"
-      - "traefik.http.middlewares.rest-cors-middleware.headers.accesscontrolallowcredentials=true"
-      - "traefik.http.services.rest-svc.loadbalancer.server.port=8000"
-
-  simply_kaspa_indexer:
-    <<: *default-service
-    image: supertypo/simply-kaspa-indexer:latest
-    profiles: ["kaspa-explorer"]
-    container_name: simply_kaspa_indexer
-    environment:
-      SQL_URI: "postgresql://postgres:postgres@kaspa_db:5432/postgres"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: "-n testnet -u -s ws://kaspad:17210 -d postgresql://postgres:postgres@kaspa_db:5432/postgres"
-    networks:
-      - kaspa-explorer-network
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "5"
-    depends_on:
-      kaspa_db:
-        condition: service_healthy
-
-  kaspa_db:
-    <<: *default-service
-    image: postgres:16-alpine
-    profiles: ["kaspa-explorer"]
-    container_name: kaspa_db
-    shm_size: 4G
-    environment:
-      POSTGRES_USER: "postgres"
-      POSTGRES_PASSWORD: "postgres"
-      POSTGRES_DB: "postgres"
-    expose:
-      - "5432"
-    volumes:
-      - kaspa_explorer_db_data:/var/lib/postgresql/data/
-    networks:
-      - kaspa-explorer-network
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "5"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
 
   # UTILITY SERVICES
   yacht:

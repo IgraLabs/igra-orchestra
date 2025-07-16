@@ -8,9 +8,23 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
+# Source .env file if it exists
+if [ -f ".env" ]; then
+    while IFS= read -r line; do
+        # Skip empty lines and comments
+        if [[ -n "$line" && ! "$line" =~ ^[[:space:]]*# ]]; then
+            # Remove inline comments and export
+            export "${line%%#*}"
+        fi
+    done < .env
+fi
+
+# Get network from environment variable, error if not set
+NETWORK=${NETWORK:?Error: NETWORK environment variable is not set}
+
 # Configuration based on container name
 CONTAINER_NAME="$1"
-VOLUME_NAME="igra-orchestra-devnet_${CONTAINER_NAME}_data"
+VOLUME_NAME="igra-orchestra-${NETWORK}_${CONTAINER_NAME}_data"
 BACKUP_DIR="$HOME/.backups/${CONTAINER_NAME}-backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="$BACKUP_DIR/${VOLUME_NAME}_$TIMESTAMP.tar.gz"
@@ -23,9 +37,19 @@ log_message() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
 }
 
+# Check if the volume exists
+log_message "Checking if volume $VOLUME_NAME exists..."
+if ! docker volume inspect "$VOLUME_NAME" > /dev/null 2>&1; then
+    log_message "ERROR: Volume $VOLUME_NAME does not exist. Cannot backup a non-existent volume."
+    log_message "Available volumes:"
+    docker volume ls --format "table {{.Name}}\t{{.Driver}}" | grep -E "(NAME|igra-orchestra)" || echo "No igra-orchestra volumes found"
+    exit 1
+fi
+log_message "Volume $VOLUME_NAME exists and will be backed up."
+
 # Ensure container is unpaused even if script exits unexpectedly
 # Note: This trap might not catch all termination signals (like SIGKILL)
-trap 'log_message "Attempting to unpause container $CONTAINER_NAME due to script exit..."; docker unpause "$CONTAINER_NAME" || true; log_message "Trap finished."' EXIT
+trap 'log_message "Attempting to unpause container $CONTAINER_NAME due to script exit..."; docker unpause "$CONTAINER_NAME" 2>/dev/null || true; log_message "Trap finished."' EXIT
 
 # Create backup directory if it doesn't exist
 mkdir -p "$BACKUP_DIR"
