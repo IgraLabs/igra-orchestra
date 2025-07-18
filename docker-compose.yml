@@ -140,11 +140,15 @@ services:
       - "8551"
       - "9001"
     environment:
-      - RUST_LOG
-      - GAS_MIN_BASE_FEE_GWEI
+      GAS_MIN_BASE_FEE_GWEI: ${GAS_MIN_BASE_FEE_GWEI}
+      L1_REFERENCE_TIMESTAMP: ${L1_REFERENCE_TIMESTAMP}
+      L1_REFERENCE_DAA_SCORE: ${L1_REFERENCE_DAA_SCORE}
+      CHAIN_ID: ${IGRA_CHAIN_ID}
+      ONE_TIME_ADDRESS: ${EL_ONE_TIME_ADDRESS}
+      IGRA_LAUNCH_DAA_SCORE: ${IGRA_LAUNCH_DAA_SCORE}
     volumes:
       - ./keys/jwt.hex:/root/reth/jwt.hex
-      - ./build/repos/execution-layer/genesis.json:/root/reth/genesis.json
+      - ./build/repos/execution-layer/genesis.template.json:/root/reth/genesis.template.json
       - ./build/repos/execution-layer/run-igra-dev-el.sh:/root/reth/run-igra-dev-el.sh
     healthcheck:
       <<: *default-healthcheck
@@ -163,8 +167,9 @@ services:
       - "8561"
     environment:
       RUST_LOG: ${RUST_LOG:-info}
-      CRESCENDO_TIMESTAMP: ${CRESCENDO_TIMESTAMP}
-      CRESCENDO_DAA_SCORE: ${CRESCENDO_DAA_SCORE}
+      L1_REFERENCE_TIMESTAMP: ${L1_REFERENCE_TIMESTAMP}
+      L1_REFERENCE_DAA_SCORE: ${L1_REFERENCE_DAA_SCORE}
+      GENESIS_BLOCK_HASH: ${GENESIS_BLOCK_HASH}
     volumes:
       - ./keys/jwt.hex:/app/jwt.hex:ro
       - /var/run/docker.sock:/var/run/docker.sock
