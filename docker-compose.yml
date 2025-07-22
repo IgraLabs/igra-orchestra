@@ -34,8 +34,8 @@ x-rpc-provider-environment: &rpc-provider-environment
   SERVER_PORT: 8535
   EL_URL: http://execution-layer:8545
   SECURITY_ENABLE_WHITELIST: "true"
-  GAS_MIN_BASE_FEE_GWEI: ${GAS_MIN_BASE_FEE_GWEI}
   READ_ONLY: ${RPC_READ_ONLY}
+  MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
 
 x-rpc-provider-base: &rpc-provider-base
   <<: *default-service
@@ -171,6 +171,7 @@ services:
       L1_REFERENCE_TIMESTAMP: ${L1_REFERENCE_TIMESTAMP}
       L1_REFERENCE_DAA_SCORE: ${L1_REFERENCE_DAA_SCORE}
       GENESIS_BLOCK_HASH: ${GENESIS_BLOCK_HASH}
+      MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
     volumes:
       - ./keys/jwt.hex:/app/jwt.hex:ro
       - /var/run/docker.sock:/var/run/docker.sock
