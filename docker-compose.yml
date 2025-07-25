@@ -35,6 +35,7 @@ x-rpc-provider-environment: &rpc-provider-environment
   EL_URL: http://execution-layer:8545
   SECURITY_ENABLE_WHITELIST: "true"
   GAS_MIN_BASE_FEE_GWEI: ${GAS_MIN_BASE_FEE_GWEI}
+  READ_ONLY: ${RPC_READ_ONLY}
 
 x-rpc-provider-base: &rpc-provider-base
   <<: *default-service
