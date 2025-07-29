@@ -179,6 +179,7 @@ services:
       L1_REFERENCE_TIMESTAMP: ${L1_REFERENCE_TIMESTAMP}
       L1_REFERENCE_DAA_SCORE: ${L1_REFERENCE_DAA_SCORE}
       GENESIS_BLOCK_HASH: ${GENESIS_BLOCK_HASH}
+      MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
     volumes:
       - ./keys/jwt.hex:/app/jwt.hex:ro
       - /var/run/docker.sock:/var/run/docker.sock
@@ -276,10 +277,10 @@ services:
       - "traefik.http.routers.web-redirect.entrypoints=web"
       - "traefik.http.routers.web-redirect.middlewares=redirect-to-https"
       # Define a router for websecure (HTTPS)
-      # - "traefik.http.routers.websecure-router.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
-      # - "traefik.http.routers.websecure-router.entrypoints=websecure"
-      # - "traefik.http.routers.websecure-router.tls=true"
-      # - "traefik.http.routers.websecure-router.tls.certresolver=myresolver"
+      - "traefik.http.routers.websecure-router.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
+      - "traefik.http.routers.websecure-router.entrypoints=websecure"
+      - "traefik.http.routers.websecure-router.tls=true"
+      - "traefik.http.routers.websecure-router.tls.certresolver=myresolver"
     healthcheck:
       <<: *default-healthcheck
       test: ["CMD", "wget", "--spider", "http://localhost:8080"]
