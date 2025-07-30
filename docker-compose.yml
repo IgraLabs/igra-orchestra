@@ -180,6 +180,7 @@ services:
       L1_REFERENCE_DAA_SCORE: ${L1_REFERENCE_DAA_SCORE}
       GENESIS_BLOCK_HASH: ${GENESIS_BLOCK_HASH}
       MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
+      ENABLE_PERF_DIAGNOSTICS: ${ENABLE_PERF_DIAGNOSTICS}
     volumes:
       - ./keys/jwt.hex:/app/jwt.hex:ro
       - /var/run/docker.sock:/var/run/docker.sock
