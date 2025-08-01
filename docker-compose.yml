@@ -6,6 +6,12 @@ volumes:
   kaspa_explorer_db_data:
   yacht_data:
   traefik_certs:
+  reth_ipc:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=10m
 networks:
   igra-network:
   kaspa-explorer-network:
@@ -151,6 +157,7 @@ services:
       - ./keys/jwt.hex:/root/reth/jwt.hex
       - ./build/repos/execution-layer/genesis.template.json:/root/reth/genesis.template.json
       - ./build/repos/execution-layer/run-igra-dev-el.sh:/root/reth/run-igra-dev-el.sh
+      - reth_ipc:/root/reth
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.el_stats.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
@@ -181,9 +188,11 @@ services:
       GENESIS_BLOCK_HASH: ${GENESIS_BLOCK_HASH}
       MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
       ENABLE_PERF_DIAGNOSTICS: ${ENABLE_PERF_DIAGNOSTICS}
+      EL_IPC_PATH: /app/reth/auth.ipc
     volumes:
       - ./keys/jwt.hex:/app/jwt.hex:ro
       - /var/run/docker.sock:/var/run/docker.sock
+      - reth_ipc:/app/reth
     healthcheck:
       <<: *default-healthcheck
       test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/$$HOSTNAME/8561"]
