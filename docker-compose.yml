@@ -11,7 +11,7 @@ volumes:
     driver_opts:
       type: tmpfs
       device: tmpfs
-      o: size=30g
+      o: size=1m
 networks:
   igra-network:
   kaspa-explorer-network:
@@ -158,7 +158,7 @@ services:
       - ./keys/jwt.hex:/root/reth/jwt.hex
       - ./build/repos/execution-layer/genesis.template.json:/root/reth/genesis.template.json
       - ./build/repos/execution-layer/run-igra-dev-el.sh:/root/reth/run-igra-dev-el.sh
-      - reth_ipc:/root/reth
+      - reth_ipc:/root/reth/socket
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.el_stats.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
@@ -169,7 +169,7 @@ services:
       - "traefik.http.services.el_stats_svc.loadbalancer.server.port=9001"
     healthcheck:
       <<: *default-healthcheck
-      test: ["CMD", "bash", "-c", "test -S /root/reth/auth.ipc"]
+      test: ["CMD", "bash", "-c", "test -S /root/reth/socket/auth.ipc"]
 
   block-builder:
     <<: *default-service
