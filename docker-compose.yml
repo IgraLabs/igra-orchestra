@@ -135,6 +135,7 @@ services:
   # CORE SERVICES
   execution-layer:
     <<: *default-service
+    restart: "no"
     container_name: execution-layer
     image: ghcr.io/paradigmxyz/reth:latest
     entrypoint: /root/reth/run-igra-dev-el.sh
@@ -172,6 +173,7 @@ services:
 
   block-builder:
     <<: *default-service
+    restart: "no"
     build:
       context: build/repos/block-builder
       dockerfile: ../../Dockerfile.block-builder
@@ -202,6 +204,7 @@ services:
 
   viaduct:
     <<: *default-service
+    restart: "no"
     build:
       context: build/repos/viaduct
       dockerfile: ../../Dockerfile.viaduct
