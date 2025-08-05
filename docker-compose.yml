@@ -137,7 +137,7 @@ services:
     <<: *default-service
     restart: "no"
     container_name: execution-layer
-    image: ghcr.io/paradigmxyz/reth:latest
+    image: igralabscom/reth:v1.6.0
     entrypoint: /root/reth/run-igra-dev-el.sh
     profiles: ["backend"]
     ports:
