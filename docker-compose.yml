@@ -4,14 +4,13 @@ volumes:
   kaspad_data:
   viaduct_data:
   kaspa_explorer_db_data:
-  yacht_data:
   traefik_certs:
   reth_ipc:
     driver: local
     driver_opts:
       type: tmpfs
       device: tmpfs
-      o: size=1m
+      o: size=10m
 networks:
   igra-network:
   kaspa-explorer-network:
@@ -48,7 +47,7 @@ x-rpc-provider-base: &rpc-provider-base
   build:
     context: build/repos/igra-rpc-provider
     dockerfile: ../../Dockerfile.rpc-provider
-  image: rpc-provider
+  image: igranetwork/rpc-provider:latest
   environment: *rpc-provider-environment
   expose:
     - "8535"
@@ -117,7 +116,7 @@ x-kaswallet-base: &kaswallet-base
   build:
     context: build/repos/kaswallet
     dockerfile: ../../Dockerfile.kaswallet
-  image: kaswallet
+  image: igranetwork/kaswallet:latest
   expose:
     - "8082"
   environment:
@@ -137,7 +136,7 @@ services:
     <<: *default-service
     restart: "no"
     container_name: execution-layer
-    image: igralabscom/reth:v1.6.0
+    image: igranetwork/reth:v1.6.0
     entrypoint: /root/reth/run-igra-dev-el.sh
     profiles: ["backend"]
     ports:
@@ -171,13 +170,29 @@ services:
       <<: *default-healthcheck
       test: ["CMD", "bash", "-c", "test -S /root/reth/socket/auth.ipc"]
 
+  health-check-client:
+    image: igranetwork/node-push-client:latest
+    container_name: node-push-client
+    profiles: ["backend"]
+    networks:
+      - igra-network
+    environment:
+      - NODE_RPC_URL=http://execution-layer:8545
+      - MONITOR_URL= http://65.108.195.238:8081
+      - NODE_ID=igra-orchestra-${NODE_ID}
+      - API_KEY=${HEALTH_CHECK_API_KEY}
+      - POLL_INTERVAL=5
+    depends_on:
+      - execution-layer
+    restart: unless-stopped
+
   block-builder:
     <<: *default-service
     restart: "no"
     build:
       context: build/repos/block-builder
       dockerfile: ../../Dockerfile.block-builder
-    image: block-builder
+    image: igranetwork/block-builder:latest
     command: /app/jwt.hex http://execution-layer
     profiles: ["backend"]
     container_name: block-builder
@@ -210,7 +225,7 @@ services:
       dockerfile: ../../Dockerfile.viaduct
       ssh:
         - default
-    image: viaduct
+    image: igranetwork/viaduct:latest
     profiles: ["backend"]
     container_name: viaduct
     environment:
@@ -582,17 +597,3 @@ services:
     depends_on:
       kaspad:
         condition: service_healthy
-
-  # UTILITY SERVICES
-  yacht:
-    <<: *default-service
-    image: selfhostedpro/yacht:latest
-    profiles: ["utils"]
-    container_name: yacht
-    ports:
-      - "8000:8000"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - yacht_data:/config
-    networks:
-      - igra-network

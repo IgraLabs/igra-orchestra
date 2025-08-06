@@ -11,8 +11,9 @@ tasks/
 # .env.local
 # .env.stage
 # .env.prod
+.env.backup
+.env
 
 .DS_Store
-.env
 .cursor
 letsencrypt/

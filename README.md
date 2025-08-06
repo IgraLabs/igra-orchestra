@@ -29,25 +29,66 @@ The `setup-repos.sh` script clones the necessary repositories into the `build/re
 
 Ensure these repositories are present before running the Docker Compose environment. The `setup-repos.sh` script handles cloning and configuring the correct branches.
 
+## Deployment Modes
+
+Igra Orchestra supports two deployment modes:
+
+### 1. Pre-built Images Mode (Recommended for Public Users)
+Uses pre-built Docker images from Docker Hub for proprietary services. This mode:
+- Protects intellectual property by not exposing proprietary source code
+- Reduces deployment time significantly
+- Only requires cloning public repositories (kaspad and kaspa-miner)
+
+### 2. Build from Source Mode (For Developers)
+Builds all services from source code. This mode:
+- Requires access to all repositories (including private ones)
+- Allows full customization and development
+- Takes longer to deploy due to compilation
+
+To configure the deployment mode, set `USE_PREBUILT_IMAGES` in your `.env` file:
+- `USE_PREBUILT_IMAGES=true` - Use pre-built images (public deployment)
+- `USE_PREBUILT_IMAGES=false` - Build from source (development)
+
 ## Quick Start
 
-The environment uses Docker Compose profiles for flexible deployment:
+### For Public Users (Using Pre-built Images)
 
 ```bash
-# 1. Setup the repositories
-./setup-repos.sh
+# 1. Copy and configure environment
+cp .env.example .env
+# Edit .env and set USE_PREBUILT_IMAGES=true
 
-# 2. Create JWT secret
+# 2. Setup repositories and pull images
+# This will only clone public repos and automatically pull/tag pre-built images
+./setup-repos.sh --dev
+
+# 3. Create JWT secret
 openssl rand -hex 32 > ./keys/jwt.hex
 
-# 3. Start Kaspa services first
+# 4. Start services (Docker will use the pre-built images)
 docker compose --profile kaspad up -d
-
-# 4. Start backend (core services)
 docker compose --profile backend up -d
+docker compose --profile kaspa-explorer up -d  # Optional
+```
 
-# 5. Start the Explorer (optional)
-docker compose --profile kaspa-explorer up -d
+### For Developers (Building from Source)
+
+```bash
+# 1. Copy environment file
+cp .env.example .env
+# Keep USE_PREBUILT_IMAGES=false (default)
+
+# 2. Setup all repositories (including proprietary)
+./setup-repos.sh --dev
+
+# 3. Create JWT secret
+openssl rand -hex 32 > ./keys/jwt.hex
+
+# 4. Build and start services
+docker compose build
+docker compose --profile kaspad up -d
+docker compose --profile backend up -d
+docker compose --profile kaspa-explorer up -d  # Optional
 
 # 6. Start worker services based on your needs
 docker compose --profile frontend-w1 up -d  # 1 worker
@@ -226,6 +267,12 @@ If you've configured the `json-file` driver (e.g., on macOS), use standard `dock
 #### Viewing Logs (json-file driver or direct Docker)
 
 The syslog tagging format allows for easy filtering by service name, making it possible to debug specific components of the stack. If using the `json-file` driver, standard `docker logs` filtering applies.
+
+## Documentation
+
+- [Quick Setup with Pre-built Images](docs/quick-setup-prebuilt.md) - Simplified deployment guide
+- [Docker Image Management](docs/docker-image-management.md) - Building and publishing Docker images
+- [Multi-Platform Builds](docs/multi-platform-quick.md) - Cross-platform build instructions
 
 ## Troubleshooting
 

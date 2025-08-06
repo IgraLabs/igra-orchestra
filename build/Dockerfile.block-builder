@@ -21,5 +21,7 @@ RUN apt-get update -y && \
 
 WORKDIR /app
 COPY --from=builder /usr/src/app/target/release/block-builder .
+COPY --from=builder /usr/src/app/target/release/reorg_analyzer .
+COPY --from=builder /usr/src/app/target/release/transaction_parser .
 
 ENTRYPOINT ["./block-builder"]
