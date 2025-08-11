@@ -178,3 +178,24 @@ log_message "============================="
 if [ "$VERIFICATION_SUCCESSFUL" != true ]; then
   exit 1 # Exit with error if verification failed
 fi
+
+# Optional S3 upload integration
+# Set S3_BACKUP_AUTO_UPLOAD=true in .env to enable automatic S3 upload after successful backup
+if [ "$VERIFICATION_SUCCESSFUL" = true ] && [ "${S3_BACKUP_AUTO_UPLOAD,,}" = "true" ]; then
+  log_message "S3 auto-upload is enabled, starting upload process..."
+  
+  # Get the directory where this script is located
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  S3_UPLOAD_SCRIPT="$SCRIPT_DIR/upload-to-s3.sh"
+  
+  if [ -x "$S3_UPLOAD_SCRIPT" ]; then
+    log_message "Calling S3 upload script for container: $CONTAINER_NAME"
+    if "$S3_UPLOAD_SCRIPT" "$CONTAINER_NAME" "$BACKUP_FILE"; then
+      log_message "S3 upload completed successfully"
+    else
+      log_message "WARNING: S3 upload failed, but local backup was successful"
+    fi
+  else
+    log_message "WARNING: S3 upload script not found or not executable: $S3_UPLOAD_SCRIPT"
+  fi
+fi

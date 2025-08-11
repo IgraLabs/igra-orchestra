@@ -39,10 +39,9 @@ chmod +x build/repos/execution-layer/run-igra-dev-el.sh
 openssl rand -hex 32 > keys/jwt.hex
 ```
 
-7) Place the database backup
+7) Download the latest database backup from S3
 ```bash
-mkdir -p ~/.backups/viaduct-backups/
-# Place your downloaded backup archive *.gz into ~/.backups/viaduct-backups/
+./scripts/backup/download-from-s3.sh viaduct
 ```
 
 8) Restore the database
