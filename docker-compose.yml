@@ -219,7 +219,7 @@ services:
       - SYNC_THREADS
       - IGRA_LAUNCH_DAA_SCORE
       - MAGIC_SPK
-      - DELAY_BLOCKS
+      - DELAY_WINDOWS
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["--ip-port=${KASPAD_HOST}:${KASPAD_BORSH_PORT}", "--bb-ip-port=block-builder:8561"]
