@@ -242,15 +242,29 @@ check_local_file_exists_with_md5() {
     local s3_etag="$2"
     
     if [ -f "$local_file" ]; then
-        local local_md5
-        local_md5=$(calculate_md5 "$local_file")
-        
-        if [ -n "$local_md5" ] && [ "$local_md5" = "$s3_etag" ]; then
-            log_message "INFO" "File already exists locally with matching MD5: $local_md5"
-            return 0  # File exists with same content
+        # Check if this is a multipart upload ETag (contains hyphen)
+        if [[ "$s3_etag" == *"-"* ]]; then
+            log_message "INFO" "Multipart upload detected (ETag: $s3_etag), skipping MD5 comparison"
+            # For multipart uploads, just check if file exists and is valid
+            if tar -tzf "$local_file" > /dev/null 2>&1; then
+                log_message "INFO" "Local file exists and is a valid archive"
+                return 0  # File exists and is valid
+            else
+                log_message "INFO" "Local file exists but appears corrupted"
+                return 1  # File exists but is corrupted
+            fi
         else
-            log_message "INFO" "File exists locally but MD5 differs (local: $local_md5, S3: $s3_etag)"
-            return 1  # File exists but content differs
+            # Regular MD5 comparison for single-part uploads
+            local local_md5
+            local_md5=$(calculate_md5 "$local_file")
+            
+            if [ -n "$local_md5" ] && [ "$local_md5" = "$s3_etag" ]; then
+                log_message "INFO" "File already exists locally with matching MD5: $local_md5"
+                return 0  # File exists with same content
+            else
+                log_message "INFO" "File exists locally but MD5 differs (local: $local_md5, S3: $s3_etag)"
+                return 1  # File exists but content differs
+            fi
         fi
     fi
     
@@ -313,14 +327,22 @@ download_backup() {
             log_message "INFO" "Downloaded file size: $(numfmt --to=iec-i --suffix=B "$file_size" 2>/dev/null || echo "${file_size} bytes")"
             
             # Calculate and log MD5 of downloaded file
-            local downloaded_md5
-            downloaded_md5=$(calculate_md5 "$local_file")
-            if [ -n "$downloaded_md5" ]; then
-                log_message "INFO" "Downloaded file MD5: $downloaded_md5"
-                if [ -n "$s3_etag" ] && [ "$downloaded_md5" = "$s3_etag" ]; then
-                    log_message "SUCCESS" "MD5 checksum verification passed"
-                elif [ -n "$s3_etag" ]; then
-                    log_message "WARNING" "MD5 mismatch (expected: $s3_etag, got: $downloaded_md5)"
+            if [ -n "$s3_etag" ]; then
+                # Check if this is a multipart upload ETag (contains hyphen)
+                if [[ "$s3_etag" == *"-"* ]]; then
+                    log_message "INFO" "Multipart upload detected (ETag: $s3_etag), skipping MD5 verification"
+                else
+                    # Regular MD5 verification for single-part uploads
+                    local downloaded_md5
+                    downloaded_md5=$(calculate_md5 "$local_file")
+                    if [ -n "$downloaded_md5" ]; then
+                        log_message "INFO" "Downloaded file MD5: $downloaded_md5"
+                        if [ "$downloaded_md5" = "$s3_etag" ]; then
+                            log_message "SUCCESS" "MD5 checksum verification passed"
+                        else
+                            log_message "WARNING" "MD5 mismatch (expected: $s3_etag, got: $downloaded_md5)"
+                        fi
+                    fi
                 fi
             fi
             
