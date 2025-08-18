@@ -30,28 +30,28 @@ docker login
 # Build and push each service with SSH forwarding
 docker buildx build --platform linux/amd64,linux/arm64 \
   --ssh default \
-  --tag igranetwork/block-builder:v0.2.0 \
+  --tag igranetwork/block-builder:v0.2.1 \
   --tag igranetwork/block-builder:latest \
   --file build/Dockerfile.block-builder \
   --push build/repos/block-builder
 
 docker buildx build --platform linux/amd64,linux/arm64 \
   --ssh default \
-  --tag igranetwork/viaduct:v0.2.0 \
+  --tag igranetwork/viaduct:v0.2.1 \
   --tag igranetwork/viaduct:latest \
   --file build/Dockerfile.viaduct \
   --push build/repos/viaduct
 
 docker buildx build --platform linux/amd64,linux/arm64 \
   --ssh default \
-  --tag igranetwork/rpc-provider:v0.2.0 \
+  --tag igranetwork/rpc-provider:v0.2.1 \
   --tag igranetwork/rpc-provider:latest \
   --file build/Dockerfile.rpc-provider \
   --push build/repos/igra-rpc-provider
 
 docker buildx build --platform linux/amd64,linux/arm64 \
   --ssh default \
-  --tag igranetwork/kaswallet:v0.2.0 \
+  --tag igranetwork/kaswallet:v0.2.1 \
   --tag igranetwork/kaswallet:latest \
   --file build/Dockerfile.kaswallet \
   --push build/repos/kaswallet

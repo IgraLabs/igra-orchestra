@@ -13,48 +13,51 @@
 cp .env.backend.example .env
 ```
 
-Update `HEALTH_CHECK_API_KEY` and `NODE_ID` in `.env` with your API key and node id that was provided to you and your node name of your choice.
+Update `NODE_ID` in `.env` with your node name.
 
 2) Initialize repositories and images
 ```bash
-./setup-repos.sh
+chmod +x setup-repos.sh
+./setup-repos.sh --dev
 ```
 
 3) Start Kaspa and wait for full sync
 ```bash
 docker compose --profile kaspad up -d
-docker compose logs -f kaspad  # wait until IDB progress reaches 100%
 ```
 
-4) Provide execution-layer artifacts
-- Place downloaded `genesis.template.json` and `run-igra-dev-el.sh` into `build/repos/execution-layer/`
+Usually it takes 4-6 hours to sync depending on the machine and network speed. You can check the sync progress with `docker compose logs -f kaspad` and wait until `IDB: 100%` is reached.
 
-5) Make execution-layer script executable
+4) Make execution-layer script executable
 ```bash
 chmod +x build/repos/execution-layer/run-igra-dev-el.sh
 ```
 
-6) Generate JWT secret
+5) Generate JWT secret
 ```bash
 openssl rand -hex 32 > keys/jwt.hex
 ```
 
-7) Download the latest database backup from S3
+6) Download the latest database backup from S3
 ```bash
+chmod +x scripts/backup/download-from-s3.sh
 ./scripts/backup/download-from-s3.sh viaduct
 ```
 
-8) Restore the database
+7) Restore the database
 ```bash
+chmod +x scripts/backup/restore.sh
 ./scripts/backup/restore.sh viaduct
+# or you can pass the backup file path, for example:
+./scripts/backup/restore.sh viaduct ~/.backups/viaduct-backups/igra-orchestra-testnet_viaduct_data_20250818_190105.tar.gz
 ```
 
-9) Start backend services
+8) Start backend services
 ```bash
-docker compose --profile backend up -d
+docker compose --profile backend up -d --pull always
 ```
 
-10)  Monitor initial sync and block building
+9)   Monitor initial sync and block building
 ```bash
 # General logs
 docker compose logs -f
@@ -62,7 +65,7 @@ docker compose logs -f
 # Track block-builder progress
 docker logs -f block-builder
 # Optional analyzer
-docker run -i --rm --entrypoint /app/reorg_analyzer igranetwork/block-builder:latest
+docker logs -f block-builder | docker run -i --rm --entrypoint /app/reorg_analyzer igranetwork/block-builder:latest
 ```
 
 #### Common issues
