@@ -9,7 +9,7 @@ RUN apt-get update && \
 
 COPY . .
 
-RUN cargo build --bin igra-rpc-provider --release
+RUN cargo build --release
 
 FROM rust:slim
 
@@ -20,6 +20,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/igra-rpc-provider /app/
+COPY --from=builder /app/target/release/entry_transaction_sender /app/
 COPY --from=builder /app/config.toml /app/
 
 ENTRYPOINT [/app/igra-rpc-provider]

@@ -9,7 +9,7 @@ RUN apt-get update && \
 
 COPY . .
 
-RUN cargo build --bin kaswallet-daemon --release
+RUN cargo build --release
 
 FROM rust:slim
 
@@ -20,5 +20,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/kaswallet-daemon /app/
+COPY --from=builder /app/target/release/test_client /app/
+COPY --from=builder /app/target/release/kaswallet-create /app/
 
 ENTRYPOINT ["/app/kaswallet-daemon"]
