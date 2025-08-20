@@ -14,7 +14,7 @@ COPY . .
 
 RUN cargo build --bin kaspa-miner --release
 
-FROM debian:bookworm-slim
+FROM rust:slim
 
 WORKDIR /app
 

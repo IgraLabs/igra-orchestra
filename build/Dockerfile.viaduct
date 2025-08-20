@@ -20,7 +20,7 @@ COPY . .
 # Use BuildKit SSH mount for cargo build
 RUN --mount=type=ssh cargo build --release
 
-FROM debian:bookworm-slim
+FROM rust:slim
 
 WORKDIR /app
 
