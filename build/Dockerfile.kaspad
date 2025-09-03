@@ -12,7 +12,7 @@ RUN rustup component add rustfmt
 
 COPY . .
 
-RUN cargo build --bin kaspad --release
+cargo build --bin kaspad --bin kaspa-cli --release
 
 FROM rust:slim
 
@@ -23,6 +23,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/kaspad /app/
+COPY --from=builder /app/target/release/kaspa-cli /app/
 
 # RUN openssl rand -hex 32 > jwt.hex
 
