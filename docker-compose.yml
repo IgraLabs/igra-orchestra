@@ -179,8 +179,6 @@ services:
       - NODE_ID=igra-orchestra-${NODE_ID}
       - API_KEY=${HEALTH_CHECK_API_KEY}
       - POLL_INTERVAL=5
-    depends_on:
-      - execution-layer
     restart: unless-stopped
 
   block-builder:
