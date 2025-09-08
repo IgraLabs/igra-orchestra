@@ -317,6 +317,15 @@ main() {
     # Generate summary report
     generate_summary
     
+    # Fix ownership and permissions for system logs after cleanup
+    log_message "INFO" "Fixing log file permissions and ownership"
+    chown syslog:adm /var/log/syslog /var/log/auth.log /var/log/kern.log /var/log/daemon.log /var/log/user.log 2>/dev/null || true
+    chmod 640 /var/log/syslog /var/log/auth.log /var/log/kern.log /var/log/daemon.log /var/log/user.log 2>/dev/null || true
+    
+    # Restart rsyslog to ensure it can write to the logs
+    log_message "INFO" "Restarting rsyslog service"
+    systemctl restart rsyslog 2>/dev/null || service rsyslog restart 2>/dev/null || true
+    
     log_message "INFO" "Log cleanup completed successfully"
     
     # Exit with appropriate code
