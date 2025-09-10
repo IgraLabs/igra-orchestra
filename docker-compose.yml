@@ -45,7 +45,7 @@ x-rpc-provider-base: &rpc-provider-base
   build:
     context: build/repos/igra-rpc-provider
     dockerfile: ../../Dockerfile.rpc-provider
-  image: igranetwork/rpc-provider:latest
+  image: igranetwork/rpc-provider:v0.2.1
   environment: *rpc-provider-environment
   expose:
     - "8535"
@@ -114,7 +114,7 @@ x-kaswallet-base: &kaswallet-base
   build:
     context: build/repos/kaswallet
     dockerfile: ../../Dockerfile.kaswallet
-  image: igranetwork/kaswallet:latest
+  image: igranetwork/kaswallet:v0.2.1
   expose:
     - "8082"
   environment:
@@ -134,7 +134,7 @@ services:
     <<: *default-service
     restart: "no"
     container_name: execution-layer
-    image: igranetwork/reth:v1.6.0
+    image: igranetwork/reth:1.7.0
     entrypoint: /root/reth/run-igra-dev-el.sh
     profiles: ["backend"]
     ports:
@@ -187,7 +187,7 @@ services:
     build:
       context: build/repos/block-builder
       dockerfile: ../../Dockerfile.block-builder
-    image: igranetwork/block-builder:latest
+    image: igranetwork/block-builder:v0.2.2
     command: /app/jwt.hex http://execution-layer
     profiles: ["backend"]
     container_name: block-builder
@@ -220,7 +220,7 @@ services:
       dockerfile: ../../Dockerfile.viaduct
       ssh:
         - default
-    image: igranetwork/viaduct:latest
+    image: igranetwork/viaduct:v0.2.2
     profiles: ["backend"]
     container_name: viaduct
     environment:
