@@ -65,7 +65,7 @@ docker compose logs -f
 # Track block-builder progress
 docker logs -f block-builder
 # Optional analyzer
-docker logs -f block-builder | docker run -i --rm --entrypoint /app/reorg_analyzer igranetwork/block-builder:latest
+docker logs -f block-builder | docker run -i --rm --entrypoint /app/reorg_analyzer igranetwork/block-builder:v0.2.2
 ```
 
 #### Common issues

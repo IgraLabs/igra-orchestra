@@ -169,8 +169,8 @@ services:
       test: ["CMD", "bash", "-c", "test -S /root/reth/socket/auth.ipc"]
 
   health-check-client:
-    image: igranetwork/node-push-client:latest
-    container_name: node-push-client
+    image: igranetwork/node-health-check-client:v0.2.2
+    container_name: node-health-check-client
     networks:
       - igra-network
     environment:
