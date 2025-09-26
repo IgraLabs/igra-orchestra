@@ -29,7 +29,8 @@ BACKUP_DIR="$HOME/.backups/${CONTAINER_NAME}-backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="$BACKUP_DIR/${VOLUME_NAME}_$TIMESTAMP.tar.gz"
 LOG_FILE="$BACKUP_DIR/backup_logs.log"
-KEEP_BACKUPS=7 # Number of recent backups to keep
+# Allow overriding local retention with environment variable
+KEEP_BACKUPS=${LOCAL_BACKUP_RETENTION_COUNT:-3} # Number of recent backups to keep
 GZIP_LEVEL=1   # Compression level (1=fastest, 9=best, 6=default). Set to "" to use default.
 
 # Function for logging
@@ -183,11 +184,11 @@ fi
 # Set S3_BACKUP_AUTO_UPLOAD=true in .env to enable automatic S3 upload after successful backup
 if [ "$VERIFICATION_SUCCESSFUL" = true ] && [ "${S3_BACKUP_AUTO_UPLOAD,,}" = "true" ]; then
   log_message "S3 auto-upload is enabled, starting upload process..."
-  
+
   # Get the directory where this script is located
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   S3_UPLOAD_SCRIPT="$SCRIPT_DIR/upload-to-s3.sh"
-  
+
   if [ -x "$S3_UPLOAD_SCRIPT" ]; then
     log_message "Calling S3 upload script for container: $CONTAINER_NAME"
     if "$S3_UPLOAD_SCRIPT" "$CONTAINER_NAME" "$BACKUP_FILE"; then
