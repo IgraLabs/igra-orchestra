@@ -29,13 +29,58 @@ BACKUP_DIR="$HOME/.backups/${CONTAINER_NAME}-backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="$BACKUP_DIR/${VOLUME_NAME}_$TIMESTAMP.tar.gz"
 LOG_FILE="$BACKUP_DIR/backup_logs.log"
+# Staging directory for two-stage backup (pause-and-copy, then compress-and-upload)
+STAGING_DIR="$BACKUP_DIR/staging/${VOLUME_NAME}_$TIMESTAMP"
 # Allow overriding local retention with environment variable
-KEEP_BACKUPS=${LOCAL_BACKUP_RETENTION_COUNT:-3} # Number of recent backups to keep
+KEEP_BACKUPS=${LOCAL_BACKUP_RETENTION_COUNT:-1} # Number of recent backups to keep
 GZIP_LEVEL=1   # Compression level (1=fastest, 9=best, 6=default). Set to "" to use default.
 
 # Function for logging
 log_message() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
+}
+
+# Simple per-container locking to prevent overlapping runs
+LOCK_FILE="/tmp/backup_${CONTAINER_NAME}.lock"
+
+# Current user ids (used for container file ownership)
+USER_UID=$(id -u)
+USER_GID=$(id -g)
+
+create_lock() {
+  if [ -f "$LOCK_FILE" ]; then
+    local pid
+    pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      log_message "ERROR: Another backup process is already running for $CONTAINER_NAME (PID: $pid)"
+      exit 1
+    else
+      log_message "WARNING: Stale lock file found, removing it: $LOCK_FILE"
+      rm -f "$LOCK_FILE"
+    fi
+  fi
+  echo $$ > "$LOCK_FILE"
+  log_message "Lock file created: $LOCK_FILE"
+}
+
+cleanup_lock() {
+  if [ -f "$LOCK_FILE" ]; then
+    rm -f "$LOCK_FILE"
+    log_message "Lock file removed"
+  fi
+}
+
+cleanup() {
+  # Ensure container is unpaused and lock is removed on exit
+  log_message "Attempting to unpause container $CONTAINER_NAME due to script exit..."
+  docker unpause "$CONTAINER_NAME" 2>/dev/null || true
+  # Always remove staging directory on exit if it still exists
+  if [ -d "$STAGING_DIR" ]; then
+    rm -rf "$STAGING_DIR"
+    log_message "Removed staging directory during cleanup: $STAGING_DIR"
+  fi
+  cleanup_lock
+  log_message "Cleanup finished."
 }
 
 # Check if the volume exists
@@ -48,12 +93,15 @@ if ! docker volume inspect "$VOLUME_NAME" > /dev/null 2>&1; then
 fi
 log_message "Volume $VOLUME_NAME exists and will be backed up."
 
-# Ensure container is unpaused even if script exits unexpectedly
-# Note: This trap might not catch all termination signals (like SIGKILL)
-trap 'log_message "Attempting to unpause container $CONTAINER_NAME due to script exit..."; docker unpause "$CONTAINER_NAME" 2>/dev/null || true; log_message "Trap finished."' EXIT
-
 # Create backup directory if it doesn't exist
 mkdir -p "$BACKUP_DIR"
+
+# Create staging directory
+mkdir -p "$STAGING_DIR"
+
+# Set cleanup trap and create lock
+trap cleanup EXIT
+create_lock
 
 # Start time measurement
 TOTAL_START_TIME=$(date +%s)
@@ -72,33 +120,25 @@ PAUSE_END_TIME=$(date +%s)
 PAUSE_DURATION=$((PAUSE_END_TIME - PAUSE_START_TIME))
 log_message "Container paused in $PAUSE_DURATION seconds."
 
-# Perform the backup
-log_message "Creating backup file (temporary)..."
-BACKUP_START_TIME=$(date +%s)
-TEMP_BACKUP_FILE="${BACKUP_FILE}.tmp"
+# Stage 1: Pause-and-copy to staging (no compression while paused)
+log_message "Copying volume data to staging directory (temporary, during pause)..."
+COPY_START_TIME=$(date +%s)
 
-# Construct the command to run inside the container
-# Use pipe for specific gzip level, otherwise use tar's built-in -z
-if [ -n "$GZIP_LEVEL" ]; then
-  # Pipe tar output to gzip with specific level
-  CONTAINER_CMD="tar -c -C /data . | gzip -${GZIP_LEVEL} > /backup/$(basename "$TEMP_BACKUP_FILE")"
-  log_message "Using tar pipe to gzip level $GZIP_LEVEL"
-else
-  # Use tar's built-in gzip compression (default level)
-  CONTAINER_CMD="tar -czf /backup/$(basename "$TEMP_BACKUP_FILE") -C /data ."
-  log_message "Using tar built-in gzip compression"
-fi
-
-# Execute the command in the container
-if ! docker run --rm -v "$VOLUME_NAME":/data:ro -v "$BACKUP_DIR":/backup:rw alpine sh -c "$CONTAINER_CMD"; then
-    log_message "ERROR: Failed to create backup archive inside container. Check volume/permissions."
+# Execute fast recursive copy inside a short-lived container as current user
+# Use tar pipeline to avoid preserving root ownership
+if ! docker run --rm \
+  --user "$USER_UID:$USER_GID" \
+  -v "$VOLUME_NAME":/data:ro \
+  -v "$STAGING_DIR":/staging:rw \
+  alpine sh -c 'tar -C /data -cf - . | tar -C /staging -xf -'; then
+    log_message "ERROR: Failed to copy data to staging. Check volume/permissions."
     # EXIT trap will handle unpausing
     exit 1
 fi
 
-BACKUP_END_TIME=$(date +%s)
-BACKUP_DURATION=$((BACKUP_END_TIME - BACKUP_START_TIME))
-log_message "Backup temporary file created in $BACKUP_DURATION seconds."
+COPY_END_TIME=$(date +%s)
+COPY_DURATION=$((COPY_END_TIME - COPY_START_TIME))
+log_message "Staging copy completed in $COPY_DURATION seconds."
 
 # Unpause the container (Moved EARLIER to reduce frozen time)
 log_message "Unpausing container $CONTAINER_NAME..."
@@ -108,23 +148,54 @@ UNPAUSE_END_TIME=$(date +%s)
 UNPAUSE_DURATION=$((UNPAUSE_END_TIME - UNPAUSE_START_TIME))
 log_message "Container unpaused in $UNPAUSE_DURATION seconds."
 
-# Disable the EXIT trap now that we've successfully unpaused
-trap - EXIT
-
 # --- Container is now running ---
 
-# Verify the backup integrity (Moved AFTER unpause)
+# Stage 2: Compress staging into final archive (after unpause)
+log_message "Creating compressed archive from staging..."
+COMPRESSION_START_TIME=$(date +%s)
+TEMP_BACKUP_FILE="${BACKUP_FILE}.tmp"
+
+# Build output filename (basename only) for container-side path
+OUT_BASE_NAME=$(basename "$TEMP_BACKUP_FILE")
+
+# Run compression inside container using positional parameters to avoid quoting issues
+if [ -n "$GZIP_LEVEL" ]; then
+  log_message "Using tar pipe to gzip level $GZIP_LEVEL"
+  if ! docker run --rm \
+    --user "$USER_UID:$USER_GID" \
+    -v "$STAGING_DIR":/data:ro \
+    -v "$BACKUP_DIR":/backup:rw \
+    alpine sh -c 'tar -c -C /data . | gzip -"$1" > "/backup/$2"' sh "$GZIP_LEVEL" "$OUT_BASE_NAME"; then
+      log_message "ERROR: Failed to create backup archive from staging."
+      exit 1
+  fi
+else
+  log_message "Using tar built-in gzip compression"
+  if ! docker run --rm \
+    --user "$USER_UID:$USER_GID" \
+    -v "$STAGING_DIR":/data:ro \
+    -v "$BACKUP_DIR":/backup:rw \
+    alpine sh -c 'tar -czf "/backup/$1" -C /data .' sh "$OUT_BASE_NAME"; then
+      log_message "ERROR: Failed to create backup archive from staging."
+      exit 1
+  fi
+fi
+
+COMPRESSION_END_TIME=$(date +%s)
+COMPRESSION_DURATION=$((COMPRESSION_END_TIME - COMPRESSION_START_TIME))
+log_message "Compression completed in $COMPRESSION_DURATION seconds."
+
+# Verify the backup integrity (after compression)
 log_message "Verifying backup integrity ($TEMP_BACKUP_FILE)..."
 VERIFY_START_TIME=$(date +%s)
 VERIFICATION_SUCCESSFUL=false
 if gunzip -t "$TEMP_BACKUP_FILE"; then
-  # Integrity check passed, rename the temp file
   mv "$TEMP_BACKUP_FILE" "$BACKUP_FILE"
   log_message "Backup verification successful. Renamed to $BACKUP_FILE."
   VERIFICATION_SUCCESSFUL=true
 else
   log_message "Backup verification failed! Checksum error on $TEMP_BACKUP_FILE."
-  rm -f "$TEMP_BACKUP_FILE" # Remove corrupted temp file
+  rm -f "$TEMP_BACKUP_FILE"
   log_message "Removed corrupted temporary file."
 fi
 VERIFY_END_TIME=$(date +%s)
@@ -151,8 +222,8 @@ log_message "Volume size: $VOLUME_SIZE"
 # Calculate times
 TOTAL_END_TIME=$(date +%s)
 TOTAL_DURATION=$((TOTAL_END_TIME - TOTAL_START_TIME))
-# Recalculate frozen time (Verification is no longer included)
-CONTAINER_FROZEN_TIME=$((PAUSE_DURATION + BACKUP_DURATION + UNPAUSE_DURATION))
+# Recalculate frozen time to include only pause/copy/unpause
+CONTAINER_FROZEN_TIME=$((PAUSE_DURATION + COPY_DURATION + UNPAUSE_DURATION))
 
 # Summary
 log_message ""
@@ -169,14 +240,20 @@ log_message "Volume size: $VOLUME_SIZE"
 log_message ""
 log_message "Time Measurements:"
 log_message "  Container pause time: $PAUSE_DURATION seconds"
-log_message "  Backup creation time: $BACKUP_DURATION seconds"
+log_message "  Copy to staging time: $COPY_DURATION seconds"
 log_message "  Container unpause time: $UNPAUSE_DURATION seconds"
 log_message "  --- Container Frozen Time: $CONTAINER_FROZEN_TIME seconds ---" # Highlight the key metric
+log_message "  Compression time: $COMPRESSION_DURATION seconds (after unpause)"
 log_message "  Backup verification time: $VERIFY_DURATION seconds (after unpause)"
 log_message "  Total backup process time: $TOTAL_DURATION seconds"
 log_message "============================="
 
 if [ "$VERIFICATION_SUCCESSFUL" != true ]; then
+  # Do not preserve staging on failure
+  if [ -d "$STAGING_DIR" ]; then
+    rm -rf "$STAGING_DIR"
+    log_message "Removed staging directory after failed verification: $STAGING_DIR"
+  fi
   exit 1 # Exit with error if verification failed
 fi
 
@@ -193,10 +270,23 @@ if [ "$VERIFICATION_SUCCESSFUL" = true ] && [ "${S3_BACKUP_AUTO_UPLOAD,,}" = "tr
     log_message "Calling S3 upload script for container: $CONTAINER_NAME"
     if "$S3_UPLOAD_SCRIPT" "$CONTAINER_NAME" "$BACKUP_FILE"; then
       log_message "S3 upload completed successfully"
+      # Remove staging only after successful upload when auto-upload is enabled
+      if [ -d "$STAGING_DIR" ]; then
+        rm -rf "$STAGING_DIR"
+        log_message "Removed staging directory after successful upload: $STAGING_DIR"
+      fi
     else
-      log_message "WARNING: S3 upload failed, but local backup was successful"
+      log_message "WARNING: S3 upload failed"
     fi
   else
     log_message "WARNING: S3 upload script not found or not executable: $S3_UPLOAD_SCRIPT"
+  fi
+fi
+
+# If auto-upload is disabled, remove staging after successful verification
+if [ "$VERIFICATION_SUCCESSFUL" = true ] && [ "${S3_BACKUP_AUTO_UPLOAD,,}" != "true" ]; then
+  if [ -d "$STAGING_DIR" ]; then
+    rm -rf "$STAGING_DIR"
+    log_message "Removed staging directory (auto-upload disabled): $STAGING_DIR"
   fi
 fi

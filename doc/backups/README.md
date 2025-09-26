@@ -53,7 +53,7 @@ AWS_PROFILE=igra-labs ./scripts/backup/upload-to-s3.sh viaduct
 All backup scripts are in `scripts/backup/`:
 - `backup.sh` - Create local backups
 - `restore.sh` - Restore from backups
-- `upload-to-s3.sh` - Upload to S3 
+- `upload-to-s3.sh` - Upload to S3
 - `download-from-s3.sh` - Download from S3
 
 ## Default Paths

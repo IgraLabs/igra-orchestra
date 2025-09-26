@@ -6,16 +6,17 @@ This document outlines the procedures for backing up, restoring, and monitoring 
 
 The backup and restore functionality has been consolidated into unified scripts that work with multiple components.
 
-### Backup (`scripts/backup/backup.sh`)
+### Backup (`scripts/backup/backup.sh`) — Two-Stage Flow
 
 This script performs the following actions:
 
-1.  Pauses the specified container.
-2.  Creates a timestamped `.tar.gz` archive of the volume's contents in `$HOME/.backups/<container>-backups/`.
-3.  Verifies the integrity of the created backup file.
-4.  Unpauses the container.
-5.  Prunes old backups, keeping the most recent 7 (configurable in the script).
-6.  Logs all operations and timings to the backup log file.
+1.  Pauses the specified container and copies the volume contents to a local staging directory.
+2.  Unpauses the container immediately after the copy completes (minimizing downtime).
+3.  Compresses the staging directory into a timestamped `.tar.gz` archive in `$HOME/.backups/<container>-backups/`.
+4.  Verifies the integrity of the archive.
+5.  Prunes old backups, keeping the most recent N (configurable via `LOCAL_BACKUP_RETENTION_COUNT`).
+6.  Optionally uploads the archive to S3 if `S3_BACKUP_AUTO_UPLOAD=true`.
+7.  Logs all operations and timings; the "Container Frozen Time" reflects only pause/copy/unpause.
 
 **Usage:**
 
