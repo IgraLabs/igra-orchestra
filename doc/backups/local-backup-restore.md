@@ -18,6 +18,17 @@ This script performs the following actions:
 6.  Optionally uploads the archive to S3 if `S3_BACKUP_AUTO_UPLOAD=true`.
 7.  Logs all operations and timings; the "Container Frozen Time" reflects only pause/copy/unpause.
 
+#### Storage usage and cleanup
+
+- Staging directory: created under `~/.backups/<container>-backups/staging/...`. It is removed automatically:
+  - after successful verification when auto-upload is disabled;
+  - after successful S3 upload when `S3_BACKUP_AUTO_UPLOAD=true`;
+  - on failure or script exit to prevent disk exhaustion.
+
+- Temp archive: a `.tar.gz.tmp` is created during compression and renamed to the final `.tar.gz` after verification. It is removed automatically on failure or script exit.
+
+- Temporary disk usage: during a run you may briefly have both the staging copy and the temporary archive; ensure sufficient free space or reduce `LOCAL_BACKUP_RETENTION_COUNT` to limit concurrent local archives.
+
 **Usage:**
 
 ```bash

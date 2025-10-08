@@ -79,6 +79,11 @@ cleanup() {
     rm -rf "$STAGING_DIR"
     log_message "Removed staging directory during cleanup: $STAGING_DIR"
   fi
+  # Remove any leftover temporary archive on exit (e.g., when compression fails)
+  if [ -n "$TEMP_BACKUP_FILE" ] && [ -f "$TEMP_BACKUP_FILE" ]; then
+    rm -f "$TEMP_BACKUP_FILE"
+    log_message "Removed temporary backup file during cleanup: $TEMP_BACKUP_FILE"
+  fi
   cleanup_lock
   log_message "Cleanup finished."
 }
@@ -167,6 +172,9 @@ if [ -n "$GZIP_LEVEL" ]; then
     -v "$BACKUP_DIR":/backup:rw \
     alpine sh -c 'tar -c -C /data . | gzip -"$1" > "/backup/$2"' sh "$GZIP_LEVEL" "$OUT_BASE_NAME"; then
       log_message "ERROR: Failed to create backup archive from staging."
+      # Clean up potentially large, incomplete temporary archive file
+      rm -f "$TEMP_BACKUP_FILE" 2>/dev/null || true
+      log_message "Removed incomplete temporary archive: $TEMP_BACKUP_FILE"
       exit 1
   fi
 else
@@ -177,6 +185,9 @@ else
     -v "$BACKUP_DIR":/backup:rw \
     alpine sh -c 'tar -czf "/backup/$1" -C /data .' sh "$OUT_BASE_NAME"; then
       log_message "ERROR: Failed to create backup archive from staging."
+      # Clean up potentially large, incomplete temporary archive file
+      rm -f "$TEMP_BACKUP_FILE" 2>/dev/null || true
+      log_message "Removed incomplete temporary archive: $TEMP_BACKUP_FILE"
       exit 1
   fi
 fi
