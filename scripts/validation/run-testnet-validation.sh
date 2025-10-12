@@ -1,0 +1,470 @@
+#!/bin/bash
+set -euo pipefail
+
+# Unified testnet validation orchestrator
+# - Loads .env.testnet-validation
+# - Verifies kaspa status (if helper is present)
+# - Phase 1: clean backend and reset viaduct volume
+# - Phase 2: ensure/download backup and restore to viaduct volume
+# - Phase 3: start backend services
+# - Phase 4: start frontend worker and verify health
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT"
+
+START_TIME=$(date +%s)
+SUMMARY_ERRORS=()
+
+# Exit codes
+EXIT_SUCCESS=0
+EXIT_CONFIG_ERROR=2
+EXIT_RUNTIME_ERROR=3
+
+# Logging utilities
+log() { echo "[INFO] $*"; }
+success() { echo -e "\033[32m[SUCCESS]\033[0m $*"; }
+warn() { echo -e "\033[33m[WARNING]\033[0m $*"; }
+err() { echo -e "\033[31m[ERROR]\033[0m $*" >&2; }
+
+# Cleanup and summary on EXIT
+summary() {
+  local end_time=$(date +%s)
+  local total=$((end_time - START_TIME))
+  echo
+  log "===== Validation Summary ====="
+  log "Project root: $PROJECT_ROOT"
+  if [ ${#SUMMARY_ERRORS[@]} -eq 0 ]; then
+    success "All phases completed successfully"
+  else
+    err "Encountered ${#SUMMARY_ERRORS[@]} error(s):"
+    for e in "${SUMMARY_ERRORS[@]}"; do err "- $e"; done
+  fi
+  log "Total time: ${total}s"
+  log "=============================="
+}
+trap summary EXIT
+
+# Env loading
+load_env() {
+  local env_file=".env.testnet-validation"
+  if [[ -f "$env_file" ]]; then
+    log "Loading $env_file"
+    # shellcheck disable=SC2046
+    export $(grep -v '^#' "$env_file" | sed 's/\r$//' | xargs -I {} bash -lc 'k="${0%%=*}"; v="${0#*=}"; printf "%s=%q\n" "$k" "$v"' {}) || true
+  else
+    SUMMARY_ERRORS+=("$env_file not found in $PROJECT_ROOT")
+    err "$env_file not found in $PROJECT_ROOT"
+    exit $EXIT_CONFIG_ERROR
+  fi
+  if [[ -z "${NETWORK:-}" ]]; then
+    SUMMARY_ERRORS+=("NETWORK not set in $env_file")
+    err "NETWORK is not set in $env_file (expected: testnet/mainnet/devnet)"
+    exit $EXIT_CONFIG_ERROR
+  fi
+}
+
+# Basic prerequisites
+check_prereqs() {
+  if ! command -v docker >/dev/null 2>&1; then
+    SUMMARY_ERRORS+=("docker not found in PATH")
+    err "docker not found in PATH"
+    exit $EXIT_RUNTIME_ERROR
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    SUMMARY_ERRORS+=("Cannot talk to Docker daemon")
+    err "Cannot talk to Docker daemon. Is it running?"
+    exit $EXIT_RUNTIME_ERROR
+  fi
+}
+
+# Compose helpers
+compose_ps_q() {
+  local service="$1"
+  if command -v docker compose >/dev/null 2>&1; then
+    docker compose -f docker-compose.yml ps -q "$service"
+  else
+    docker-compose -f docker-compose.yml ps -q "$service"
+  fi
+}
+
+# Get health status for a compose service (empty until container exists)
+get_service_health() {
+  local service="$1"
+  local cid
+  cid=$(compose_ps_q "$service" | head -n1 || true)
+  if [[ -z "$cid" ]]; then
+    echo ""
+    return 0
+  fi
+  docker inspect --format='{{.State.Health.Status}}' "$cid" 2>/dev/null || echo ""
+}
+
+# Compose project name resolution (align with manual usage)
+get_compose_project() {
+  # Allow override via COMPOSE_PROJECT_NAME, otherwise default to directory name
+  if [[ -n "${COMPOSE_PROJECT_NAME:-}" ]]; then
+    echo "$COMPOSE_PROJECT_NAME"
+  else
+    basename "$PROJECT_ROOT"
+  fi
+}
+
+# Optionally verify kaspa status if helper exists
+verify_kaspa() {
+  local helper="$SCRIPT_DIR/verify-kaspa-status.sh"
+  if [[ -x "$helper" ]]; then
+    log "Verifying Kaspa status..."
+    if ! "$helper"; then
+      SUMMARY_ERRORS+=("Kaspa status verification failed")
+      err "Kaspa status verification failed"
+      exit $EXIT_RUNTIME_ERROR
+    fi
+  else
+    warn "Skipping Kaspa verification (helper not found: $helper)"
+  fi
+}
+
+# Derive and export L1 reference vars from kaspa DAA reader
+set_l1_reference_from_kaspa() {
+  local reader="$SCRIPT_DIR/kaspa_daa_reader.sh"
+  if [[ ! -x "$reader" ]]; then
+    warn "kaspa_daa_reader.sh not found or not executable: $reader (skipping L1 reference derivation)"
+    return 0
+  fi
+
+  log "Reading Kaspa DAA to populate L1 reference vars..."
+  local out
+  local wrpc_url
+  local borsh_port
+  borsh_port="${KASPAD_BORSH_PORT:-17610}"
+  wrpc_url="ws://localhost:${borsh_port}"
+  log "Using KASPA_WRPC_URL=$wrpc_url (from KASPAD_BORSH_PORT=$borsh_port)"
+  if ! out=$(KASPA_WRPC_URL="$wrpc_url" bash "$reader" 2>/dev/null); then
+    SUMMARY_ERRORS+=("kaspa_daa_reader failed")
+    err "kaspa_daa_reader failed"
+    return 1
+  fi
+
+  # Parse outputs
+  local vdaa ts
+  vdaa=$(echo "$out" | awk -F': ' '/virtual_daa_score/ {print $2}' | tr -d '\r' | tail -n1)
+  ts=$(echo "$out" | awk -F': ' '/timestamp/ {print $2}' | tr -d '\r' | tail -n1)
+
+  if [[ -z "$vdaa" || -z "$ts" ]]; then
+    SUMMARY_ERRORS+=("Failed to parse kaspa_daa_reader output")
+    err "Failed to parse kaspa_daa_reader output: $out"
+    return 1
+  fi
+
+  export L1_REFERENCE_DAA_SCORE="$vdaa"
+  export L1_REFERENCE_TIMESTAMP="$ts"
+  export IGRA_LAUNCH_DAA_SCORE="$vdaa"
+  log "Set L1_REFERENCE_DAA_SCORE=$L1_REFERENCE_DAA_SCORE"
+  log "Set L1_REFERENCE_TIMESTAMP=$L1_REFERENCE_TIMESTAMP"
+  log "Set IGRA_LAUNCH_DAA_SCORE=$IGRA_LAUNCH_DAA_SCORE (same as L1_REFERENCE_DAA_SCORE)"
+}
+
+# Phase 1: Clean stop backend and reset viaduct volume
+phase1_clean_backend() {
+  log "[Phase 1] Clean stopping backend and resetting viaduct volume"
+  local compose_project
+  compose_project=$(get_compose_project)
+  local viaduct_volume="${compose_project}_viaduct_data"
+  log "Compose project: $compose_project"
+  log "Viaduct volume: $viaduct_volume"
+
+  if command -v docker compose >/dev/null 2>&1; then
+    docker compose -f docker-compose.yml --profile backend down || true
+  else
+    docker-compose -f docker-compose.yml stop execution-layer block-builder viaduct || true
+    docker-compose -f docker-compose.yml rm -f execution-layer block-builder viaduct || true
+  fi
+
+  # Only reset viaduct data if explicitly requested
+  case "${RESET_VIADUCT:-false}" in
+    true|TRUE|yes|YES|1)
+      if docker volume inspect "$viaduct_volume" >/dev/null 2>&1; then
+        docker volume rm -f "$viaduct_volume"
+        success "Removed volume: $viaduct_volume"
+      else
+        log "Volume not found (already clean): $viaduct_volume"
+      fi
+      ;;
+    *)
+      log "Skipping viaduct volume reset (set RESET_VIADUCT=true to enable)"
+      ;;
+  esac
+}
+
+# Phase 2: Ensure/download backup and restore to viaduct volume
+phase2_restore_viaduct() {
+  log "[Phase 2] Ensuring backup and restoring viaduct volume"
+  local compose_project
+  compose_project=$(get_compose_project)
+  local viaduct_volume="${compose_project}_viaduct_data"
+
+  local downloader="$PROJECT_ROOT/scripts/backup/download-from-s3.sh"
+  if [[ ! -f "$downloader" ]]; then
+    SUMMARY_ERRORS+=("Downloader not found: $downloader")
+    err "Downloader not found: $downloader"
+    exit $EXIT_RUNTIME_ERROR
+  fi
+
+  export S3_BACKUP_BUCKET="igralabs-viaduct-archival-data"
+  export S3_BACKUP_REGION="${S3_BACKUP_REGION:-eu-north-1}"
+
+  local out_dir="${S3_OUTPUT_DIR:-$HOME/.backups/viaduct-backups}"
+  local backup_basename=""
+
+  local requested_backup="${BACKUP_FILE:-${1:-}}"
+  if [[ -n "$requested_backup" ]]; then
+    log "Requested backup: $requested_backup (will download if missing)"
+    "$downloader" viaduct "$requested_backup"
+    backup_basename="$(basename "$requested_backup")"
+  else
+    log "No specific backup provided; ensuring latest exists locally"
+    local list_out
+    list_out=$("$downloader" --list viaduct | sed 's/\r$//')
+    local latest_key
+    latest_key=$(echo "$list_out" | grep -E '\.tar\.gz$' | sed 's/^[[:space:]]*-[[:space:]]*//' | head -n1 || true)
+    if [[ -z "$latest_key" ]]; then
+      SUMMARY_ERRORS+=("Could not determine latest backup key from S3")
+      err "Could not determine latest backup key"
+      echo "$list_out" | head -n50 >&2 || true
+      exit $EXIT_RUNTIME_ERROR
+    fi
+    local basename_latest
+    basename_latest=$(basename "$latest_key")
+    local local_latest="$out_dir/viaduct/$basename_latest"
+    if [[ -f "$local_latest" ]]; then
+      log "Latest backup already present: $local_latest"
+    else
+      log "Downloading latest backup: $latest_key -> $out_dir"
+      if ! "$downloader" viaduct; then
+        SUMMARY_ERRORS+=("Failed to download backup from S3")
+        err "Failed to download backup from S3"
+        exit $EXIT_RUNTIME_ERROR
+      fi
+    fi
+    backup_basename="$basename_latest"
+  fi
+
+  if [[ -z "$backup_basename" ]]; then
+    SUMMARY_ERRORS+=("Backup basename could not be resolved")
+    err "Could not locate downloaded backup under $out_dir/viaduct"
+    exit $EXIT_RUNTIME_ERROR
+  fi
+
+  local local_backup_path="$out_dir/viaduct/$backup_basename"
+
+  # Verify backup integrity before restore
+  log "Verifying backup integrity: $local_backup_path"
+  if ! gunzip -t "$local_backup_path" 2>/dev/null; then
+    SUMMARY_ERRORS+=("Backup file integrity check failed - file is corrupted")
+    err "Backup file integrity check failed (gunzip -t). The file may be corrupted."
+    exit $EXIT_RUNTIME_ERROR
+  fi
+  log "Backup integrity verified successfully"
+
+  # Clean up old backups, keeping only the latest one
+  log "Cleaning up old backups (keeping only latest: $backup_basename)..."
+  local old_backups_count=0
+  while IFS= read -r old_backup; do
+    if [[ -n "$old_backup" && -f "$old_backup" && "$old_backup" != "$local_backup_path" ]]; then
+      log "Removing old backup: $(basename "$old_backup")"
+      rm -f "$old_backup"
+      ((old_backups_count++))
+    fi
+  done < <(find "$out_dir/viaduct" -maxdepth 1 -name "igra-orchestra-${NETWORK}_viaduct_data_*.tar.gz" -type f 2>/dev/null || true)
+
+  if [[ $old_backups_count -gt 0 ]]; then
+    log "Cleaned up $old_backups_count old backup(s)"
+  else
+    log "No old backups to clean up"
+  fi
+
+  log "Restoring backup: $local_backup_path -> volume $viaduct_volume"
+
+  if ! docker run --rm \
+    -v "$viaduct_volume":/app/storage \
+    -v "$local_backup_path":/backup.tar.gz:ro \
+    alpine:3.20 sh -c "rm -rf /app/storage/* && mkdir -p /app/storage && tar -xzf /backup.tar.gz -C /app/storage"; then
+    SUMMARY_ERRORS+=("Failed to restore backup to volume")
+    err "Failed to extract backup into volume $viaduct_volume"
+    exit $EXIT_RUNTIME_ERROR
+  fi
+
+  success "Restore complete"
+}
+
+# Phase 3: Start backend services
+phase3_start_backend() {
+  log "[Phase 3] Starting backend services"
+
+  # Step 1: Start execution-layer first to generate genesis
+  log "Starting execution-layer to generate genesis block..."
+  if command -v docker compose >/dev/null 2>&1; then
+    docker compose -f docker-compose.yml up -d execution-layer
+  else
+    docker-compose -f docker-compose.yml up -d execution-layer
+  fi
+
+  # Step 2: Wait for execution-layer to be healthy
+  log "Waiting for execution-layer to be healthy..."
+  local attempts=0
+  until [[ "$(get_service_health execution-layer)" == "healthy" ]]; do
+    attempts=$((attempts+1))
+    if [[ $attempts -gt 60 ]]; then
+      SUMMARY_ERRORS+=("execution-layer not healthy after 2 minutes")
+      err "execution-layer not healthy after 2 minutes"
+      docker logs --tail=50 execution-layer 2>&1 || true
+      exit $EXIT_RUNTIME_ERROR
+    fi
+    sleep 2
+  done
+  success "execution-layer is healthy"
+
+  # Step 3: Extract genesis hash from execution-layer using RPC
+  log "Extracting genesis hash from execution-layer..."
+  local genesis_hash
+  local rpc_response
+  local max_attempts=10
+  local attempt=0
+
+  while [[ $attempt -lt $max_attempts ]]; do
+    attempt=$((attempt+1))
+    # Try to get block 0 via JSON-RPC from host (port 9545 is mapped to container's 8545)
+    rpc_response=$(curl -s -X POST http://localhost:9545 \
+      -H "Content-Type: application/json" \
+      -d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["0x0",false],"id":1}' 2>/dev/null || true)
+
+    if [[ -n "$rpc_response" ]] && [[ "$rpc_response" != *"error"* ]] && [[ "$rpc_response" != *"null"* ]]; then
+      # Extract hash from JSON response using sed/grep
+      genesis_hash=$(echo "$rpc_response" | sed -n 's/.*"hash":"\(0x[a-fA-F0-9]*\)".*/\1/p' | head -n1)
+
+      if [[ -n "$genesis_hash" ]] && [[ "$genesis_hash" =~ ^0x[a-fA-F0-9]{64}$ ]]; then
+        break
+      fi
+    fi
+
+    if [[ $attempt -lt $max_attempts ]]; then
+      log "RPC not ready yet, retrying in 2 seconds (attempt $attempt/$max_attempts)..."
+      sleep 2
+    fi
+  done
+
+  if [[ -z "$genesis_hash" ]] || ! [[ "$genesis_hash" =~ ^0x[a-fA-F0-9]{64}$ ]]; then
+    SUMMARY_ERRORS+=("Failed to extract valid genesis hash from execution-layer")
+    err "Failed to extract valid genesis hash from execution-layer"
+    err "Last RPC response: $rpc_response"
+    exit $EXIT_RUNTIME_ERROR
+  fi
+
+  export GENESIS_BLOCK_HASH="$genesis_hash"
+  success "Extracted GENESIS_BLOCK_HASH: $GENESIS_BLOCK_HASH"
+
+  # Step 4: Start block-builder and viaduct with the correct genesis hash
+  log "Starting block-builder and viaduct with genesis hash..."
+  if command -v docker compose >/dev/null 2>&1; then
+    docker compose -f docker-compose.yml up -d block-builder viaduct
+  else
+    docker-compose -f docker-compose.yml up -d block-builder viaduct
+  fi
+
+  # Step 5: Wait for block-builder to be healthy
+  log "Waiting for block-builder to be healthy..."
+  attempts=0
+  until [[ "$(get_service_health block-builder)" == "healthy" ]]; do
+    attempts=$((attempts+1))
+    if [[ $attempts -gt 30 ]]; then
+      warn "block-builder not healthy after 1 minute (continuing anyway)"
+      break
+    fi
+    sleep 2
+  done
+
+  # Step 6: Wait for viaduct to be healthy
+  log "Waiting for viaduct to be healthy..."
+  attempts=0
+  until [[ "$(get_service_health viaduct)" == "healthy" ]]; do
+    attempts=$((attempts+1))
+    if [[ $attempts -gt 30 ]]; then
+      warn "viaduct not healthy after 1 minute (continuing anyway)"
+      break
+    fi
+    sleep 2
+  done
+
+  success "Backend services started successfully"
+}
+
+# Phase 4: Start frontend and verify health
+phase4_start_frontend() {
+  log "[Phase 4] Starting frontend worker and verifying health"
+  if command -v docker compose >/dev/null 2>&1; then
+    docker compose -f docker-compose.yml --profile frontend-w1 up -d
+  else
+    docker-compose -f docker-compose.yml up -d kaswallet-0 rpc-provider-0 traefik
+  fi
+
+  local attempts=0
+  until [[ "$(get_service_health kaswallet-0)" == "healthy" ]]; do
+    attempts=$((attempts+1))
+    if [[ $attempts -gt 60 ]]; then
+      SUMMARY_ERRORS+=("kaswallet-0 not healthy")
+      err "kaswallet-0 not healthy"
+      if command -v docker compose >/dev/null 2>&1; then
+        docker compose -f docker-compose.yml ps || true
+        cid=$(compose_ps_q kaswallet-0 | head -n1 || true)
+        [[ -n "$cid" ]] && docker logs --tail=200 "$cid" || true
+      else
+        docker-compose -f docker-compose.yml ps || true
+      fi
+      exit $EXIT_RUNTIME_ERROR
+    fi
+    sleep 2
+  done
+
+  log "Starting rpc-provider-0"
+  if command -v docker compose >/dev/null 2>&1; then
+    docker compose -f docker-compose.yml up -d rpc-provider-0
+  else
+    docker-compose -f docker-compose.yml up -d rpc-provider-0
+  fi
+
+  attempts=0
+  until [[ "$(get_service_health rpc-provider-0)" == "healthy" ]]; do
+    attempts=$((attempts+1))
+    if [[ $attempts -gt 60 ]]; then
+      SUMMARY_ERRORS+=("rpc-provider-0 not healthy")
+      err "rpc-provider-0 not healthy"
+      if command -v docker compose >/dev/null 2>&1; then
+        docker compose -f docker-compose.yml ps || true
+        cid=$(compose_ps_q rpc-provider-0 | head -n1 || true)
+        [[ -n "$cid" ]] && docker logs --tail=200 "$cid" || true
+      else
+        docker-compose -f docker-compose.yml ps || true
+      fi
+      exit $EXIT_RUNTIME_ERROR
+    fi
+    sleep 2
+  done
+
+  success "Frontend worker started and healthy"
+}
+
+main() {
+  log "Project root: $PROJECT_ROOT"
+  load_env
+  check_prereqs
+  verify_kaspa
+  set_l1_reference_from_kaspa
+  phase1_clean_backend
+  phase2_restore_viaduct "$@"
+  phase3_start_backend
+  phase4_start_frontend
+}
+
+main "$@"
+
