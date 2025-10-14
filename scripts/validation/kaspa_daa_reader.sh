@@ -43,7 +43,7 @@ use std::{env, io::Write};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let url = env::var("KASPA_WRPC_URL").unwrap_or_else(|_| "ws://localhost:17610".to_string());
+    let url = env::var("KASPA_WRPC_URL").unwrap_or_else(|_| "ws://localhost:17210".to_string());
     let encoding = WrpcEncoding::Borsh;
 
     let client = KaspaRpcClient::new(encoding, Some(&url), None, None, None)?;
@@ -93,7 +93,7 @@ use std::{env, io::Write};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let url = env::var("KASPA_WRPC_URL").unwrap_or_else(|_| "ws://localhost:17610".to_string());
+    let url = env::var("KASPA_WRPC_URL").unwrap_or_else(|_| "ws://localhost:17210".to_string());
     let encoding = WrpcEncoding::Borsh;
 
     let client = KaspaRpcClient::new(encoding, Some(&url), None, None, None)?;
@@ -139,7 +139,7 @@ use std::{env, io::Write};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let url = env::var("KASPA_WRPC_URL").unwrap_or_else(|_| "ws://localhost:17610".to_string());
+    let url = env::var("KASPA_WRPC_URL").unwrap_or_else(|_| "ws://localhost:17210".to_string());
     let encoding = WrpcEncoding::Borsh;
 
     let client = KaspaRpcClient::new(encoding, Some(&url), None, None, None)?;
