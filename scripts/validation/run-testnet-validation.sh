@@ -93,8 +93,11 @@ load_env() {
   local env_file=".env"
   if [[ -f "$env_file" ]]; then
     log "Loading $env_file"
-    # shellcheck disable=SC2046
-    export $(grep -v '^#' "$env_file" | sed 's/\r$//' | xargs -I {} bash -lc 'k="${0%%=*}"; v="${0#*=}"; printf "%s=%q\n" "$k" "$v"' {}) || true
+    # Use set -a to automatically export all variables, properly handling empty values
+    set -a
+    # shellcheck disable=SC1090
+    source "$env_file"
+    set +a
   else
     SUMMARY_ERRORS+=("$env_file not found in $PROJECT_ROOT")
     err "$env_file not found in $PROJECT_ROOT"
