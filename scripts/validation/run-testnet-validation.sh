@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Unified testnet validation orchestrator
-# - Loads .env.testnet-validation
+# - Loads .env
 # - Accepts L1 reference parameters as arguments
 # - Phase 1: clean backend and reset viaduct volume
 # - Phase 2: ensure/download backup and restore to viaduct volume
@@ -11,9 +11,9 @@ set -euo pipefail
 
 # Run the script 
 #  ./scripts/validation/run-testnet-validation.sh \
-#    --l1-daa-score 200184247 \
-#    --l1-timestamp 1752450516 \
-#    --igra-launch-score 206700000
+#    --l1-daa-score 286049397 \
+#    --l1-timestamp 1761034187 \
+#    --igra-launch-score 286049397
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -78,7 +78,7 @@ Examples:
      --backup-file igra-orchestra-testnet_viaduct_data_20250115_120000.tar.gz
 
 Environment:
-  Loads configuration from .env.testnet-validation
+  Loads configuration from .env
 
 Phases:
   1. Clean backend and reset viaduct volume (if RESET_VIADUCT=true)
@@ -90,7 +90,7 @@ EOF
 
 # Env loading
 load_env() {
-  local env_file=".env.testnet-validation"
+  local env_file=".env"
   if [[ -f "$env_file" ]]; then
     log "Loading $env_file"
     # shellcheck disable=SC2046
