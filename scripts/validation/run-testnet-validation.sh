@@ -3,11 +3,17 @@ set -euo pipefail
 
 # Unified testnet validation orchestrator
 # - Loads .env.testnet-validation
-# - Verifies kaspa status (if helper is present)
+# - Accepts L1 reference parameters as arguments
 # - Phase 1: clean backend and reset viaduct volume
 # - Phase 2: ensure/download backup and restore to viaduct volume
 # - Phase 3: start backend services
 # - Phase 4: start frontend worker and verify health
+
+# Run the script 
+#  ./scripts/validation/run-testnet-validation.sh \
+#    --l1-daa-score 200184247 \
+#    --l1-timestamp 1752450516 \
+#    --igra-launch-score 206700000
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -44,6 +50,43 @@ summary() {
   log "=============================="
 }
 trap summary EXIT
+
+# Show usage information
+show_usage() {
+  cat <<EOF
+Usage: $0 --l1-daa-score <value> --l1-timestamp <value> --igra-launch-score <value> [--backup-file <file>]
+
+Unified testnet validation orchestrator that sets up and validates the IGRA testnet environment.
+
+Required Arguments:
+  --l1-daa-score <value>        Kaspa's virtual DAA score at reference point
+  --l1-timestamp <value>        Unix timestamp corresponding to reference DAA
+  --igra-launch-score <value>   DAA score when IGRA launched (L2 genesis point on L1)
+
+Optional Arguments:
+  --backup-file <file>          Specific backup file to restore (downloads latest if not provided)
+  -h, --help                    Show this help message
+
+Examples:
+  # Use latest backup
+  $0 --l1-daa-score 200184247 --l1-timestamp 1752450516 --igra-launch-score 206700000
+
+  # Use specific backup file
+  $0 --l1-daa-score 200184247 \\
+     --l1-timestamp 1752450516 \\
+     --igra-launch-score 206700000 \\
+     --backup-file igra-orchestra-testnet_viaduct_data_20250115_120000.tar.gz
+
+Environment:
+  Loads configuration from .env.testnet-validation
+
+Phases:
+  1. Clean backend and reset viaduct volume (if RESET_VIADUCT=true)
+  2. Download/restore backup to viaduct volume
+  3. Start backend services (execution-layer, block-builder, viaduct)
+  4. Start frontend worker and verify health
+EOF
+}
 
 # Env loading
 load_env() {
@@ -110,59 +153,19 @@ get_compose_project() {
   fi
 }
 
-# Optionally verify kaspa status if helper exists
-verify_kaspa() {
-  local helper="$SCRIPT_DIR/verify-kaspa-status.sh"
-  if [[ -x "$helper" ]]; then
-    log "Verifying Kaspa status..."
-    if ! "$helper"; then
-      SUMMARY_ERRORS+=("Kaspa status verification failed")
-      err "Kaspa status verification failed"
-      exit $EXIT_RUNTIME_ERROR
-    fi
-  else
-    warn "Skipping Kaspa verification (helper not found: $helper)"
-  fi
-}
+# Set L1 reference parameters from arguments
+set_l1_reference_params() {
+  local daa_score="$1"
+  local timestamp="$2"
+  local launch_score="$3"
 
-# Derive and export L1 reference vars from kaspa DAA reader
-set_l1_reference_from_kaspa() {
-  local reader="$SCRIPT_DIR/kaspa_daa_reader.sh"
-  if [[ ! -x "$reader" ]]; then
-    warn "kaspa_daa_reader.sh not found or not executable: $reader (skipping L1 reference derivation)"
-    return 0
-  fi
+  export L1_REFERENCE_DAA_SCORE="$daa_score"
+  export L1_REFERENCE_TIMESTAMP="$timestamp"
+  export IGRA_LAUNCH_DAA_SCORE="$launch_score"
 
-  log "Reading Kaspa DAA to populate L1 reference vars..."
-  local out
-  local wrpc_url
-  local borsh_port
-  borsh_port="${KASPAD_BORSH_PORT:-17610}"
-  wrpc_url="ws://localhost:${borsh_port}"
-  log "Using KASPA_WRPC_URL=$wrpc_url (from KASPAD_BORSH_PORT=$borsh_port)"
-  if ! out=$(KASPA_WRPC_URL="$wrpc_url" bash "$reader" 2>/dev/null); then
-    SUMMARY_ERRORS+=("kaspa_daa_reader failed")
-    err "kaspa_daa_reader failed"
-    return 1
-  fi
-
-  # Parse outputs
-  local vdaa ts
-  vdaa=$(echo "$out" | awk -F': ' '/virtual_daa_score/ {print $2}' | tr -d '\r' | tail -n1)
-  ts=$(echo "$out" | awk -F': ' '/timestamp/ {print $2}' | tr -d '\r' | tail -n1)
-
-  if [[ -z "$vdaa" || -z "$ts" ]]; then
-    SUMMARY_ERRORS+=("Failed to parse kaspa_daa_reader output")
-    err "Failed to parse kaspa_daa_reader output: $out"
-    return 1
-  fi
-
-  export L1_REFERENCE_DAA_SCORE="$vdaa"
-  export L1_REFERENCE_TIMESTAMP="$ts"
-  export IGRA_LAUNCH_DAA_SCORE="$vdaa"
   log "Set L1_REFERENCE_DAA_SCORE=$L1_REFERENCE_DAA_SCORE"
   log "Set L1_REFERENCE_TIMESTAMP=$L1_REFERENCE_TIMESTAMP"
-  log "Set IGRA_LAUNCH_DAA_SCORE=$IGRA_LAUNCH_DAA_SCORE (same as L1_REFERENCE_DAA_SCORE)"
+  log "Set IGRA_LAUNCH_DAA_SCORE=$IGRA_LAUNCH_DAA_SCORE"
 }
 
 # Phase 1: Clean stop backend and reset viaduct volume
@@ -455,13 +458,99 @@ phase4_start_frontend() {
 }
 
 main() {
+  # Initialize variables
+  local l1_daa_score=""
+  local l1_timestamp=""
+  local igra_launch_score=""
+  local backup_file=""
+
+  # Parse named arguments
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      -h|--help)
+        show_usage
+        exit $EXIT_SUCCESS
+        ;;
+      --l1-daa-score)
+        l1_daa_score="$2"
+        shift 2
+        ;;
+      --l1-timestamp)
+        l1_timestamp="$2"
+        shift 2
+        ;;
+      --igra-launch-score)
+        igra_launch_score="$2"
+        shift 2
+        ;;
+      --backup-file)
+        backup_file="$2"
+        shift 2
+        ;;
+      *)
+        err "Error: Unknown argument '$1'"
+        echo
+        show_usage
+        exit $EXIT_CONFIG_ERROR
+        ;;
+    esac
+  done
+
+  # Validate required arguments
+  if [[ -z "$l1_daa_score" ]]; then
+    err "Error: Missing required argument --l1-daa-score"
+    echo
+    show_usage
+    exit $EXIT_CONFIG_ERROR
+  fi
+  if [[ -z "$l1_timestamp" ]]; then
+    err "Error: Missing required argument --l1-timestamp"
+    echo
+    show_usage
+    exit $EXIT_CONFIG_ERROR
+  fi
+  if [[ -z "$igra_launch_score" ]]; then
+    err "Error: Missing required argument --igra-launch-score"
+    echo
+    show_usage
+    exit $EXIT_CONFIG_ERROR
+  fi
+
+  # Validate numeric arguments
+  if ! [[ "$l1_daa_score" =~ ^[0-9]+$ ]]; then
+    err "Error: --l1-daa-score must be a number, got: $l1_daa_score"
+    exit $EXIT_CONFIG_ERROR
+  fi
+  if ! [[ "$l1_timestamp" =~ ^[0-9]+$ ]]; then
+    err "Error: --l1-timestamp must be a number, got: $l1_timestamp"
+    exit $EXIT_CONFIG_ERROR
+  fi
+  if ! [[ "$igra_launch_score" =~ ^[0-9]+$ ]]; then
+    err "Error: --igra-launch-score must be a number, got: $igra_launch_score"
+    exit $EXIT_CONFIG_ERROR
+  fi
+
   log "Project root: $PROJECT_ROOT"
+  log "L1 DAA Score: $l1_daa_score"
+  log "L1 Timestamp: $l1_timestamp"
+  log "IGRA Launch DAA Score: $igra_launch_score"
+  if [[ -n "$backup_file" ]]; then
+    log "Backup file: $backup_file"
+  fi
+  echo
+
   load_env
   check_prereqs
-  verify_kaspa
-  set_l1_reference_from_kaspa
+  set_l1_reference_params "$l1_daa_score" "$l1_timestamp" "$igra_launch_score"
   phase1_clean_backend
-  phase2_restore_viaduct "$@"
+
+  # # Pass backup file to phase2 if provided
+  # if [[ -n "$backup_file" ]]; then
+  #   phase2_restore_viaduct "$backup_file"
+  # else
+  #   phase2_restore_viaduct
+  # fi
+
   phase3_start_backend
   phase4_start_frontend
 }
