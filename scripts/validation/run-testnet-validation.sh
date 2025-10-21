@@ -54,7 +54,7 @@ trap summary EXIT
 # Show usage information
 show_usage() {
   cat <<EOF
-Usage: $0 --l1-daa-score <value> --l1-timestamp <value> --igra-launch-score <value> [--backup-file <file>]
+Usage: $0 --l1-daa-score <value> --l1-timestamp <value> --igra-launch-score <value> [OPTIONS]
 
 Unified testnet validation orchestrator that sets up and validates the IGRA testnet environment.
 
@@ -64,17 +64,22 @@ Required Arguments:
   --igra-launch-score <value>   DAA score when IGRA launched (L2 genesis point on L1)
 
 Optional Arguments:
-  --backup-file <file>          Specific backup file to restore (downloads latest if not provided)
+  --download-backup             Download and restore viaduct backup from S3 (downloads if not present locally)
+  --backup-file <file>          Specific backup file to restore (requires --download-backup)
   -h, --help                    Show this help message
 
 Examples:
-  # Use latest backup
+  # Without backup download (use existing volume)
   $0 --l1-daa-score 200184247 --l1-timestamp 1752450516 --igra-launch-score 206700000
 
-  # Use specific backup file
+  # Download latest backup
+  $0 --l1-daa-score 200184247 --l1-timestamp 1752450516 --igra-launch-score 206700000 --download-backup
+
+  # Download specific backup file
   $0 --l1-daa-score 200184247 \\
      --l1-timestamp 1752450516 \\
      --igra-launch-score 206700000 \\
+     --download-backup \\
      --backup-file igra-orchestra-testnet_viaduct_data_20250115_120000.tar.gz
 
 Environment:
@@ -82,7 +87,7 @@ Environment:
 
 Phases:
   1. Clean backend and reset viaduct volume (if RESET_VIADUCT=true)
-  2. Download/restore backup to viaduct volume
+  2. Download/restore backup to viaduct volume (if --download-backup flag provided)
   3. Start backend services (execution-layer, block-builder, viaduct)
   4. Start frontend worker and verify health
 EOF
@@ -220,49 +225,70 @@ phase2_restore_viaduct() {
   export S3_BACKUP_BUCKET="igralabs-viaduct-archival-data"
   export S3_BACKUP_REGION="${S3_BACKUP_REGION:-eu-north-1}"
 
-  local out_dir="${S3_OUTPUT_DIR:-$HOME/.backups/viaduct-backups}"
+  # Fixed: download-from-s3.sh downloads to $HOME/.backups/viaduct-backups/ (not /viaduct/ subdirectory)
+  local out_dir="$HOME/.backups/viaduct-backups"
   local backup_basename=""
 
   local requested_backup="${BACKUP_FILE:-${1:-}}"
   if [[ -n "$requested_backup" ]]; then
     log "Requested backup: $requested_backup (will download if missing)"
-    "$downloader" viaduct "$requested_backup"
     backup_basename="$(basename "$requested_backup")"
+    local local_path="$out_dir/$backup_basename"
+
+    if [[ -f "$local_path" ]]; then
+      log "Requested backup already exists locally: $local_path"
+    else
+      log "Downloading requested backup: $requested_backup"
+      if ! "$downloader" viaduct "$requested_backup"; then
+        SUMMARY_ERRORS+=("Failed to download requested backup from S3")
+        err "Failed to download backup: $requested_backup"
+        exit $EXIT_RUNTIME_ERROR
+      fi
+    fi
   else
-    log "No specific backup provided; ensuring latest exists locally"
+    log "Checking for latest backup..."
+    # Get list of backups from S3 to determine the latest
     local list_out
     list_out=$("$downloader" --list viaduct | sed 's/\r$//')
     local latest_key
     latest_key=$(echo "$list_out" | grep -E '\.tar\.gz$' | sed 's/^[[:space:]]*-[[:space:]]*//' | head -n1 || true)
+
     if [[ -z "$latest_key" ]]; then
-      SUMMARY_ERRORS+=("Could not determine latest backup key from S3")
-      err "Could not determine latest backup key"
+      SUMMARY_ERRORS+=("Could not determine latest backup from S3")
+      err "Could not determine latest backup from S3"
       echo "$list_out" | head -n50 >&2 || true
       exit $EXIT_RUNTIME_ERROR
     fi
-    local basename_latest
-    basename_latest=$(basename "$latest_key")
-    local local_latest="$out_dir/viaduct/$basename_latest"
+
+    backup_basename=$(basename "$latest_key")
+    local local_latest="$out_dir/$backup_basename"
+
     if [[ -f "$local_latest" ]]; then
-      log "Latest backup already present: $local_latest"
+      log "Latest backup already exists locally: $backup_basename"
     else
-      log "Downloading latest backup: $latest_key -> $out_dir"
+      log "Downloading latest backup: $backup_basename"
       if ! "$downloader" viaduct; then
-        SUMMARY_ERRORS+=("Failed to download backup from S3")
-        err "Failed to download backup from S3"
+        SUMMARY_ERRORS+=("Failed to download latest backup from S3")
+        err "Failed to download latest backup from S3"
         exit $EXIT_RUNTIME_ERROR
       fi
     fi
-    backup_basename="$basename_latest"
   fi
 
   if [[ -z "$backup_basename" ]]; then
     SUMMARY_ERRORS+=("Backup basename could not be resolved")
-    err "Could not locate downloaded backup under $out_dir/viaduct"
+    err "Could not locate downloaded backup in $out_dir"
     exit $EXIT_RUNTIME_ERROR
   fi
 
-  local local_backup_path="$out_dir/viaduct/$backup_basename"
+  local local_backup_path="$out_dir/$backup_basename"
+
+  # Verify backup file exists
+  if [[ ! -f "$local_backup_path" ]]; then
+    SUMMARY_ERRORS+=("Downloaded backup file not found: $local_backup_path")
+    err "Downloaded backup file not found: $local_backup_path"
+    exit $EXIT_RUNTIME_ERROR
+  fi
 
   # Verify backup integrity before restore
   log "Verifying backup integrity: $local_backup_path"
@@ -282,7 +308,7 @@ phase2_restore_viaduct() {
       rm -f "$old_backup"
       ((old_backups_count++))
     fi
-  done < <(find "$out_dir/viaduct" -maxdepth 1 -name "igra-orchestra-${NETWORK}_viaduct_data_*.tar.gz" -type f 2>/dev/null || true)
+  done < <(find "$out_dir" -maxdepth 1 -name "igra-orchestra-${NETWORK}_viaduct_data_*.tar.gz" -type f 2>/dev/null || true)
 
   if [[ $old_backups_count -gt 0 ]]; then
     log "Cleaned up $old_backups_count old backup(s)"
@@ -466,6 +492,7 @@ main() {
   local l1_timestamp=""
   local igra_launch_score=""
   local backup_file=""
+  local download_backup=false
 
   # Parse named arguments
   while [[ $# -gt 0 ]]; do
@@ -485,6 +512,10 @@ main() {
       --igra-launch-score)
         igra_launch_score="$2"
         shift 2
+        ;;
+      --download-backup)
+        download_backup=true
+        shift
         ;;
       --backup-file)
         backup_file="$2"
@@ -533,10 +564,19 @@ main() {
     exit $EXIT_CONFIG_ERROR
   fi
 
+  # Validate backup file requires download flag
+  if [[ -n "$backup_file" && "$download_backup" != true ]]; then
+    err "Error: --backup-file requires --download-backup flag"
+    echo
+    show_usage
+    exit $EXIT_CONFIG_ERROR
+  fi
+
   log "Project root: $PROJECT_ROOT"
   log "L1 DAA Score: $l1_daa_score"
   log "L1 Timestamp: $l1_timestamp"
   log "IGRA Launch DAA Score: $igra_launch_score"
+  log "Download backup: $download_backup"
   if [[ -n "$backup_file" ]]; then
     log "Backup file: $backup_file"
   fi
@@ -547,12 +587,17 @@ main() {
   set_l1_reference_params "$l1_daa_score" "$l1_timestamp" "$igra_launch_score"
   phase1_clean_backend
 
-  # # Pass backup file to phase2 if provided
-  # if [[ -n "$backup_file" ]]; then
-  #   phase2_restore_viaduct "$backup_file"
-  # else
-  #   phase2_restore_viaduct
-  # fi
+  # Phase 2: Download and restore backup (optional)
+  if [[ "$download_backup" == true ]]; then
+    if [[ -n "$backup_file" ]]; then
+      export BACKUP_FILE="$backup_file"
+      phase2_restore_viaduct "$backup_file"
+    else
+      phase2_restore_viaduct
+    fi
+  else
+    log "Skipping backup download (use --download-backup to enable)"
+  fi
 
   phase3_start_backend
   phase4_start_frontend
