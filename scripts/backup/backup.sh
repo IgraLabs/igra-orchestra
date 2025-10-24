@@ -35,6 +35,13 @@ STAGING_DIR="$BACKUP_DIR/staging/${VOLUME_NAME}_$TIMESTAMP"
 KEEP_BACKUPS=${LOCAL_BACKUP_RETENTION_COUNT:-1} # Number of recent backups to keep
 GZIP_LEVEL=1   # Compression level (1=fastest, 9=best, 6=default). Set to "" to use default.
 
+# Ensure backup directory and log file exist before any logging
+mkdir -p "$BACKUP_DIR"
+touch "$LOG_FILE" 2>/dev/null || true
+
+# Normalize auto-upload flag for portability (avoid bash 4+ lowercase expansion)
+S3_UPLOAD_ENABLED=$(echo "${S3_BACKUP_AUTO_UPLOAD:-false}" | tr -d '"' | tr '[:upper:]' '[:lower:]')
+
 # Function for logging
 log_message() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
@@ -70,6 +77,16 @@ cleanup_lock() {
   fi
 }
 
+# Prune local backups, keeping the most recent N files matching pattern
+prune_backups() {
+  local keep_count="$1"
+  log_message "Pruning old backups (keeping last $keep_count)..."
+  # Suppress ls errors if no files match; xargs -r avoids running rm with no args
+  ls -1t "$BACKUP_DIR"/"${VOLUME_NAME}"_*.tar.gz 2>/dev/null | \
+    tail -n +$((keep_count + 1)) | xargs -r rm -fv | tee -a "$LOG_FILE"
+  log_message "Pruning complete."
+}
+
 cleanup() {
   # Ensure container is unpaused and lock is removed on exit
   log_message "Attempting to unpause container $CONTAINER_NAME due to script exit..."
@@ -97,9 +114,6 @@ if ! docker volume inspect "$VOLUME_NAME" > /dev/null 2>&1; then
     exit 1
 fi
 log_message "Volume $VOLUME_NAME exists and will be backed up."
-
-# Create backup directory if it doesn't exist
-mkdir -p "$BACKUP_DIR"
 
 # Create staging directory
 mkdir -p "$STAGING_DIR"
@@ -217,11 +231,13 @@ log_message "Backup verified in $VERIFY_DURATION seconds."
 BACKUP_SIZE="N/A"
 if [ "$VERIFICATION_SUCCESSFUL" = true ]; then
     BACKUP_SIZE=$(du -sh "$BACKUP_FILE" | cut -f1)
-    # Prune old backups (Only if a new backup was successfully created)
-    log_message "Pruning old backups (keeping last $KEEP_BACKUPS)..."
-    # List files matching the pattern, sort by time, take all but the last N, delete them
-    ls -1t "$BACKUP_DIR"/"${VOLUME_NAME}"_*.tar.gz | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -fv | tee -a "$LOG_FILE"
-    log_message "Pruning complete."
+    # If auto-upload is enabled, defer pruning until after successful S3 upload
+    if [ "$S3_UPLOAD_ENABLED" = "true" ]; then
+      log_message "Deferring local pruning until after S3 upload (keeping last $KEEP_BACKUPS)"
+    else
+      # Prune old backups immediately (no auto-upload scenario)
+      prune_backups "$KEEP_BACKUPS"
+    fi
 fi
 
 # Check volume size (Moved AFTER unpause)
@@ -270,7 +286,7 @@ fi
 
 # Optional S3 upload integration
 # Set S3_BACKUP_AUTO_UPLOAD=true in .env to enable automatic S3 upload after successful backup
-if [ "$VERIFICATION_SUCCESSFUL" = true ] && [ "${S3_BACKUP_AUTO_UPLOAD,,}" = "true" ]; then
+if [ "$VERIFICATION_SUCCESSFUL" = true ] && [ "$S3_UPLOAD_ENABLED" = "true" ]; then
   log_message "S3 auto-upload is enabled, starting upload process..."
 
   # Get the directory where this script is located
@@ -281,6 +297,8 @@ if [ "$VERIFICATION_SUCCESSFUL" = true ] && [ "${S3_BACKUP_AUTO_UPLOAD,,}" = "tr
     log_message "Calling S3 upload script for container: $CONTAINER_NAME"
     if "$S3_UPLOAD_SCRIPT" "$CONTAINER_NAME" "$BACKUP_FILE"; then
       log_message "S3 upload completed successfully"
+      # Apply local retention pruning after successful upload (handles KEEP_BACKUPS=0)
+      prune_backups "$KEEP_BACKUPS"
       # Remove staging only after successful upload when auto-upload is enabled
       if [ -d "$STAGING_DIR" ]; then
         rm -rf "$STAGING_DIR"

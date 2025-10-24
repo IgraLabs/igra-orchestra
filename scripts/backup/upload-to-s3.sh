@@ -17,6 +17,12 @@ LOCK_FILE=""
 UPLOADED_S3_KEY=""
 ROLLBACK_NEEDED=false
 
+# Optional dependency checks
+HAS_JQ=true
+HAS_NUMFMT=true
+command -v jq >/dev/null 2>&1 || HAS_JQ=false
+command -v numfmt >/dev/null 2>&1 || HAS_NUMFMT=false
+
 # Exit codes
 EXIT_SUCCESS=0
 EXIT_INVALID_ARGS=1
@@ -263,6 +269,12 @@ log_environment_configuration() {
     log_message "INFO" "  - Retention Count: $S3_BACKUP_RETENTION_COUNT"
     log_message "INFO" "  - Storage Class: $S3_BACKUP_STORAGE_CLASS"
     log_message "INFO" "  - Dry Run Mode: $DRY_RUN"
+    if [ "$HAS_JQ" != true ]; then
+        log_message "WARNING" "jq not found; using basic parsing fallbacks"
+    fi
+    if [ "$HAS_NUMFMT" != true ]; then
+        log_message "WARNING" "numfmt not found; using built-in size formatter"
+    fi
 }
 
 # Function to test S3 bucket access and permissions
@@ -487,7 +499,7 @@ log_backup_file_validation_success() {
     file_size=$(get_file_size "$file")
 
     log_message "SUCCESS" "Backup file validation passed"
-    log_message "INFO" "File size: $(numfmt --to=iec --suffix=B "$file_size")"
+    log_message "INFO" "File size: $(format_bytes "$file_size")"
 }
 
 # Function to calculate MD5 checksum
@@ -597,7 +609,11 @@ has_existing_backups() {
 # Function to count existing backups
 count_existing_backups() {
     local backups_json="$1"
-    echo "$backups_json" | jq length 2>/dev/null || echo "0"
+    if [ "$HAS_JQ" = true ]; then
+        echo "$backups_json" | jq length 2>/dev/null || echo "0"
+    else
+        echo "$backups_json" | grep -o '"Key"' | wc -l | tr -d ' ' || echo "0"
+    fi
 }
 
 # Function to calculate how many backups to delete
@@ -629,7 +645,11 @@ delete_old_backups() {
 get_keys_to_delete() {
     local backups_json="$1"
     local delete_count="$2"
-    echo "$backups_json" | jq -r ".[0:$delete_count][].Key" 2>/dev/null
+    if [ "$HAS_JQ" = true ]; then
+        echo "$backups_json" | jq -r ".[0:$delete_count][].Key" 2>/dev/null
+    else
+        echo "$backups_json" | sed -n 's/.*"Key"[[:space:]]*:[[:space:]]*"\([^"]\+\)".*/\1/p' | head -n "$delete_count"
+    fi
 }
 
 # Function to process backup deletions
@@ -927,8 +947,13 @@ create_verification_context() {
     local local_file="$2"
 
     local s3_etag s3_size local_size
-    s3_etag=$(echo "$s3_metadata" | jq -r '.ETag // empty' | tr -d '"')
-    s3_size=$(echo "$s3_metadata" | jq -r '.ContentLength // empty')
+    if [ "$HAS_JQ" = true ]; then
+        s3_etag=$(echo "$s3_metadata" | jq -r '.ETag // empty' | tr -d '"')
+        s3_size=$(echo "$s3_metadata" | jq -r '.ContentLength // empty')
+    else
+        s3_etag=$(echo "$s3_metadata" | sed -n 's/.*"ETag"[[:space:]]*:[[:space:]]*"\([^"]\+\)".*/\1/p' | head -n1 | tr -d '"')
+        s3_size=$(echo "$s3_metadata" | sed -n 's/.*"ContentLength"[[:space:]]*:[[:space:]]*\([0-9]\+\).*/\1/p' | head -n1)
+    fi
     local_size=$(get_file_size "$local_file")
 
     echo "$s3_etag|$s3_size|$local_size"
@@ -944,8 +969,29 @@ verify_file_size() {
         return 1
     fi
 
-    log_message "SUCCESS" "File size verification passed: $(numfmt --to=iec --suffix=B "$local_size")"
+    log_message "SUCCESS" "File size verification passed: $(format_bytes "$local_size")"
     return 0
+}
+
+# Format bytes using built-in calculator if numfmt is unavailable
+format_bytes() {
+    local bytes="$1"
+    if [ "$HAS_NUMFMT" = true ]; then
+        numfmt --to=iec --suffix=B "$bytes" 2>/dev/null && return 0
+    fi
+    # Fallback implementation (integer-only)
+    local units=(B KiB MiB GiB TiB PiB)
+    local idx=0
+    local value="$bytes"
+    if ! echo "$value" | grep -Eq '^[0-9]+$'; then
+        echo "$value B"
+        return 0
+    fi
+    while [ "$value" -ge 1024 ] && [ $idx -lt 5 ]; do
+        value=$((value / 1024))
+        idx=$((idx + 1))
+    done
+    echo "$value ${units[$idx]}"
 }
 
 # Function to verify checksum
