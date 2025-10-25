@@ -47,12 +47,13 @@ EOF_CARGO
     mkdir -p "$SRC_DIR"
     cat >"$SRC_DIR/main.rs" <<'EOF_MAIN'
 use kaspa_addresses::Address;
-use kaspa_consensus_core::network::{NetworkId, NetworkType};
+use kaspa_consensus_core::network::NetworkId;
 use kaspa_wallet_core::{
     prelude::*,
     rpc::Rpc,
 };
 use kaspa_wrpc_client::KaspaRpcClient;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::{env, io::Write};
 use workflow_core::abortable::Abortable;
@@ -81,19 +82,9 @@ async fn main() -> Result<(), SweepError> {
     let password = env::var("WALLET_PASSWORD").unwrap_or_else(|_| "123456".to_string());
     let network_str = env::var("KASPA_NETWORK").unwrap_or_else(|_| "testnet-11".to_string());
 
-    // Parse network
-    let network_type = match network_str.as_str() {
-        "mainnet" => NetworkType::Mainnet,
-        "testnet" | "testnet-10" => NetworkType::Testnet,
-        "testnet-11" => NetworkType::Testnet,
-        "devnet" => NetworkType::Devnet,
-        _ => {
-            eprintln!("Unknown network: {}, defaulting to testnet-11", network_str);
-            NetworkType::Testnet
-        }
-    };
-    let network_id = NetworkId::try_from(network_type)
-        .map_err(|e| SweepError::Wallet(format!("Invalid network: {}", e)))?;
+    // Parse network ID directly (preserves suffix)
+    let network_id = NetworkId::from_str(&network_str)
+        .map_err(|e| SweepError::Wallet(format!("Invalid network '{}': {}", network_str, e)))?;
 
     println!("🔧 Configuration:");
     println!("  RPC URL: {}", url);
