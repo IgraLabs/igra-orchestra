@@ -208,7 +208,7 @@ async fn main() -> Result<(), SweepError> {
     let abortable = Abortable::default();
 
     let (summary, tx_ids) = account
-        .sweep(wallet_secret.clone(), payment_secret, None, &abortable, None)
+        .sweep(wallet_secret.clone(), payment_secret, &abortable, None)
         .await
         .map_err(|e| {
             let error_msg = e.to_string();
