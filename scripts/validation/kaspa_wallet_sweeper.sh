@@ -36,7 +36,6 @@ tokio = { version = "1.45", features = ["full"] }
 kaspa-wrpc-client = "0.15"
 kaspa-wallet-core = "0.15"
 kaspa-rpc-core = "0.15"
-kaspa-addresses = "0.15"
 kaspa-consensus-core = "0.15"
 workflow-core = "0.18"
 futures = "0.3"
@@ -46,7 +45,6 @@ EOF_CARGO
     # src/main.rs
     mkdir -p "$SRC_DIR"
     cat >"$SRC_DIR/main.rs" <<'EOF_MAIN'
-use kaspa_addresses::Address;
 use kaspa_consensus_core::network::NetworkId;
 use kaspa_wallet_core::{
     prelude::*,
@@ -64,10 +62,6 @@ enum SweepError {
     Wallet(String),
     #[error("RPC error: {0}")]
     Rpc(String),
-    #[error("Missing required environment variable: {0}")]
-    EnvVar(String),
-    #[error("Invalid address: {0}")]
-    Address(String),
     #[error("No mature balance to sweep")]
     NoBalance,
 }
@@ -77,8 +71,6 @@ async fn main() -> Result<(), SweepError> {
     // Get configuration from environment
     let url = env::var("KASPA_WRPC_URL").unwrap_or_else(|_| "ws://localhost:17610".to_string());
     let wallet_name = env::var("WALLET_NAME").unwrap_or_else(|_| "kaspa".to_string());
-    let sweep_address = env::var("SWEEP_TO_ADDRESS")
-        .map_err(|_| SweepError::EnvVar("SWEEP_TO_ADDRESS".to_string()))?;
     let password = env::var("WALLET_PASSWORD").unwrap_or_else(|_| "123456".to_string());
     let network_str = env::var("KASPA_NETWORK").unwrap_or_else(|_| "testnet-11".to_string());
 
@@ -90,12 +82,7 @@ async fn main() -> Result<(), SweepError> {
     println!("  RPC URL: {}", url);
     println!("  Network: {}", network_str);
     println!("  Wallet name: {}", wallet_name);
-    println!("  Sweep to: {}", sweep_address);
     println!();
-
-    // Parse destination address
-    let _destination = Address::try_from(sweep_address.as_str())
-        .map_err(|e| SweepError::Address(format!("Invalid destination address: {}", e)))?;
 
     // Create RPC client - SAME AS kaspa_daa_reader.sh
     let encoding = WrpcEncoding::Borsh;
@@ -213,7 +200,7 @@ async fn main() -> Result<(), SweepError> {
         }
     }
 
-    println!("🧹 Sweeping {} KAS to {}", kas_mature, sweep_address);
+    println!("🧹 Consolidating {} KAS ({} UTXOs) to change address...", kas_mature, balance.mature_utxo_count);
     println!();
 
     // Perform sweep using wallet-core API
@@ -221,7 +208,7 @@ async fn main() -> Result<(), SweepError> {
     let abortable = Abortable::default();
 
     let (summary, tx_ids) = account
-        .sweep(wallet_secret.clone(), payment_secret, &abortable, None)
+        .sweep(wallet_secret.clone(), payment_secret, None, &abortable, None)
         .await
         .map_err(|e| {
             let error_msg = e.to_string();
@@ -301,26 +288,24 @@ show_usage() {
     cat <<EOF
 Usage: kaspa_wallet_sweeper.sh
 
-Sweeps all mature UTXOs from an existing Kaspa wallet to a specified address.
-Uses the same approach as kaspa_daa_reader.sh (kaspa-wrpc-client + kaspa-wallet-core).
-
-Required environment variables:
-  SWEEP_TO_ADDRESS   - Destination Kaspa address for the sweep
+Consolidates all mature UTXOs in an existing Kaspa wallet by sweeping them back
+to the wallet's change address. This reduces UTXO count and optimizes future transactions.
 
 Optional environment variables:
   KASPA_WRPC_URL     - Kaspa WRPC endpoint (default: ws://localhost:17610)
   WALLET_NAME        - Wallet name (default: kaspa)
   WALLET_PASSWORD    - Wallet password (default: 123456)
   KASPA_NETWORK      - Network type (default: testnet-11)
-  WALLET_DIR         - Wallet storage directory (default: ~/.kaspa/wallets)
 
 Example:
-  SWEEP_TO_ADDRESS="kaspadev:qqqeharzns4r0tp4f8fmf95p42ymqcugq37ly93qrn3c95hqtm6tzmalhwan2" \\
   WALLET_NAME="kaspa" \\
   WALLET_PASSWORD="123456" \\
+  KASPA_NETWORK="testnet-10" \\
+  KASPA_WRPC_URL="ws://localhost:17210" \\
   ./kaspa_wallet_sweeper.sh
 
 Note: This script connects directly to kaspad (NOT kaswallet).
+      Funds stay in YOUR wallet - they are consolidated to your change address.
       Only mature UTXOs will be swept. Immature coinbase rewards
       (requiring 1000 blocks to mature) will be skipped automatically.
 EOF
@@ -330,13 +315,6 @@ main() {
     if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
         show_usage
         exit 0
-    fi
-
-    if [[ -z "${SWEEP_TO_ADDRESS:-}" ]]; then
-        echo "error: SWEEP_TO_ADDRESS environment variable is required" >&2
-        echo "" >&2
-        show_usage
-        exit 1
     fi
 
     ensure_tools
