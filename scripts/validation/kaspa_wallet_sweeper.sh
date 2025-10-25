@@ -225,8 +225,11 @@ async fn main() -> Result<(), SweepError> {
     let (summary, tx_ids) = account
         .send(
             outputs.into(),          // Destination: our own change address
-            payment_secret,
-            &abortable,
+            Fees::None,              // priority_fee_sompi
+            payment_secret,          // payment_secret
+            wallet_secret.clone(),   // wallet_secret
+            None,                    // payload
+            &abortable,              // abortable
             None,                    // notifier
         )
         .await
