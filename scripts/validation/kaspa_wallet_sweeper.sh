@@ -201,29 +201,50 @@ async fn main() -> Result<(), SweepError> {
     }
 
     println!("🧹 Consolidating {} KAS ({} UTXOs) to change address...", kas_mature, balance.mature_utxo_count);
+    if balance.stasis_utxo_count > 0 {
+        println!("   (Skipping {} immature coinbase UTXOs)", balance.stasis_utxo_count);
+    }
     println!();
 
-    // Perform sweep using wallet-core API
+    // Get change address to send funds back to
+    let change_address = account.change_address()
+        .map_err(|e| SweepError::Wallet(format!("Failed to get change address: {}", e)))?;
+
+    println!("📍 Change address: {}", change_address);
+    println!();
+
+    // Use send() with mature balance to avoid immature UTXOs
+    // This consolidates UTXOs while keeping funds in the same wallet
     let payment_secret = None; // No payment secret for this wallet
     let abortable = Abortable::default();
 
+    // Send mature balance back to our own change address (consolidation)
+    let send_amount = balance.mature;
+    let outputs = PaymentOutputs::from((change_address.clone(), send_amount));
+
     let (summary, tx_ids) = account
-        .sweep(wallet_secret.clone(), payment_secret, &abortable, None)
+        .send(
+            outputs.into(),          // Destination: our own change address
+            payment_secret,
+            &abortable,
+            None,                    // notifier
+        )
         .await
         .map_err(|e| {
             let error_msg = e.to_string();
             if error_msg.contains("immature") || error_msg.contains("coinbase") {
                 SweepError::Wallet(format!(
-                    "Sweep failed due to immature UTXOs:\n{}\n\n\
-                    Coinbase rewards require 1000 blocks to mature.",
+                    "Consolidation failed due to immature UTXOs:\n{}\n\n\
+                    Coinbase rewards require 1000 blocks to mature.\n\
+                    Wait for more blocks and try again.",
                     error_msg
                 ))
             } else {
-                SweepError::Wallet(format!("Sweep failed: {}", error_msg))
+                SweepError::Wallet(format!("Consolidation failed: {}", error_msg))
             }
         })?;
 
-    println!("✅ Sweep successful!");
+    println!("✅ Consolidation successful!");
     println!();
     println!("📝 Transaction summary:");
     println!("  {}", summary);
