@@ -219,7 +219,15 @@ async fn main() -> Result<(), SweepError> {
     let abortable = Abortable::default();
 
     // Send mature balance back to our own change address (consolidation)
-    let send_amount = balance.mature;
+    // Reduce amount by a small margin to avoid immature coinbase edge cases
+    // With many mining rewards, some "mature" UTXOs may not be fully mature (1000 blocks)
+    let safety_margin = balance.mature / 1000; // 0.1% safety margin
+    let send_amount = balance.mature.saturating_sub(safety_margin).saturating_sub(100_000_000); // Also subtract 1 KAS minimum
+
+    let kas_to_send = send_amount as f64 / 100_000_000.0;
+    println!("💡 Sending {} KAS (leaving small buffer to avoid immature UTXOs)", kas_to_send);
+    println!();
+
     let outputs = PaymentOutputs::from((change_address.clone(), send_amount));
 
     let (summary, tx_ids) = account
