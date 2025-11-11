@@ -20,8 +20,13 @@ function print_help() {
     echo "    KASWALLET_BRANCH"
     echo "    IGRA_RPC_PROVIDER_BRANCH"
     echo "    VIADUCT_BRANCH"
+    echo "    ATTESTOR_BRANCH"
     echo "    KASPAD_BRANCH"
     echo "    KASPA_MINER_BRANCH"
+    echo "    CORE_CONTRACTS_BRANCH"
+    echo ""
+    echo "  Additional options:"
+    echo "    CLONE_CORE_CONTRACTS - Set to 'true' to clone igra-core-contracts repository (default: false)"
     echo ""
     echo "Examples:"
     echo "  ./setup-repos.sh           # Standard setup."
@@ -131,8 +136,13 @@ EXECUTION_LAYER_BRANCH=${EXECUTION_LAYER_BRANCH:-main}
 KASWALLET_BRANCH=${KASWALLET_BRANCH:-main}
 IGRA_RPC_PROVIDER_BRANCH=${IGRA_RPC_PROVIDER_BRANCH:-main}
 VIADUCT_BRANCH=${VIADUCT_BRANCH:-main}
+ATTESTOR_BRANCH=${ATTESTOR_BRANCH:-main}
 KASPAD_BRANCH=${KASPAD_BRANCH:-master}
 KASPA_MINER_BRANCH=${KASPA_MINER_BRANCH:-main}
+CORE_CONTRACTS_BRANCH=${CORE_CONTRACTS_BRANCH:-main}
+
+# Core contracts flag (default: false)
+CLONE_CORE_CONTRACTS=${CLONE_CORE_CONTRACTS:-false}
 
 log "Starting repository setup"
 
@@ -166,6 +176,7 @@ else
         "kaswallet        "
         "igra-rpc-provider"
         "viaduct          "
+        "attestor         "
     )
     if [[ ${is_dev_env} == "Y" ]]; then
         REPOS+=(
@@ -180,6 +191,7 @@ else
         "git@github.com:IgraLabs/kaswallet.git"
         "git@github.com:IgraLabs/igra-rpc-provider.git"
         "git@github.com:IgraLabs/viaduct.git"
+        "git@github.com:IgraLabs/attestor.git"
         "git@github.com:kaspanet/rusty-kaspa.git"
         "git@github.com:elichai/kaspa-miner.git"
     )
@@ -189,9 +201,20 @@ else
         "$KASWALLET_BRANCH"
         "$IGRA_RPC_PROVIDER_BRANCH"
         "$VIADUCT_BRANCH"
+        "$ATTESTOR_BRANCH"
         "$KASPAD_BRANCH"
         "$KASPA_MINER_BRANCH"
     )
+fi
+
+# Add core contracts repository if requested (independent of other modes)
+if [[ "${CLONE_CORE_CONTRACTS}" == "true" ]]; then
+    log "Core contracts cloning enabled (CLONE_CORE_CONTRACTS=true)"
+    REPOS+=("igra-core-contracts")
+    URLS+=("git@github.com:IgraLabs/igra-core-contracts.git")
+    BRANCHES+=("$CORE_CONTRACTS_BRANCH")
+else
+    log "Core contracts cloning disabled (CLONE_CORE_CONTRACTS=false)"
 fi
 
 # Log branch information
@@ -224,7 +247,7 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
     log "Pulling pre-built images from Docker Hub..."
 
     # Pull and tag images
-    services=("block-builder" "viaduct" "rpc-provider" "kaswallet")
+    services=("block-builder" "viaduct" "rpc-provider" "kaswallet" "attestor")
     for service in "${services[@]}"; do
         log "Pulling igranetwork/${service}:latest..."
         if docker pull "igranetwork/${service}:latest"; then

@@ -510,6 +510,37 @@ services:
           echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
         ]
 
+  # ATTESTOR SERVICE
+  attestor:
+    <<: *default-service
+    build:
+      context: build/repos/attestor
+      dockerfile: ../../Dockerfile.attestor
+    image: igranetwork/attestor:latest
+    profiles: ["attestor"]
+    container_name: attestor
+    ports:
+      - "127.0.0.1:${ATTESTOR_HEALTH_PORT:-8081}:${ATTESTOR_HEALTH_PORT:-8081}"  # Health endpoint
+      - "127.0.0.1:${ATTESTOR_METRICS_PORT:-9091}:${ATTESTOR_METRICS_PORT:-9091}"  # Metrics endpoint
+    expose:
+      - "${ATTESTOR_HEALTH_PORT:-8081}"
+      - "${ATTESTOR_METRICS_PORT:-9091}"
+    environment:
+      RUST_LOG: ${RUST_LOG:-info}
+      RPC_URL: ${ATTESTOR_RPC_URL}
+      CONTRACT_ADDRESS: ${ATTESTOR_CONTRACT_ADDRESS}
+      CHAIN_ID: ${IGRA_CHAIN_ID}
+      PRIVATE_KEY: ${ATTESTOR_PRIVATE_KEY}
+      HEALTH_PORT: ${ATTESTOR_HEALTH_PORT:-8081}
+      METRICS_PORT: ${ATTESTOR_METRICS_PORT:-9091}
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD", "bash", "-c", "curl -f http://localhost:$${HEALTH_PORT}/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   # KASPA SERVICES
   kaspad:
     <<: *default-service
