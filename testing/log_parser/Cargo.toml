@@ -1,0 +1,6 @@
+[package]
+name = "log_parser"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

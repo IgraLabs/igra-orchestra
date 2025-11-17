@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = [
+    "reconciler",
+    "log_parser",
+    "loadgen",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"

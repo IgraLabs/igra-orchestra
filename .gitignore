@@ -2,6 +2,7 @@ repos/
 jwt.hex
 keys.json
 logs/
+artifacts/
 keys/
 !keys/readme.txt
 

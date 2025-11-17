@@ -1,0 +1,16 @@
+# Shared Configuration
+
+# Transaction inclusion timing (seconds)
+# < 3s = GOOD, 3-6s = LATE, > 6s = LOST
+inclusion_thresholds_s:
+  late: 3 # >= 3s classified as LATE
+  lost: 6 # >= 6s classified as LOST
+
+percentile_targets_s:
+  95: 2.0 # 95% of txs must be included within 2s
+  99: 4.0 # 99% of txs must be included within 4s
+
+# Test duration range (seconds)
+test_duration_s:
+  min: 3600 # 60 minutes
+  max: 7200 # 120 minutes
