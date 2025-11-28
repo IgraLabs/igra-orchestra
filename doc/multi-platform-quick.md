@@ -27,19 +27,7 @@ docker buildx inspect --bootstrap
 # Login to Docker Hub
 docker login
 
-# Build and push each service with SSH forwarding
-docker buildx build --platform linux/amd64,linux/arm64 \
-  --ssh default \
-  --tag igranetwork/block-builder:v0.2.2 \
-  --file build/Dockerfile.block-builder \
-  --push build/repos/block-builder
-
-docker buildx build --platform linux/amd64,linux/arm64 \
-  --ssh default \
-  --tag igranetwork/viaduct:v0.2.2 \
-  --file build/Dockerfile.viaduct \
-  --push build/repos/viaduct
-
+# Build and push supported services with SSH forwarding
 docker buildx build --platform linux/amd64,linux/arm64 \
   --ssh default \
   --tag igranetwork/rpc-provider:v0.2.1 \

@@ -3,32 +3,25 @@
 
 # Function to print help information
 function print_help() {
-    echo "Usage: ./setup-repos.sh [--dev]"
+    echo "Usage: ./setup-repos.sh"
     echo ""
     echo "Description:"
     echo "  This script clones and configures repositories for Igra Orchestra."
     echo "  It sets up each repository in the list with the appropriate branches."
     echo ""
-    echo "Options:"
-    echo "  --dev    Use this flag for the development environment. Adds 'kaspad' and 'kaspa-miner' repositories to the setup."
-    echo "  (empty)  Run the script without any arguments for the standard setup without dev-specific repositories."
-    echo ""
     echo "Environment Variables:"
     echo "  You can override the default branches for each repository by setting the following environment variables:"
-    echo "    BLOCK_BUILDER_BRANCH"
     echo "    EXECUTION_LAYER_BRANCH"
     echo "    KASWALLET_BRANCH"
     echo "    IGRA_RPC_PROVIDER_BRANCH"
-    echo "    VIADUCT_BRANCH"
     echo "    KASPAD_BRANCH"
     echo "    KASPA_MINER_BRANCH"
     echo ""
     echo "Examples:"
-    echo "  ./setup-repos.sh           # Standard setup."
-    echo "  ./setup-repos.sh --dev     # Development setup with additional repositories."
+    echo "  ./setup-repos.sh"
     echo ""
     echo "  # Example with environment variables:"
-    echo "  KASWALLET_BRANCH=my-branch ./setup-repos.sh --dev"
+    echo "  KASWALLET_BRANCH=my-branch ./setup-repos.sh"
     echo ""
     echo "Notes:"
     echo "  - Ensure you have the required permissions and SSH key set up to clone from private repositories."
@@ -116,21 +109,14 @@ function configure_repo() {
     cd "$SCRIPT_DIR"
 }
 
-is_dev_env=
 if [[ $# -gt 0 ]]; then
-    if [[ $# -gt 1 || "$1" != "--dev" ]]; then
-        panic "Unexpected parameter(s) $@"
-    fi
-    is_dev_env="Y"
-    shift
+    panic "Unexpected parameter(s) $@"
 fi
 
 # Default branches
-BLOCK_BUILDER_BRANCH=${BLOCK_BUILDER_BRANCH:-main}
 EXECUTION_LAYER_BRANCH=${EXECUTION_LAYER_BRANCH:-main}
 KASWALLET_BRANCH=${KASWALLET_BRANCH:-main}
 IGRA_RPC_PROVIDER_BRANCH=${IGRA_RPC_PROVIDER_BRANCH:-main}
-VIADUCT_BRANCH=${VIADUCT_BRANCH:-main}
 KASPAD_BRANCH=${KASPAD_BRANCH:-master}
 KASPA_MINER_BRANCH=${KASPA_MINER_BRANCH:-main}
 
@@ -139,20 +125,16 @@ log "Starting repository setup"
 # Check if using pre-built images for proprietary services
 if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
     log "USE_PREBUILT_IMAGES is set to true"
-    log "Will only clone public repositories (kaspad and kaspa-miner)"
-    log "Proprietary services will use pre-built Docker images"
+    log "Will clone Kaspa miner repository only"
+    log "All other services will use pre-built Docker images"
 
-    # Only include public repositories
     REPOS=(
-        "kaspad           "
         "kaspa-miner      "
     )
     URLS=(
-        "git@github.com:kaspanet/rusty-kaspa.git"
         "git@github.com:elichai/kaspa-miner.git"
     )
     BRANCHES=(
-        "$KASPAD_BRANCH"
         "$KASPA_MINER_BRANCH"
     )
 else
@@ -161,34 +143,24 @@ else
 
     # Repository information - all repositories
     REPOS=(
-        "block-builder    "
         "execution-layer  "
         "kaswallet        "
         "igra-rpc-provider"
-        "viaduct          "
+        "kaspad           "
+        "kaspa-miner      "
     )
-    if [[ ${is_dev_env} == "Y" ]]; then
-        REPOS+=(
-          "kaspad           "
-          "kaspa-miner      "
-        )
-    fi
 
     URLS=(
-        "git@github.com:IgraLabs/block-builder.git"
         "git@github.com:IgraLabs/execution-layer.git"
         "git@github.com:IgraLabs/kaswallet.git"
         "git@github.com:IgraLabs/igra-rpc-provider.git"
-        "git@github.com:IgraLabs/viaduct.git"
-        "git@github.com:kaspanet/rusty-kaspa.git"
+        "git@github.com:IgraLabs/rusty-kaspa-private.git"
         "git@github.com:elichai/kaspa-miner.git"
     )
     BRANCHES=(
-        "$BLOCK_BUILDER_BRANCH"
         "$EXECUTION_LAYER_BRANCH"
         "$KASWALLET_BRANCH"
         "$IGRA_RPC_PROVIDER_BRANCH"
-        "$VIADUCT_BRANCH"
         "$KASPAD_BRANCH"
         "$KASPA_MINER_BRANCH"
     )
@@ -224,7 +196,7 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
     log "Pulling pre-built images from Docker Hub..."
 
     # Pull and tag images
-    services=("block-builder" "viaduct" "rpc-provider" "kaswallet")
+    services=("kaspad" "execution-layer" "rpc-provider" "kaswallet")
     for service in "${services[@]}"; do
         log "Pulling igranetwork/${service}:latest..."
         if docker pull "igranetwork/${service}:latest"; then

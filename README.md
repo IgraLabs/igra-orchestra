@@ -17,15 +17,11 @@ The `setup-repos.sh` script clones the necessary repositories into the `build/re
 **Repositories:**
 
 *   `build/repos/execution-layer` - Ethereum-compatible execution layer (repo: `IgraLabs/execution-layer`)
-*   `build/repos/block-builder` - Block builder service (repo: `IgraLabs/block-builder`)
-*   `build/repos/viaduct` - Contains the Viaduct component (repo: `IgraLabs/viaduct`)
 *   `build/repos/igra-rpc-provider` - RPC provider for handling API requests (repo: `IgraLabs/igra-rpc-provider`)
 *   `build/repos/kaswallet` - Wallet service for relaying transactions (repo: `IgraLabs/kaswallet`)
+*   `build/repos/rusty-kaspa-private` - Contains the Kaspad node (repo: `IgraLabs/rusty-kaspa-private`)
 
-**Additional Development Repositories (cloned when using `./setup-repos.sh --dev`):**
-
-*   `build/repos/rusty-kaspa` - Contains the Kaspad node (repo: `IgraLabs/rusty-kaspa`)
-*   `build/repos/kaspa-miner` - Kaspa mining service (repo: `elichai/kaspa-miner`)
+The `setup-repos.sh` script also clones the `kaspa-miner` repository (repo: `elichai/kaspa-miner`) when building from source.
 
 Ensure these repositories are present before running the Docker Compose environment. The `setup-repos.sh` script handles cloning and configuring the correct branches.
 
@@ -59,8 +55,8 @@ cp .env.example .env
 # Edit .env and set USE_PREBUILT_IMAGES=true
 
 # 2. Setup repositories and pull images
-# This will only clone public repos and automatically pull/tag pre-built images
-./setup-repos.sh --dev
+# This will clone Kaspad and kaspa-miner and automatically pull/tag pre-built images
+./setup-repos.sh
 
 # 3. Create JWT secret
 openssl rand -hex 32 > ./keys/jwt.hex
@@ -79,7 +75,7 @@ cp .env.example .env
 # Keep USE_PREBUILT_IMAGES=false (default)
 
 # 2. Setup all repositories (including proprietary)
-./setup-repos.sh --dev
+./setup-repos.sh
 
 # 3. Create JWT secret
 openssl rand -hex 32 > ./keys/jwt.hex
@@ -111,13 +107,11 @@ Follow these steps before the first run:
     ```bash
     cp .env.example .env
     # Edit .env and add/modify lines like these:
-    # BLOCK_BUILDER_BRANCH=develop
     # EXECUTION_LAYER_BRANCH=main
     # KASWALLET_BRANCH=feature/new-api
     # IGRA_RPC_PROVIDER_BRANCH=main
-    # VIADUCT_BRANCH=main
-    # KASPAD_BRANCH=for-wallet # Used only if --dev flag is set
-    # KASPA_MINER_BRANCH=main  # Used only if --dev flag is set
+    # KASPAD_BRANCH=for-wallet
+    # KASPA_MINER_BRANCH=main
     ```
 
 2.  **Clone and setup the repositories:**
@@ -161,9 +155,8 @@ The Docker Compose configuration uses profiles and YAML anchors for improved mai
   - `kaswallet-0` to `kaswallet-4` - Wallet services for transaction relay
 
 - **Core Services** (profile: `backend`, automatically included when worker profiles are used):
+  - `kaspad` - Kaspa node with integrated Igra adapter (L1-L2 bridge and block building)
   - `execution-layer` - Ethereum-compatible execution layer
-  - `block-builder` - Block creation and publishing
-  - `viaduct` - L1-L2 communication bridge
   - `traefik` - Reverse proxy and load balancer
 
 ## Configuration

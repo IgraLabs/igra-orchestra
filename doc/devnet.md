@@ -28,7 +28,7 @@
    KASPAD_HOST=kaspad
    KASPAD_BORSH_PORT=17610
 
-   # Viaduct settings
+   # Core service settings
    REPLAY_ON_ERROR=-1
    SYNC_THREADS=64
    MAGIC_SPK=20587b999b5b38f5c87ce04e4a2100998a05d303cc54c30ec77fa2c51dc5aa0a53ac

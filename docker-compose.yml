@@ -2,7 +2,6 @@ name: igra-orchestra-${NETWORK}
 
 volumes:
   kaspad_data:
-  viaduct_data:
   traefik_certs:
   reth_ipc:
     driver: local
@@ -26,7 +25,6 @@ x-default-healthcheck: &default-healthcheck
   start_period: 5s
 
 x-default-service: &default-service
-  restart: unless-stopped
   networks:
     - igra-network
   logging: *default-logging
@@ -55,58 +53,11 @@ x-rpc-provider-base: &rpc-provider-base
     - traefik-network
   labels:
     - "traefik.enable=true"
-    - >
-      traefik.http.routers.rpc0.rule=
-      (Host(`${IGRA_ORCHESTRA_DOMAIN}`) && (PathPrefix(`/${RPC_ACCESS_TOKEN_1}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_2}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_3}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_4}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_5}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_6}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_7}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_8}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_9}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_10}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_11}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_12}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_13}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_14}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_15}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_16}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_17}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_18}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_19}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_20}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_21}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_22}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_23}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_24}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_25}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_26}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_27}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_28}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_29}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_30}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_31}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_32}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_33}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_34}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_35}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_36}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_37}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_38}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_39}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_40}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_41}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_42}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_43}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_44}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_45}`) ||
-      PathPrefix(`/${RPC_ACCESS_TOKEN_46}`)))
+    - "traefik.http.routers.rpc0.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
     - "traefik.http.routers.rpc0.entrypoints=rpc"
     - "traefik.http.routers.rpc0.tls=true"
     - "traefik.http.routers.rpc0.tls.certresolver=myresolver"
-    - "traefik.http.routers.rpc0.middlewares=strip-token,cors"
+    - "traefik.http.routers.rpc0.middlewares=cors"
     - "traefik.http.services.rpc0.loadbalancer.server.port=8535"
 
 x-kaswallet-base: &kaswallet-base
@@ -129,14 +80,83 @@ x-kaswallet-base: &kaswallet-base
     --listen 0.0.0.0:8082
 
 services:
-  # CORE SERVICES
+# CORE SERVICES
+  kaspad:
+    <<: *default-service
+    build:
+      context: build/repos/rusty-kaspa-private
+      dockerfile: ../../Dockerfile.kaspad
+    image: kaspad
+    profiles: ["kaspad"]
+    container_name: kaspad
+    expose:
+      - "16210" # GRPC Server
+      - "16211" # P2P Server
+      - "17210" # WRPC (borsh) Server
+      - "18210" # WRPC (json) Server
+    ports:
+      - "17210:17210"
+      - "16211:16211"
+    environment:
+      - KASPAD_ADD_PEER
+      - RUST_LOG=info,kaspa_viaduct=trace,kaspa_igra_adapter=trace,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace
+    entrypoint: |
+      sh -c '
+      ARGS="--${NETWORK} \
+        --disable-upnp \
+        --nodnsseed \
+        --rpclisten-borsh=0.0.0.0 \
+        --rpclisten=0.0.0.0 \
+        --rpclisten-json=0.0.0.0 \
+        --listen=0.0.0.0 \
+        --utxoindex \
+        --appdir=/app/data \
+        --igra-enable \
+        --atan-listen \
+        --atan-transaction-id-prefix=97b1 \
+        --viaduct-start-daa-score=${IGRA_LAUNCH_DAA_SCORE} \
+        --igra-l1-reference-timestamp=${L1_REFERENCE_TIMESTAMP} \
+        --igra-l1-reference-daa-score=${L1_REFERENCE_DAA_SCORE} \
+        --igra-genesis-hash=${GENESIS_BLOCK_HASH} \
+        --igra-min-fee-per-gas-gwei=${MIN_PROTOCOL_FEE_PER_GAS_GWEI} \
+        --igra-jwt-path=/app/jwt.hex \
+        --igra-lock-script-pubkey=${IGRA_LOCK_SCRIPT_PUBKEY} \
+        --igra-entry-min-amount=${IGRA_ENTRY_MIN_AMOUNT} \
+        --igra-el-host=http://execution-layer"
+      if [ -n "$$KASPAD_ADD_PEER" ]; then
+        ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
+      else
+        ARGS="$$ARGS --enable-unsynced-mining"
+      fi
+      exec /app/kaspad $$ARGS
+      '
+    volumes:
+      - kaspad_data:/app/data/
+      - ./keys/jwt.hex:/app/jwt.hex:ro
+    networks:
+      - igra-network
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.kaspad-grpc.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.kaspad-grpc.entrypoints=kaspad_grpc"
+      - "traefik.tcp.routers.kaspad-grpc.service=kaspad-grpc-svc"
+      - "traefik.tcp.services.kaspad-grpc-svc.loadbalancer.server.port=16210"
+      - "traefik.tcp.routers.kaspad-json.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.kaspad-json.entrypoints=kaspad_json"
+      - "traefik.tcp.routers.kaspad-json.service=kaspad-json-svc"
+      - "traefik.tcp.services.kaspad-json-svc.loadbalancer.server.port=18210"
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/kaspad/16210"]
+
   execution-layer:
     <<: *default-service
     restart: "no"
     container_name: execution-layer
     image: igranetwork/reth:1.7.0
+    profiles: ["execution-layer"]
     entrypoint: /root/reth/run-igra-dev-el.sh
-    profiles: ["backend"]
     ports:
       - "127.0.0.1:9545:8545"  # open 8545 on localhost for blockscout
       - "127.0.0.1:9546:8546"  # open 8546 on localhost for blockscout
@@ -170,83 +190,225 @@ services:
 
   node-health-check-client:
     image: igranetwork/node-health-check-client:v0.2.2
+    profiles: ["node-health-check-client"]
     container_name: node-health-check-client
     networks:
       - igra-network
     environment:
       - NODE_RPC_URL=http://execution-layer:8545
-      - MONITOR_URL= http://65.108.195.238:8081
+      - MONITOR_URL=http://65.108.195.238:8081
       - NODE_ID=igra-orchestra-${NODE_ID}
       - API_KEY=${HEALTH_CHECK_API_KEY}
       - POLL_INTERVAL=5
     restart: unless-stopped
 
-  block-builder:
-    <<: *default-service
-    restart: "no"
-    build:
-      context: build/repos/block-builder
-      dockerfile: ../../Dockerfile.block-builder
-    image: igranetwork/block-builder:v0.2.2
-    command: /app/jwt.hex http://execution-layer
-    profiles: ["backend"]
-    container_name: block-builder
-    expose:
-      - "8561"
+  # WORKER SERVICES
+  rpc-provider-0:
+    <<: *rpc-provider-base
+    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
+    container_name: rpc-provider-0
     environment:
-      RUST_LOG: ${RUST_LOG:-info}
-      L1_REFERENCE_TIMESTAMP: ${L1_REFERENCE_TIMESTAMP}
-      L1_REFERENCE_DAA_SCORE: ${L1_REFERENCE_DAA_SCORE}
-      GENESIS_BLOCK_HASH: ${GENESIS_BLOCK_HASH}
-      MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
-      ENABLE_PERF_DIAGNOSTICS: ${ENABLE_PERF_DIAGNOSTICS}
-      EL_IPC_PATH: /app/reth/auth.ipc
-    volumes:
-      - ./keys/jwt.hex:/app/jwt.hex:ro
-      - /var/run/docker.sock:/var/run/docker.sock
-      - reth_ipc:/app/reth
+      <<: *rpc-provider-environment
+      WALLET_DAEMON_URI: http://kaswallet-0:8082
+      WALLET_TO_ADDRESS: ${W0_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W0_KASWALLET_PASSWORD}
     healthcheck:
       <<: *default-healthcheck
-      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/$$HOSTNAME/8561"]
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
+          echo hello > /dev/tcp/execution-layer/8545 && \
+          echo hello > /dev/tcp/kaswallet-0/8082",
+        ]
     depends_on:
-      execution-layer:
+      kaswallet-0:
         condition: service_healthy
 
-  viaduct:
-    <<: *default-service
-    restart: "no"
-    build:
-      context: build/repos/viaduct
-      dockerfile: ../../Dockerfile.viaduct
-      ssh:
-        - default
-    image: igranetwork/viaduct:v0.2.2
-    profiles: ["backend"]
-    container_name: viaduct
-    environment:
-      - RUST_LOG
-      - REPLAY_ON_ERROR
-      - SYNC_THREADS
-      - IGRA_LAUNCH_DAA_SCORE
-      - MAGIC_SPK
-      - DELAY_WINDOWS
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: ["--ip-port=${KASPAD_HOST}:${KASPAD_BORSH_PORT}", "--bb-ip-port=block-builder:8561"]
+  kaswallet-0:
+    <<: *kaswallet-base
+    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
+    container_name: kaswallet-0
+    ports:
+      - "127.0.0.1:8082:8082"  # open 8082 on localhost for entry transactions
     volumes:
-      - viaduct_data:/app/storage
+      - ./keys/keys.kaswallet-0.json:/app/keys.json
     healthcheck:
       <<: *default-healthcheck
-      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}"]
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+        ]
+
+  # Additional workers
+  rpc-provider-1:
+    <<: *rpc-provider-base
+    profiles: ["frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
+    container_name: rpc-provider-1
+    environment:
+      <<: *rpc-provider-environment
+      WALLET_DAEMON_URI: http://kaswallet-1:8082
+      WALLET_TO_ADDRESS: ${W1_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W1_KASWALLET_PASSWORD}
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
+          echo hello > /dev/tcp/execution-layer/8545 && \
+          echo hello > /dev/tcp/kaswallet-1/8082",
+        ]
     depends_on:
-      block-builder:
+      kaswallet-1:
         condition: service_healthy
+
+  kaswallet-1:
+    <<: *kaswallet-base
+    profiles: ["frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
+    container_name: kaswallet-1
+    volumes:
+      - ./keys/keys.kaswallet-1.json:/app/keys.json
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+        ]
+
+  # Worker 3
+  rpc-provider-2:
+    <<: *rpc-provider-base
+    profiles: ["frontend-w3", "frontend-w4", "frontend-w5"]
+    container_name: rpc-provider-2
+    environment:
+      <<: *rpc-provider-environment
+      WALLET_DAEMON_URI: http://kaswallet-2:8082
+      WALLET_TO_ADDRESS: ${W2_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W2_KASWALLET_PASSWORD}
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
+          echo hello > /dev/tcp/execution-layer/8545 && \
+          echo hello > /dev/tcp/kaswallet-2/8082",
+        ]
+    depends_on:
+      kaswallet-2:
+        condition: service_healthy
+
+  kaswallet-2:
+    <<: *kaswallet-base
+    profiles: ["frontend-w3", "frontend-w4", "frontend-w5"]
+    container_name: kaswallet-2
+    volumes:
+      - ./keys/keys.kaswallet-2.json:/app/keys.json
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+        ]
+
+  # Worker 4
+  rpc-provider-3:
+    <<: *rpc-provider-base
+    profiles: ["frontend-w4", "frontend-w5"]
+    container_name: rpc-provider-3
+    environment:
+      <<: *rpc-provider-environment
+      WALLET_DAEMON_URI: http://kaswallet-3:8082
+      WALLET_TO_ADDRESS: ${W3_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W3_KASWALLET_PASSWORD}
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
+          echo hello > /dev/tcp/execution-layer/8545 && \
+          echo hello > /dev/tcp/kaswallet-3/8082",
+        ]
+    depends_on:
+      kaswallet-3:
+        condition: service_healthy
+
+  kaswallet-3:
+    <<: *kaswallet-base
+    profiles: ["frontend-w4", "frontend-w5"]
+    container_name: kaswallet-3
+    volumes:
+      - ./keys/keys.kaswallet-3.json:/app/keys.json
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+        ]
+
+  # Worker 5
+  rpc-provider-4:
+    <<: *rpc-provider-base
+    profiles: ["frontend-w5"]
+    container_name: rpc-provider-4
+    environment:
+      <<: *rpc-provider-environment
+      WALLET_DAEMON_URI: http://kaswallet-4:8082
+      WALLET_TO_ADDRESS: ${W4_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W4_KASWALLET_PASSWORD}
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
+          echo hello > /dev/tcp/execution-layer/8545 && \
+          echo hello > /dev/tcp/kaswallet-4/8082",
+        ]
+    depends_on:
+      kaswallet-4:
+        condition: service_healthy
+
+  kaswallet-4:
+    <<: *kaswallet-base
+    profiles: ["frontend-w5"]
+    container_name: kaswallet-4
+    volumes:
+      - ./keys/keys.kaswallet-4.json:/app/keys.json
+    healthcheck:
+      <<: *default-healthcheck
+      test: [
+          "CMD",
+          "bash",
+          "-c",
+          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+        ]
 
   # TRAEFIK SERVICE
   traefik:
     <<: *default-service
     image: traefik:v3.0
-    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "kaspa-explorer"]
+    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
     container_name: traefik
     command:
       - "--api.dashboard=true"
@@ -285,7 +447,6 @@ services:
       - traefik-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.middlewares.strip-token.stripprefixregex.regex=^/([a-f0-9]{32})"
       - "traefik.http.middlewares.cors.headers.accesscontrolallowmethods=GET,OPTIONS,PUT,POST,DELETE"
       - "traefik.http.middlewares.cors.headers.accesscontrolalloworiginlist=*"
       - "traefik.http.middlewares.cors.headers.accesscontrolallowheaders=*"
@@ -308,266 +469,15 @@ services:
       test: ["CMD", "wget", "--spider", "http://localhost:8080"]
       timeout: 5s
 
-  # WORKER SERVICES
-  rpc-provider-0:
-    <<: *rpc-provider-base
-    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
-    container_name: rpc-provider-0
-    environment:
-      <<: *rpc-provider-environment
-      WALLET_DAEMON_URI: http://kaswallet-0:8082
-      WALLET_TO_ADDRESS: ${W0_WALLET_TO_ADDRESS}
-      KASWALLET_PASSWORD: ${W0_KASWALLET_PASSWORD}
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
-          echo hello > /dev/tcp/execution-layer/8545 && \
-          echo hello > /dev/tcp/kaswallet-0/8082",
-        ]
-    depends_on:
-      kaswallet-0:
-        condition: service_healthy
 
-  kaswallet-0:
-    <<: *kaswallet-base
-    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "kaswallets"]
-    container_name: kaswallet-0
-    ports:
-      - "127.0.0.1:8082:8082"  # open 8082 on localhost for entry transactions
-    volumes:
-      - ./keys/keys.kaswallet-0.json:/app/keys.json
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
-        ]
-
-  # Additional workers
-  rpc-provider-1:
-    <<: *rpc-provider-base
-    profiles: ["frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "rpc-providers"]
-    container_name: rpc-provider-1
-    environment:
-      <<: *rpc-provider-environment
-      WALLET_DAEMON_URI: http://kaswallet-1:8082
-      WALLET_TO_ADDRESS: ${W1_WALLET_TO_ADDRESS}
-      KASWALLET_PASSWORD: ${W1_KASWALLET_PASSWORD}
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
-          echo hello > /dev/tcp/execution-layer/8545 && \
-          echo hello > /dev/tcp/kaswallet-1/8082",
-        ]
-    depends_on:
-      kaswallet-1:
-        condition: service_healthy
-
-  kaswallet-1:
-    <<: *kaswallet-base
-    profiles: ["frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "kaswallets"]
-    container_name: kaswallet-1
-    volumes:
-      - ./keys/keys.kaswallet-1.json:/app/keys.json
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
-        ]
-
-  # Worker 3
-  rpc-provider-2:
-    <<: *rpc-provider-base
-    profiles: ["frontend-w3", "frontend-w4", "frontend-w5", "rpc-providers"]
-    container_name: rpc-provider-2
-    environment:
-      <<: *rpc-provider-environment
-      WALLET_DAEMON_URI: http://kaswallet-2:8082
-      WALLET_TO_ADDRESS: ${W2_WALLET_TO_ADDRESS}
-      KASWALLET_PASSWORD: ${W2_KASWALLET_PASSWORD}
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
-          echo hello > /dev/tcp/execution-layer/8545 && \
-          echo hello > /dev/tcp/kaswallet-2/8082",
-        ]
-    depends_on:
-      kaswallet-2:
-        condition: service_healthy
-
-  kaswallet-2:
-    <<: *kaswallet-base
-    profiles: ["frontend-w3", "frontend-w4", "frontend-w5", "kaswallets"]
-    container_name: kaswallet-2
-    volumes:
-      - ./keys/keys.kaswallet-2.json:/app/keys.json
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
-        ]
-
-  # Worker 4
-  rpc-provider-3:
-    <<: *rpc-provider-base
-    profiles: ["frontend-w4", "frontend-w5", "rpc-providers"]
-    container_name: rpc-provider-3
-    environment:
-      <<: *rpc-provider-environment
-      WALLET_DAEMON_URI: http://kaswallet-3:8082
-      WALLET_TO_ADDRESS: ${W3_WALLET_TO_ADDRESS}
-      KASWALLET_PASSWORD: ${W3_KASWALLET_PASSWORD}
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
-          echo hello > /dev/tcp/execution-layer/8545 && \
-          echo hello > /dev/tcp/kaswallet-3/8082",
-        ]
-    depends_on:
-      kaswallet-3:
-        condition: service_healthy
-
-  kaswallet-3:
-    <<: *kaswallet-base
-    profiles: ["frontend-w4", "frontend-w5", "kaswallets"]
-    container_name: kaswallet-3
-    volumes:
-      - ./keys/keys.kaswallet-3.json:/app/keys.json
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
-        ]
-
-  # Worker 5
-  rpc-provider-4:
-    <<: *rpc-provider-base
-    profiles: ["frontend-w5", "rpc-providers"]
-    container_name: rpc-provider-4
-    environment:
-      <<: *rpc-provider-environment
-      WALLET_DAEMON_URI: http://kaswallet-4:8082
-      WALLET_TO_ADDRESS: ${W4_WALLET_TO_ADDRESS}
-      KASWALLET_PASSWORD: ${W4_KASWALLET_PASSWORD}
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
-          echo hello > /dev/tcp/execution-layer/8545 && \
-          echo hello > /dev/tcp/kaswallet-4/8082",
-        ]
-    depends_on:
-      kaswallet-4:
-        condition: service_healthy
-
-  kaswallet-4:
-    <<: *kaswallet-base
-    profiles: ["frontend-w5", "kaswallets"]
-    container_name: kaswallet-4
-    volumes:
-      - ./keys/keys.kaswallet-4.json:/app/keys.json
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
-        ]
-
-  # KASPA SERVICES
-  kaspad:
-    <<: *default-service
-    build:
-      context: build/repos/rusty-kaspa
-      dockerfile: ../../Dockerfile.kaspad
-    image: kaspad
-    profiles: ["kaspad"]
-    container_name: kaspad
-    expose:
-      - "16210" # GRPC Server
-      - "16211" # P2P Server
-      - "17210" # WRPC (borsh) Server
-      - "18210" # WRPC (json) Server
-    ports:
-      - "17210:17210"
-      - "16211:16211"
-    environment:
-      - RUST_LOG
-      - REPLAY_ON_ERROR
-      - SYNC_THREADS
-      - KASPAD_ADD_PEER
-    entrypoint: |
-      sh -c '
-      ARGS="--${NETWORK} --disable-upnp --nodnsseed --rpclisten-borsh=0.0.0.0 --rpclisten=0.0.0.0 --rpclisten-json=0.0.0.0 --listen=0.0.0.0 --loglevel=info --utxoindex --appdir=/app/data"
-      if [ -n "$$KASPAD_ADD_PEER" ]; then
-        ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
-      else
-        ARGS="$$ARGS --enable-unsynced-mining"
-      fi
-      exec /app/kaspad $$ARGS
-      '
-    volumes:
-      - kaspad_data:/app/data/
-    networks:
-      - igra-network
-      - traefik-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.tcp.routers.kaspad-grpc.rule=HostSNI(`*`)"
-      - "traefik.tcp.routers.kaspad-grpc.entrypoints=kaspad_grpc"
-      - "traefik.tcp.routers.kaspad-grpc.service=kaspad-grpc-svc"
-      - "traefik.tcp.services.kaspad-grpc-svc.loadbalancer.server.port=16210"
-      - "traefik.tcp.routers.kaspad-json.rule=HostSNI(`*`)"
-      - "traefik.tcp.routers.kaspad-json.entrypoints=kaspad_json"
-      - "traefik.tcp.routers.kaspad-json.service=kaspad-json-svc"
-      - "traefik.tcp.services.kaspad-json-svc.loadbalancer.server.port=18210"
-    healthcheck:
-      <<: *default-healthcheck
-      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/kaspad/16210"]
-
+  # Miscellaneous Services
   kaspa-miner:
     <<: *default-service
     build:
       context: build/repos/kaspa-miner
       dockerfile: ../../Dockerfile.kaspa-miner
     image: kaspa-miner
-    profiles: ["kaspad"]
+    profiles: ["kaspa-miner"]
     container_name: kaspa-miner
     environment:
       - RUST_LOG

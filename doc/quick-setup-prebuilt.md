@@ -18,7 +18,7 @@ Update `NODE_ID` in `.env` with your node name.
 2) Initialize repositories and images
 ```bash
 chmod +x setup-repos.sh
-./setup-repos.sh --dev
+./setup-repos.sh
 ```
 
 3) Start Kaspa and wait for full sync
@@ -38,43 +38,21 @@ chmod +x build/repos/execution-layer/run-igra-dev-el.sh
 openssl rand -hex 32 > keys/jwt.hex
 ```
 
-6) Download the latest database backup from S3
-```bash
-chmod +x scripts/backup/download-from-s3.sh
-./scripts/backup/download-from-s3.sh viaduct
-```
-
-7) Restore the database
-```bash
-chmod +x scripts/backup/restore.sh
-./scripts/backup/restore.sh viaduct
-# or you can pass the backup file path, for example:
-./scripts/backup/restore.sh viaduct ~/.backups/viaduct-backups/igra-orchestra-testnet_viaduct_data_20250818_190105.tar.gz
-```
-
-8) Start backend services
+6) Start backend services
 ```bash
 docker compose --profile backend up -d --pull always
 ```
 
-9)   Monitor initial sync and block building
+7) Monitor initial sync and block building
 ```bash
 # General logs
 docker compose logs -f
 
-# Track block-builder progress
-docker logs -f block-builder
-# Optional analyzer
-docker logs -f block-builder | docker run -i --rm --entrypoint /app/reorg_analyzer igranetwork/block-builder:v0.2.2
+# Monitor kaspad logs for Igra adapter activity
+docker logs -f kaspad | grep -E "kaspa_igra_adapter|kaspa_atan"
 ```
 
-#### Common issues
-- Viaduct exits immediately:
-  ```
-  viaduct  | [.... INFO  viaduct::uni_storage] Starting to handle notifications
-  viaduct exited with code 0
-  ```
-  - Kaspa is not fully synced yet. Wait for `IDB: 100%` in Kaspad logs, then start backend again.
+#### Common Issues
 - Permission error on execution-layer startup:
 ```bash
 chmod +x build/repos/execution-layer/run-igra-dev-el.sh
