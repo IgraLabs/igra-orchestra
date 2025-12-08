@@ -261,6 +261,34 @@ If you've configured the `json-file` driver (e.g., on macOS), use standard `dock
 
 The syslog tagging format allows for easy filtering by service name, making it possible to debug specific components of the stack. If using the `json-file` driver, standard `docker logs` filtering applies.
 
+### Kaspad Diagnostics
+
+Enable diagnostic features by setting environment variables in your `.env` file:
+
+```bash
+# Enable performance diagnostics (passes --igra-enable-perf-diagnostics flag)
+ENABLE_PERF_DIAGNOSTICS=true
+
+# Enable event logging (passes --igra-enable-event-logging flag)
+ENABLE_EVENT_LOGGING=true
+```
+
+#### Adapter Stats
+
+Analyze kaspad adapter performance by piping logs to the adapter-stats tool:
+
+```bash
+docker logs -f -n 1000 kaspad 2>&1 | docker run --rm -i --entrypoint /app/adapter-stats kaspad
+```
+
+#### Transaction Parser
+
+When event logging is enabled, transaction logs are written to `./logs/`. Use the igra-tx-parser to watch and analyze them:
+
+```bash
+docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser kaspad watch --logs-dir /app/logs
+```
+
 ## Documentation
 
 - [Quick Setup with Pre-built Images](docs/quick-setup-prebuilt.md) - Simplified deployment guide

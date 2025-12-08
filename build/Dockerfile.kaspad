@@ -13,6 +13,7 @@ RUN rustup component add rustfmt
 COPY . .
 
 RUN cargo build --bin kaspad --bin kaspa-cli --release
+RUN cargo build -p igra-tx-parser -p adapter-stats --release
 
 FROM rust:slim
 
@@ -24,5 +25,7 @@ RUN apt-get update && \
 
 COPY --from=builder /app/target/release/kaspad /app/
 COPY --from=builder /app/target/release/kaspa-cli /app/
+COPY --from=builder /app/target/release/igra-tx-parser /app/
+COPY --from=builder /app/target/release/adapter-stats /app/
 
 ENTRYPOINT ["/app/kaspad"]

@@ -100,6 +100,7 @@ services:
     environment:
       - KASPAD_ADD_PEER
       - ENABLE_PERF_DIAGNOSTICS
+      - ENABLE_EVENT_LOGGING
       - RUST_LOG=info,kaspa_viaduct=trace,kaspa_igra_adapter=trace,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace
     entrypoint: |
       sh -c '
@@ -132,10 +133,14 @@ services:
       if [ "$$ENABLE_PERF_DIAGNOSTICS" = "true" ]; then
         ARGS="$$ARGS --igra-enable-perf-diagnostics"
       fi
+      if [ "$$ENABLE_EVENT_LOGGING" = "true" ]; then
+        ARGS="$$ARGS --igra-enable-event-logging"
+      fi
       exec /app/kaspad $$ARGS
       '
     volumes:
       - kaspad_data:/app/data/
+      - ./logs/:/app/logs/  # Event logs when ENABLE_EVENT_LOGGING=true
       - ./keys/jwt.hex:/app/jwt.hex:ro
     networks:
       - igra-network
