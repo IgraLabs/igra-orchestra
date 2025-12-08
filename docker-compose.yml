@@ -99,6 +99,7 @@ services:
       - "16211:16211"
     environment:
       - KASPAD_ADD_PEER
+      - ENABLE_PERF_DIAGNOSTICS
       - RUST_LOG=info,kaspa_viaduct=trace,kaspa_igra_adapter=trace,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace
     entrypoint: |
       sh -c '
@@ -127,6 +128,9 @@ services:
         ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
       else
         ARGS="$$ARGS --enable-unsynced-mining"
+      fi
+      if [ "$$ENABLE_PERF_DIAGNOSTICS" = "true" ]; then
+        ARGS="$$ARGS --igra-enable-perf-diagnostics"
       fi
       exec /app/kaspad $$ARGS
       '
