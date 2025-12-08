@@ -163,7 +163,7 @@ services:
     <<: *default-service
     restart: "no"
     container_name: execution-layer
-    image: igranetwork/reth:1.7.0
+    image: igranetwork/reth:1.9.3
     profiles: ["execution-layer"]
     entrypoint: /root/reth/run-igra-dev-el.sh
     ports:
