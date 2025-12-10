@@ -271,6 +271,9 @@ ENABLE_PERF_DIAGNOSTICS=true
 
 # Enable event logging (passes --igra-enable-event-logging flag)
 ENABLE_EVENT_LOGGING=true
+
+# Warm start from a specific block number (passes --igra-warm-start-block flag)
+WARM_START_BLOCK=200184247
 ```
 
 #### Adapter Stats

@@ -102,6 +102,7 @@ services:
       - KASPAD_ADD_PEER
       - ENABLE_PERF_DIAGNOSTICS
       - ENABLE_EVENT_LOGGING
+      - WARM_START_BLOCK
       - RUST_LOG=info,kaspa_viaduct=trace,kaspa_igra_adapter=trace,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace
     entrypoint: |
       sh -c '
@@ -136,6 +137,9 @@ services:
       fi
       if [ "$$ENABLE_EVENT_LOGGING" = "true" ]; then
         ARGS="$$ARGS --igra-enable-event-logging"
+      fi
+      if [ -n "$$WARM_START_BLOCK" ]; then
+        ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
       fi
       exec /app/kaspad $$ARGS
       '
