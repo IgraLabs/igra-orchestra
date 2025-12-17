@@ -168,7 +168,7 @@ services:
     <<: *default-service
     restart: "no"
     container_name: execution-layer
-    image: igranetwork/reth:1.9.3-discard-reorg-txs
+    image: igranetwork/reth:1.9.3-discard-reorg-txs-and-fifo-order
     profiles: ["execution-layer"]
     entrypoint: /root/reth/run-igra-el.sh
     ports:
