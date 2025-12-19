@@ -1,0 +1,13 @@
+target/
+.git/
+.github/
+*.log
+*.tmp
+**/.DS_Store
+**/node_modules
+docs/
+tests/
+benches/
+examples/
+*.md
+!README.md

@@ -166,11 +166,14 @@ services:
 
   execution-layer:
     <<: *default-service
+    build:
+      context: build/repos/reth-private
+      dockerfile: ../../Dockerfile.reth
+    image: reth
     restart: "no"
     container_name: execution-layer
-    image: igranetwork/reth:1.9.3
     profiles: ["execution-layer"]
-    entrypoint: /root/reth/run-igra-dev-el.sh
+    entrypoint: /root/reth/run-igra-el.sh
     ports:
       - "127.0.0.1:9545:8545"  # open 8545 on localhost for blockscout
       - "127.0.0.1:9546:8546"  # open 8546 on localhost for blockscout
@@ -187,9 +190,9 @@ services:
       IGRA_LAUNCH_DAA_SCORE: ${IGRA_LAUNCH_DAA_SCORE}
     volumes:
       - ./keys/jwt.hex:/root/reth/jwt.hex
-      - ./build/repos/execution-layer/genesis.template.json:/root/reth/genesis.template.json
-      - ./build/repos/execution-layer/run-igra-dev-el.sh:/root/reth/run-igra-dev-el.sh
       - reth_ipc:/root/reth/socket
+      - ./build/repos/reth-private/igra/genesis.template.json:/root/reth/genesis.template.json
+      - ./build/repos/reth-private/igra/run-igra-el.sh:/root/reth/run-igra-el.sh
       - reth_data:/root/reth/data/
     labels:
       - "traefik.enable=true"
@@ -422,7 +425,7 @@ services:
   # TRAEFIK SERVICE
   traefik:
     <<: *default-service
-    image: traefik:v3.0
+    image: traefik:v3
     profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
     container_name: traefik
     command:

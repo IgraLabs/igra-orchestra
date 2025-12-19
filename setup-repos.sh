@@ -11,7 +11,7 @@ function print_help() {
     echo ""
     echo "Environment Variables:"
     echo "  You can override the default branches for each repository by setting the following environment variables:"
-    echo "    EXECUTION_LAYER_BRANCH"
+    echo "    RETH_BRANCH"
     echo "    KASWALLET_BRANCH"
     echo "    IGRA_RPC_PROVIDER_BRANCH"
     echo "    KASPAD_BRANCH"
@@ -114,7 +114,7 @@ if [[ $# -gt 0 ]]; then
 fi
 
 # Default branches
-EXECUTION_LAYER_BRANCH=${EXECUTION_LAYER_BRANCH:-main}
+RETH_BRANCH=${RETH_BRANCH:-main}
 KASWALLET_BRANCH=${KASWALLET_BRANCH:-main}
 IGRA_RPC_PROVIDER_BRANCH=${IGRA_RPC_PROVIDER_BRANCH:-main}
 KASPAD_BRANCH=${KASPAD_BRANCH:-master}
@@ -143,7 +143,7 @@ else
 
     # Repository information - all repositories
     REPOS=(
-        "execution-layer  "
+        "reth             "
         "kaswallet        "
         "igra-rpc-provider"
         "kaspad           "
@@ -151,14 +151,14 @@ else
     )
 
     URLS=(
-        "git@github.com:IgraLabs/execution-layer.git"
+        "git@github.com:IgraLabs/reth-private.git"
         "git@github.com:IgraLabs/kaswallet.git"
         "git@github.com:IgraLabs/igra-rpc-provider.git"
         "git@github.com:IgraLabs/rusty-kaspa-private.git"
         "git@github.com:elichai/kaspa-miner.git"
     )
     BRANCHES=(
-        "$EXECUTION_LAYER_BRANCH"
+        "$RETH_BRANCH"
         "$KASWALLET_BRANCH"
         "$IGRA_RPC_PROVIDER_BRANCH"
         "$KASPAD_BRANCH"
