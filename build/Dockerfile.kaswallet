@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install OpenSSL and Protocol Buffers compiler
 RUN apt-get update && \
-    apt-get install -y pkg-config libssl-dev protobuf-compiler && \
+    apt-get install -y pkg-config libssl-dev protobuf-compiler libclang-dev build-essential && \
     rm -rf /var/lib/apt/lists/*
 
 COPY . .
