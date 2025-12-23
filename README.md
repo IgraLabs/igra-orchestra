@@ -80,7 +80,12 @@ cp .env.example .env
 # 3. Create JWT secret
 openssl rand -hex 32 > ./keys/jwt.hex
 
-# 4. Build and start services
+# 4. Setup SSH agent (required for private dependencies)
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519  # or your GitHub SSH key
+ssh -T git@github.com      # verify access
+
+# 5. Build and start services
 docker compose build
 docker compose --profile kaspad up -d
 docker compose --profile backend up -d
@@ -309,4 +314,5 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser kaspad watc
 5. **Profile dependencies**: Make sure to start profiles in the correct order (kaspad → explorer → workers)
 6. **Missing JWT file**: Ensure you've created the JWT file before starting services
 7. **Service connectivity**: Ensure all services can properly connect by starting profiles in the correct order and allowing time for services to initialize
+8. **SSH authentication during build**: If `docker compose build` fails with "failed to authenticate when downloading repository", ensure your SSH agent is running with your GitHub key loaded: `eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_ed25519`
 ```

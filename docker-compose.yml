@@ -43,6 +43,8 @@ x-rpc-provider-base: &rpc-provider-base
   build:
     context: build/repos/igra-rpc-provider
     dockerfile: ../../Dockerfile.rpc-provider
+    ssh:
+      - default
   image: igranetwork/rpc-provider:v0.2.1
   environment: *rpc-provider-environment
   expose:
