@@ -107,7 +107,7 @@ Follow these steps before the first run:
     ```bash
     cp .env.example .env
     # Edit .env and add/modify lines like these:
-    # EXECUTION_LAYER_BRANCH=main
+    # RETH_BRANCH=production
     # KASWALLET_BRANCH=feature/new-api
     # IGRA_RPC_PROVIDER_BRANCH=main
     # KASPAD_BRANCH=for-wallet
