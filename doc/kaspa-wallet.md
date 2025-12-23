@@ -57,7 +57,7 @@ $ send kaspadev:qq727apeewmcfvv4rvq68xgfal3e9qn7ukqk9ujk0tragepxcnrgwcz34srr4 50
 
 ## Findout the address of the wallet
 ```bash
-./target/release/kaswallet-daemon --devnet --keys path/to/keys.json --server ws://127.0.0.1:17610 --listen 0.0.0.0:8082
-./target/release/test_client
+./target/release/kaswallet-daemon --devnet --keys path/to/keys.json --server grpc://127.0.0.1:16210 --listen 0.0.0.0:8082
+./target/release/kaswallet-test-client
 # Address displayed in output
 ```

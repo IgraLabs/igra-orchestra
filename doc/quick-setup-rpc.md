@@ -29,7 +29,7 @@ When prompted for password, press Enter for empty password or set your own.
 docker run --rm -v $(pwd)/keys:/keys --network igra-orchestra-testnet_igra-network \
   -p 8082:8082 --name kaswallet-temp igranetwork/kaswallet:latest \
   --testnet --keys /keys/keys.kaswallet-0.json \
-  --server ws://kaspad:17210 --listen 0.0.0.0:8082
+  --server grpc://kaspad:16210 --listen 0.0.0.0:8082
 ```
 
 Expected output:

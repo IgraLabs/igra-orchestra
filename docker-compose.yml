@@ -76,7 +76,7 @@ x-kaswallet-base: &kaswallet-base
     --${NETWORK}
     --logs-level=${RUST_LOG}
     --keys /app/keys.json
-    --server ws://${KASPAD_HOST}:${KASPAD_BORSH_PORT}
+    --server grpc://${KASPAD_HOST}:${KASPAD_GRPC_PORT}
     --listen 0.0.0.0:8082
 
 services:
@@ -257,7 +257,7 @@ services:
           "bash",
           "-c",
           "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
         ]
 
   # Additional workers
@@ -297,7 +297,7 @@ services:
           "bash",
           "-c",
           "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
         ]
 
   # Worker 3
@@ -337,7 +337,7 @@ services:
           "bash",
           "-c",
           "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
         ]
 
   # Worker 4
@@ -377,7 +377,7 @@ services:
           "bash",
           "-c",
           "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
         ]
 
   # Worker 5
@@ -417,7 +417,7 @@ services:
           "bash",
           "-c",
           "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_BORSH_PORT}",
+          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
         ]
 
   # TRAEFIK SERVICE
