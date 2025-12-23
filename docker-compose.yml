@@ -3,7 +3,6 @@ name: igra-orchestra-${NETWORK}
 volumes:
   kaspad_data:
   traefik_certs:
-  reth_data:
   reth_ipc:
     driver: local
     driver_opts:
@@ -193,7 +192,6 @@ services:
       - reth_ipc:/root/reth/socket
       - ./build/repos/reth-private/igra/genesis.template.json:/root/reth/genesis.template.json
       - ./build/repos/reth-private/igra/run-igra-el.sh:/root/reth/run-igra-el.sh
-      - reth_data:/root/reth/data/
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.el_stats.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
