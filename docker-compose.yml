@@ -37,6 +37,7 @@ x-rpc-provider-environment: &rpc-provider-environment
   SECURITY_ENABLE_WHITELIST: "true"
   READ_ONLY: ${RPC_READ_ONLY}
   MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
+  TX_ID_PREFIX: ${TX_ID_PREFIX}
 
 x-rpc-provider-base: &rpc-provider-base
   <<: *default-service
@@ -118,7 +119,7 @@ services:
         --appdir=/app/data \
         --igra-enable \
         --atan-listen \
-        --atan-transaction-id-prefix=97b1 \
+        --atan-transaction-id-prefix=${TX_ID_PREFIX} \
         --viaduct-start-daa-score=${IGRA_LAUNCH_DAA_SCORE} \
         --igra-l1-reference-timestamp=${L1_REFERENCE_TIMESTAMP} \
         --igra-l1-reference-daa-score=${L1_REFERENCE_DAA_SCORE} \
