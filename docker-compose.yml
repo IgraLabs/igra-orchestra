@@ -513,6 +513,3 @@ services:
       '
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      kaspad:
-        condition: service_healthy
