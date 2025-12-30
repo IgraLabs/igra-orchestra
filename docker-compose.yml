@@ -166,6 +166,33 @@ services:
       <<: *default-healthcheck
       test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/kaspad/16210"]
 
+  atan-importer:
+    <<: *default-service
+    image: ghcr.io/igralabs/atan-importer:latest
+    profiles: ["kaspad"]
+    container_name: atan-importer
+    restart: unless-stopped
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_PREFIX: ${S3_PREFIX:-}
+      CDN_BASE_URL: ${CDN_BASE_URL:-}
+      WATCH_FOLDER: /app/data/kaspa-testnet-10/datadir/atan_datadir/chain_block_lists
+    volumes:
+      - kaspad_data:/app/data/
+    depends_on:
+      kaspad:
+        condition: service_healthy
+    healthcheck:
+      <<: *default-healthcheck
+      test:
+        [
+          "CMD-SHELL",
+          "test -n \"$$AWS_ACCESS_KEY_ID\" && test -n \"$$AWS_SECRET_ACCESS_KEY\" && test -n \"$$AWS_REGION\" && test -n \"$$S3_BUCKET\" && test -d \"$$WATCH_FOLDER\"",
+        ]
+
   execution-layer:
     <<: *default-service
     build:
