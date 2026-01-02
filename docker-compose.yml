@@ -514,3 +514,28 @@ services:
       '
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  atan-importer:
+    <<: *default-service
+    image: igranetwork/atan-importer:latest
+    profiles: ["atan-importer"]
+    container_name: atan-importer
+    restart: unless-stopped
+    environment:
+      # AWS credentials (required)
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      # AWS S3 configuration (with defaults)
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-atan-import}
+      CDN_BASE_URL: ${CDN_BASE_URL:-https://cdn.example.com}
+      # Network and transaction configuration (required)
+      NETWORK: ${NETWORK}
+      TX_ID_PREFIX: ${TX_ID_PREFIX}
+      # Data directory path (required, must match NETWORK)
+      DATADIR: ${DATADIR}
+    volumes:
+      - kaspad_data:/app/data/
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "pgrep -f atan-importer > /dev/null || exit 1"]
