@@ -279,6 +279,11 @@ ENABLE_EVENT_LOGGING=true
 
 # Warm start from a specific block number (passes --igra-warm-start-block flag)
 WARM_START_BLOCK=200184247
+
+# ATAN auto-import URL (passes --atan-import-url flag, remote URLs only)
+# Auto-constructed from NETWORK and TX_ID_PREFIX by default
+# Override only if you need a custom remote URL:
+# ATAN_IMPORT_URL=https://custom-cdn.example.com/index.pb
 ```
 
 #### Adapter Stats

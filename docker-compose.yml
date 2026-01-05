@@ -105,6 +105,9 @@ services:
       - ENABLE_PERF_DIAGNOSTICS
       - ENABLE_EVENT_LOGGING
       - WARM_START_BLOCK
+      - ATAN_IMPORT_URL
+      - NETWORK
+      - TX_ID_PREFIX
       - RUST_LOG=info,kaspa_viaduct=trace,kaspa_igra_adapter=trace,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace
     entrypoint: |
       sh -c '
@@ -142,6 +145,12 @@ services:
       fi
       if [ -n "$$WARM_START_BLOCK" ]; then
         ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
+      fi
+      # Auto-construct ATAN import URL from NETWORK and TX_ID_PREFIX, allow override via env
+      if [ -n "$$ATAN_IMPORT_URL" ]; then
+        ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
+      else
+        ARGS="$$ARGS --atan-import-url=https://igra.b-cdn.net/$$NETWORK/$$TX_ID_PREFIX/index.pb"
       fi
       exec /app/kaspad $$ARGS
       '
