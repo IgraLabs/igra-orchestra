@@ -105,6 +105,10 @@ services:
       - ENABLE_PERF_DIAGNOSTICS
       - ENABLE_EVENT_LOGGING
       - WARM_START_BLOCK
+      - ATAN_IMPORT_URL
+      - CDN_BASE_URL
+      - NETWORK
+      - TX_ID_PREFIX
       - RUST_LOG=info,kaspa_viaduct=trace,kaspa_igra_adapter=trace,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace
     entrypoint: |
       sh -c '
@@ -142,6 +146,15 @@ services:
       fi
       if [ -n "$$WARM_START_BLOCK" ]; then
         ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
+      fi
+      # Auto-construct ATAN import URL from NETWORK and TX_ID_PREFIX, allow override via env
+      if [ -n "$$ATAN_IMPORT_URL" ]; then
+        ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
+      elif [ -n "$$NETWORK" ] && [ -n "$$TX_ID_PREFIX" ]; then
+        ARGS="$$ARGS --atan-import-url=https://dyehoijgeqfp8.cloudfront.net/$$NETWORK/$$TX_ID_PREFIX/index.pb"
+      else
+        echo "Error: NETWORK and TX_ID_PREFIX must be set for ATAN import" >&2
+        exit 1
       fi
       exec /app/kaspad $$ARGS
       '
@@ -515,11 +528,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  atan-importer:
+  atan-uploader:
     <<: *default-service
-    image: igranetwork/atan-importer:latest
-    profiles: ["atan-importer"]
-    container_name: atan-importer
+    image: igranetwork/atan-uploader:latest
+    profiles: ["atan-uploader"]
+    container_name: atan-uploader
     restart: unless-stopped
     environment:
       # AWS credentials (required)
@@ -528,7 +541,7 @@ services:
       # AWS S3 configuration (with defaults)
       AWS_REGION: ${AWS_REGION:-us-east-1}
       S3_BUCKET: ${S3_BUCKET:-atan-import}
-      CDN_BASE_URL: ${CDN_BASE_URL:-https://igra.b-cdn.net}
+      CDN_BASE_URL: ${CDN_BASE_URL:-https://dyehoijgeqfp8.cloudfront.net}
       # Network and transaction configuration (required)
       NETWORK: ${NETWORK}
       TX_ID_PREFIX: ${TX_ID_PREFIX}
@@ -538,4 +551,4 @@ services:
       - kaspad_data:/app/data/
     healthcheck:
       <<: *default-healthcheck
-      test: ["CMD-SHELL", "pgrep -f atan-importer > /dev/null || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f atan-uploader > /dev/null || exit 1"]
