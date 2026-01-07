@@ -14,8 +14,11 @@ networks:
   traefik-network:
 
 x-default-logging: &default-logging
-  driver: "${LOGGING_DRIVER:-syslog}"
+  driver: "${LOGGING_DRIVER:-json-file}"
   options:
+    max-size: "10g"
+    max-file: "100"
+    compress: "true"
     tag: "igra-orchestra-${NETWORK}/{{.Name}}/{{.ID}}"
 
 x-default-healthcheck: &default-healthcheck
@@ -46,7 +49,7 @@ x-rpc-provider-base: &rpc-provider-base
     dockerfile: ../../Dockerfile.rpc-provider
     ssh:
       - default
-  image: igranetwork/rpc-provider:v0.2.1
+  image: igranetwork/rpc-provider:latest
   environment: *rpc-provider-environment
   expose:
     - "8535"
@@ -68,22 +71,29 @@ x-kaswallet-base: &kaswallet-base
   build:
     context: build/repos/kaswallet
     dockerfile: ../../Dockerfile.kaswallet
-  image: igranetwork/kaswallet:v0.2.1
+  image: igranetwork/kaswallet:latest
   expose:
     - "8082"
   environment:
     - RUST_LOG
+    - NETWORK
+    - KASPAD_HOST
+    - KASPAD_GRPC_PORT
   extra_hosts:
     - "host.docker.internal:host-gateway"
-  command: >
-    --${NETWORK}
-    --logs-level=${RUST_LOG}
-    --keys /app/keys.json
-    --server grpc://${KASPAD_HOST}:${KASPAD_GRPC_PORT}
-    --listen 0.0.0.0:8082
+  entrypoint: |
+    sh -c '
+    ARGS="--logs-level=$${RUST_LOG} --keys /app/keys.json --server grpc://$${KASPAD_HOST}:$${KASPAD_GRPC_PORT} --listen 0.0.0.0:8082"
+    if [ "$${NETWORK}" = "mainnet" ]; then
+      ARGS="--enable-mainnet-pre-launch $$ARGS"
+    else
+      ARGS="--$${NETWORK} $$ARGS"
+    fi
+    exec /app/kaswallet-daemon $$ARGS
+    '
 
 services:
-# CORE SERVICES
+  # Core Services
   kaspad:
     <<: *default-service
     build:
@@ -92,14 +102,11 @@ services:
     image: kaspad
     profiles: ["kaspad"]
     container_name: kaspad
-    expose:
-      - "16210" # GRPC Server
-      - "16211" # P2P Server
-      - "17210" # WRPC (borsh) Server
-      - "18210" # WRPC (json) Server
     ports:
-      - "17210:17210"
-      - "16211:16211"
+      - "${KASPAD_GRPC_PORT}:${KASPAD_GRPC_PORT}"
+      - "${KASPAD_P2P_PORT}:${KASPAD_P2P_PORT}"
+      - "${KASPAD_BORSH_PORT}:${KASPAD_BORSH_PORT}"
+      - "${KASPAD_JSON_PORT}:${KASPAD_JSON_PORT}"
     environment:
       - KASPAD_ADD_PEER
       - ENABLE_PERF_DIAGNOSTICS
@@ -109,44 +116,54 @@ services:
       - CDN_BASE_URL
       - NETWORK
       - TX_ID_PREFIX
+      - IGRA_ENABLE
       - RUST_LOG=info,kaspa_viaduct=trace,kaspa_igra_adapter=trace,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace
     entrypoint: |
       sh -c '
-      ARGS="--${NETWORK} \
-        --disable-upnp \
-        --nodnsseed \
+      # Base kaspad arguments
+      ARGS="--disable-upnp \
         --rpclisten-borsh=0.0.0.0 \
         --rpclisten=0.0.0.0 \
         --rpclisten-json=0.0.0.0 \
         --listen=0.0.0.0 \
         --utxoindex \
-        --appdir=/app/data \
-        --igra-enable \
-        --atan-listen \
-        --atan-transaction-id-prefix=${TX_ID_PREFIX} \
-        --viaduct-start-daa-score=${IGRA_LAUNCH_DAA_SCORE} \
-        --igra-l1-reference-timestamp=${L1_REFERENCE_TIMESTAMP} \
-        --igra-l1-reference-daa-score=${L1_REFERENCE_DAA_SCORE} \
-        --igra-genesis-hash=${GENESIS_BLOCK_HASH} \
-        --igra-min-fee-per-gas-gwei=${MIN_PROTOCOL_FEE_PER_GAS_GWEI} \
-        --igra-jwt-path=/app/jwt.hex \
-        --igra-lock-script-pubkey=${IGRA_LOCK_SCRIPT_PUBKEY} \
-        --igra-entry-min-amount=${IGRA_ENTRY_MIN_AMOUNT} \
-        --igra-el-host=http://execution-layer"
+        --appdir=/app/data"
+
+      # Network-specific flags (mainnet is default, no flag needed)
+      if [ "${NETWORK}" != "mainnet" ]; then
+        ARGS="--${NETWORK} --nodnsseed $$ARGS"
+      fi
+
+      # IGRA-specific arguments
+      IGRA_ENABLED="$${IGRA_ENABLE:-true}"
+      if [ "$$IGRA_ENABLED" = "true" ]; then
+        ARGS="$$ARGS \
+          --igra-enable \
+          --atan-listen \
+          --atan-transaction-id-prefix=${TX_ID_PREFIX} \
+          --viaduct-start-daa-score=${IGRA_LAUNCH_DAA_SCORE} \
+          --igra-l1-reference-timestamp=${L1_REFERENCE_TIMESTAMP} \
+          --igra-l1-reference-daa-score=${L1_REFERENCE_DAA_SCORE} \
+          --igra-genesis-hash=${GENESIS_BLOCK_HASH} \
+          --igra-min-fee-per-gas-gwei=${MIN_PROTOCOL_FEE_PER_GAS_GWEI} \
+          --igra-jwt-path=/app/jwt.hex \
+          --igra-lock-script-pubkey=${IGRA_LOCK_SCRIPT_PUBKEY} \
+          --igra-entry-min-amount=${IGRA_ENTRY_MIN_AMOUNT} \
+          --igra-el-host=http://execution-layer"
+
+        # Optional IGRA diagnostics flags
+        [ "$$ENABLE_PERF_DIAGNOSTICS" = "true" ] && ARGS="$$ARGS --igra-enable-perf-diagnostics"
+        [ "$$ENABLE_EVENT_LOGGING" = "true" ] && ARGS="$$ARGS --igra-enable-event-logging"
+        [ -n "$$WARM_START_BLOCK" ] && ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
+      fi
+
+      # Peer configuration
       if [ -n "$$KASPAD_ADD_PEER" ]; then
         ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
       else
         ARGS="$$ARGS --enable-unsynced-mining"
       fi
-      if [ "$$ENABLE_PERF_DIAGNOSTICS" = "true" ]; then
-        ARGS="$$ARGS --igra-enable-perf-diagnostics"
-      fi
-      if [ "$$ENABLE_EVENT_LOGGING" = "true" ]; then
-        ARGS="$$ARGS --igra-enable-event-logging"
-      fi
-      if [ -n "$$WARM_START_BLOCK" ]; then
-        ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
-      fi
+
       # Auto-construct ATAN import URL from NETWORK and TX_ID_PREFIX, allow override via env
       if [ -n "$$ATAN_IMPORT_URL" ]; then
         ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
@@ -156,6 +173,7 @@ services:
         echo "Error: NETWORK and TX_ID_PREFIX must be set for ATAN import" >&2
         exit 1
       fi
+
       exec /app/kaspad $$ARGS
       '
     volumes:
@@ -164,20 +182,9 @@ services:
       - ./keys/jwt.hex:/app/jwt.hex:ro
     networks:
       - igra-network
-      - traefik-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.tcp.routers.kaspad-grpc.rule=HostSNI(`*`)"
-      - "traefik.tcp.routers.kaspad-grpc.entrypoints=kaspad_grpc"
-      - "traefik.tcp.routers.kaspad-grpc.service=kaspad-grpc-svc"
-      - "traefik.tcp.services.kaspad-grpc-svc.loadbalancer.server.port=16210"
-      - "traefik.tcp.routers.kaspad-json.rule=HostSNI(`*`)"
-      - "traefik.tcp.routers.kaspad-json.entrypoints=kaspad_json"
-      - "traefik.tcp.routers.kaspad-json.service=kaspad-json-svc"
-      - "traefik.tcp.services.kaspad-json-svc.loadbalancer.server.port=18210"
     healthcheck:
       <<: *default-healthcheck
-      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/kaspad/16210"]
+      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/kaspad/${KASPAD_GRPC_PORT}"]
 
   execution-layer:
     <<: *default-service
@@ -234,7 +241,7 @@ services:
       - POLL_INTERVAL=5
     restart: unless-stopped
 
-  # WORKER SERVICES
+  # Worker Services
   rpc-provider-0:
     <<: *rpc-provider-base
     profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
@@ -276,7 +283,6 @@ services:
           echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
         ]
 
-  # Additional workers
   rpc-provider-1:
     <<: *rpc-provider-base
     profiles: ["frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
@@ -316,7 +322,6 @@ services:
           echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
         ]
 
-  # Worker 3
   rpc-provider-2:
     <<: *rpc-provider-base
     profiles: ["frontend-w3", "frontend-w4", "frontend-w5"]
@@ -356,7 +361,6 @@ services:
           echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
         ]
 
-  # Worker 4
   rpc-provider-3:
     <<: *rpc-provider-base
     profiles: ["frontend-w4", "frontend-w5"]
@@ -396,7 +400,6 @@ services:
           echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
         ]
 
-  # Worker 5
   rpc-provider-4:
     <<: *rpc-provider-base
     profiles: ["frontend-w5"]
@@ -436,7 +439,7 @@ services:
           echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
         ]
 
-  # TRAEFIK SERVICE
+  # Traefik Service
   traefik:
     <<: *default-service
     image: traefik:v3
@@ -453,9 +456,6 @@ services:
       - "--entrypoints.explorer_http.address=:8008"
       - "--entrypoints.explorer_ws.address=:8001"
       - "--entrypoints.explorer_rest.address=:8010"
-      - "--entrypoints.kaspad_grpc.address=:16210"
-      - "--entrypoints.kaspad_borsh.address=:17210"
-      - "--entrypoints.kaspad_json.address=:18210"
       - "--entrypoints.el_stats.address=:9001"
       - "--log.level=DEBUG"
       - "--certificatesresolvers.myresolver.acme.email=${IGRA_ORCHESTRA_DOMAIN_EMAIL}"
@@ -469,7 +469,6 @@ services:
       - "8010:8010"
       - "8545:8545"
       - "9001:9001"
-      - "17611:17210"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./config/traefik:/etc/traefik
@@ -501,7 +500,6 @@ services:
       test: ["CMD", "wget", "--spider", "http://localhost:8080"]
       timeout: 5s
 
-
   # Miscellaneous Services
   kaspa-miner:
     <<: *default-service
@@ -521,7 +519,7 @@ services:
       exec /app/kaspa-miner
       --mining-address ${MINING_ADDRESS}
       --kaspad-address $$KASPAD
-      --port 16210
+      --port ${KASPAD_GRPC_PORT}
       --threads ${MINING_THREADS}
       --mine-when-not-synced
       '

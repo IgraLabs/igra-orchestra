@@ -266,11 +266,15 @@ If you've configured the `json-file` driver (e.g., on macOS), use standard `dock
 
 The syslog tagging format allows for easy filtering by service name, making it possible to debug specific components of the stack. If using the `json-file` driver, standard `docker logs` filtering applies.
 
-### Kaspad Diagnostics
+### Kaspad Configuration
 
-Enable diagnostic features by setting environment variables in your `.env` file:
+Control IGRA adapter functionality in your `.env` file:
 
 ```bash
+# Enable/disable IGRA adapter (default: true)
+# Set to false for faster initial kaspad sync without IGRA overhead
+IGRA_ENABLE=true
+
 # Enable performance diagnostics (passes --igra-enable-perf-diagnostics flag)
 ENABLE_PERF_DIAGNOSTICS=true
 
@@ -307,9 +311,10 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser kaspad watc
 
 ## Documentation
 
-- [Quick Setup with Pre-built Images](docs/quick-setup-prebuilt.md) - Simplified deployment guide
-- [Docker Image Management](docs/docker-image-management.md) - Building and publishing Docker images
-- [Multi-Platform Builds](docs/multi-platform-quick.md) - Cross-platform build instructions
+- [Quick Setup with Pre-built Images](doc/quick-setup-prebuilt.md) - Simplified testnet deployment guide
+- [Mainnet Deployment Guide](doc/quick-setup-mainnet.md) - Production mainnet deployment
+- [Kaspa Wallet Guide](doc/kaspa-wallet.md) - Wallet setup for all networks
+- [Multi-Platform Builds](doc/multi-platform-quick.md) - Cross-platform build instructions
 
 ## Troubleshooting
 
