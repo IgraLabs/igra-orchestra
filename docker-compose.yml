@@ -3,6 +3,7 @@ name: igra-orchestra-${NETWORK}
 volumes:
   kaspad_data:
   traefik_certs:
+  reth_data:
   reth_ipc:
     driver: local
     driver_opts:
@@ -211,6 +212,7 @@ services:
       ONE_TIME_ADDRESS: ${EL_ONE_TIME_ADDRESS}
       IGRA_LAUNCH_DAA_SCORE: ${IGRA_LAUNCH_DAA_SCORE}
     volumes:
+      - reth_data:/root/reth/data/
       - ./keys/jwt.hex:/root/reth/jwt.hex
       - reth_ipc:/root/reth/socket
       - ./build/repos/reth-private/igra/genesis.template.json:/root/reth/genesis.template.json
