@@ -131,8 +131,8 @@ services:
         --appdir=/app/data"
 
       # Network-specific flags (mainnet is default, no flag needed)
-      if [ "${NETWORK}" != "mainnet" ]; then
-        ARGS="--${NETWORK} --nodnsseed $$ARGS"
+      if [ "$${NETWORK}" != "mainnet" ]; then
+        ARGS="--$${NETWORK} --nodnsseed $$ARGS"
       fi
 
       # IGRA-specific arguments
@@ -156,6 +156,16 @@ services:
         [ "$$ENABLE_PERF_DIAGNOSTICS" = "true" ] && ARGS="$$ARGS --igra-enable-perf-diagnostics"
         [ "$$ENABLE_EVENT_LOGGING" = "true" ] && ARGS="$$ARGS --igra-enable-event-logging"
         [ -n "$$WARM_START_BLOCK" ] && ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
+
+        # Auto-construct ATAN import URL from NETWORK and TX_ID_PREFIX, allow override via env
+        if [ -n "$$ATAN_IMPORT_URL" ]; then
+          ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
+        elif [ -n "$$NETWORK" ] && [ -n "$$TX_ID_PREFIX" ]; then
+          ARGS="$$ARGS --atan-import-url=https://dyehoijgeqfp8.cloudfront.net/$$NETWORK/$$TX_ID_PREFIX/index.pb"
+        else
+          echo "Error: NETWORK and TX_ID_PREFIX must be set for ATAN import" >&2
+          exit 1
+        fi
       fi
 
       # Peer configuration
@@ -163,16 +173,6 @@ services:
         ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
       else
         ARGS="$$ARGS --enable-unsynced-mining"
-      fi
-
-      # Auto-construct ATAN import URL from NETWORK and TX_ID_PREFIX, allow override via env
-      if [ -n "$$ATAN_IMPORT_URL" ]; then
-        ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
-      elif [ -n "$$NETWORK" ] && [ -n "$$TX_ID_PREFIX" ]; then
-        ARGS="$$ARGS --atan-import-url=https://dyehoijgeqfp8.cloudfront.net/$$NETWORK/$$TX_ID_PREFIX/index.pb"
-      else
-        echo "Error: NETWORK and TX_ID_PREFIX must be set for ATAN import" >&2
-        exit 1
       fi
 
       exec /app/kaspad $$ARGS
