@@ -66,6 +66,16 @@ x-rpc-provider-base: &rpc-provider-base
     - "traefik.http.routers.rpc0.tls.certresolver=myresolver"
     - "traefik.http.routers.rpc0.middlewares=cors"
     - "traefik.http.services.rpc0.loadbalancer.server.port=8535"
+    # Health check router - HTTPS (port 443) for load balancer health checks
+    - "traefik.http.routers.health.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`) && PathPrefix(`/health`) && Method(`GET`)"
+    - "traefik.http.routers.health.entrypoints=websecure"
+    - "traefik.http.routers.health.tls=true"
+    - "traefik.http.routers.health.tls.certresolver=myresolver"
+    - "traefik.http.routers.health.service=rpc0"
+    # Health check router - HTTP (port 80) - bypasses HTTP-to-HTTPS redirect for load balancers
+    - "traefik.http.routers.health-http.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`) && PathPrefix(`/health`) && Method(`GET`)"
+    - "traefik.http.routers.health-http.entrypoints=web"
+    - "traefik.http.routers.health-http.service=rpc0"
 
 x-kaswallet-base: &kaswallet-base
   <<: *default-service
