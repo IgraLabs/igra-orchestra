@@ -1,12 +1,41 @@
 #!/bin/bash
-# last_blocks.sh - Get last 10 blocks with DAA and timestamp
+# kaspa-last-blocks.sh - Get last 10 blocks with DAA and timestamp
+
+# Check for websocat, install via cargo if missing
+if ! command -v websocat &> /dev/null; then
+    echo "websocat not found. Installing via cargo..."
+    if ! command -v cargo &> /dev/null; then
+        echo "ERROR: cargo not found. Install Rust or manually install websocat."
+        exit 1
+    fi
+    if ! cargo install websocat; then
+        echo "ERROR: Failed to install websocat via cargo."
+        exit 1
+    fi
+fi
+
+# Source .env if it exists to get KASPAD_JSON_PORT
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../../.env" ]; then
+    set -a
+    source "$SCRIPT_DIR/../../.env"
+    set +a
+fi
+
+# Default to mainnet port if not set
+KASPAD_JSON_PORT=${KASPAD_JSON_PORT:-18110}
 
 # Detect if kaspad is in Docker and get its IP
 if docker ps --format '{{.Names}}' | grep -q '^kaspad$'; then
-    KASPAD_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' kaspad)
-    WS_URL="ws://${KASPAD_IP}:18110"
+    KASPAD_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' kaspad 2>/dev/null)
+    if [ -z "$KASPAD_IP" ]; then
+        echo "WARNING: Could not get kaspad container IP, falling back to localhost"
+        WS_URL="ws://127.0.0.1:${KASPAD_JSON_PORT}"
+    else
+        WS_URL="ws://${KASPAD_IP}:${KASPAD_JSON_PORT}"
+    fi
 else
-    WS_URL="ws://127.0.0.1:18110"
+    WS_URL="ws://127.0.0.1:${KASPAD_JSON_PORT}"
 fi
 
 # Function to make wRPC call
