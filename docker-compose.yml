@@ -47,7 +47,7 @@ x-rpc-provider-base: &rpc-provider-base
   <<: *default-service
   build:
     context: build/repos/igra-rpc-provider
-    dockerfile: ../../Dockerfile.rpc-provider
+    dockerfile: Dockerfile
     ssh:
       - default
   image: igranetwork/rpc-provider:latest
@@ -81,7 +81,9 @@ x-kaswallet-base: &kaswallet-base
   <<: *default-service
   build:
     context: build/repos/kaswallet
-    dockerfile: ../../Dockerfile.kaswallet
+    dockerfile: Dockerfile
+    ssh:
+      - default
   image: igranetwork/kaswallet:latest
   expose:
     - "8082"
@@ -109,7 +111,9 @@ services:
     <<: *default-service
     build:
       context: build/repos/rusty-kaspa-private
-      dockerfile: ../../Dockerfile.kaspad
+      dockerfile: build/Dockerfile.kaspad
+      ssh:
+        - default
     image: kaspad
     profiles: ["kaspad"]
     container_name: kaspad
@@ -138,6 +142,7 @@ services:
         --rpclisten-json=0.0.0.0 \
         --listen=0.0.0.0 \
         --utxoindex \
+        --logdir=/app/logs \
         --appdir=/app/data"
 
       # Network-specific flags (mainnet is default, no flag needed)
@@ -201,12 +206,16 @@ services:
     <<: *default-service
     build:
       context: build/repos/reth-private
-      dockerfile: ../../Dockerfile.reth
+      dockerfile: Dockerfile
+      ssh:
+        - default
+      args:
+        BUILD_PROFILE: release
     image: reth
     restart: "no"
     container_name: execution-layer
     profiles: ["execution-layer"]
-    entrypoint: /root/reth/run-igra-el.sh
+    entrypoint: /app/run-igra-el.sh
     ports:
       - "127.0.0.1:9545:8545"  # open 8545 on localhost for blockscout
       - "127.0.0.1:9546:8546"  # open 8546 on localhost for blockscout
@@ -222,11 +231,11 @@ services:
       ONE_TIME_ADDRESS: ${EL_ONE_TIME_ADDRESS}
       IGRA_LAUNCH_DAA_SCORE: ${IGRA_LAUNCH_DAA_SCORE}
     volumes:
-      - reth_data:/root/reth/data/
-      - ./keys/jwt.hex:/root/reth/jwt.hex
-      - reth_ipc:/root/reth/socket
-      - ./build/repos/reth-private/igra/genesis.template.json:/root/reth/genesis.template.json
-      - ./build/repos/reth-private/igra/run-igra-el.sh:/root/reth/run-igra-el.sh
+      - reth_data:/app/data/
+      - ./keys/jwt.hex:/app/jwt.hex
+      - reth_ipc:/app/socket
+      - ./build/repos/reth-private/igra/genesis.template.json:/app/genesis.template.json
+      - ./build/repos/reth-private/igra/run-igra-el.sh:/app/run-igra-el.sh
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.el_stats.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
@@ -237,7 +246,7 @@ services:
       - "traefik.http.services.el_stats_svc.loadbalancer.server.port=9001"
     healthcheck:
       <<: *default-healthcheck
-      test: ["CMD", "bash", "-c", "test -S /root/reth/socket/auth.ipc"]
+      test: ["CMD", "bash", "-c", "test -S /app/socket/auth.ipc"]
 
   node-health-check-client:
     image: igranetwork/node-health-check-client:v0.2.2
