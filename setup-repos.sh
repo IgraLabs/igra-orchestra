@@ -35,11 +35,11 @@ fi
 
 # Function for timestamped log messages
 function log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $@"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
 }
 
 function panic() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $@" >&2
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
     echo >&2
     echo "Try './setup-repos.sh --help'" >&2
     exit 1
@@ -110,7 +110,7 @@ function configure_repo() {
 }
 
 if [[ $# -gt 0 ]]; then
-    panic "Unexpected parameter(s) $@"
+    panic "Unexpected parameter(s) $*"
 fi
 
 # Default branches
@@ -195,16 +195,23 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
     log ""
     log "Pulling pre-built images from Docker Hub..."
 
-    # Pull and tag images
-    services=("kaspad" "execution-layer" "rpc-provider" "kaswallet")
-    for service in "${services[@]}"; do
-        log "Pulling igranetwork/${service}:latest..."
-        if docker pull "igranetwork/${service}:latest"; then
-            log "Tagging as ${service}..."
-            docker tag "igranetwork/${service}:latest" "${service}"
-            log "✓ ${service} ready"
+    # Pull and tag images (versions must match docker-compose.yml)
+    # Format: "image_name:version:local_tag"
+    images=(
+        "kaspad:2.0.1:kaspad"
+        "reth:2.0.2:execution-layer"
+        "rpc-provider:2.0.0:rpc-provider"
+        "kaswallet:2.0.0:kaswallet"
+    )
+    for entry in "${images[@]}"; do
+        IFS=':' read -r image version local_tag <<< "$entry"
+        log "Pulling igranetwork/${image}:${version}..."
+        if docker pull "igranetwork/${image}:${version}"; then
+            log "Tagging as ${local_tag}..."
+            docker tag "igranetwork/${image}:${version}" "${local_tag}"
+            log "✓ ${local_tag} ready"
         else
-            panic "Failed to pull igranetwork/${service}:latest. Make sure the image exists on Docker Hub."
+            panic "Failed to pull igranetwork/${image}:${version}. Make sure the image exists on Docker Hub."
         fi
     done
 

@@ -17,8 +17,8 @@ networks:
 x-default-logging: &default-logging
   driver: "${LOGGING_DRIVER:-json-file}"
   options:
-    max-size: "10g"
-    max-file: "100"
+    max-size: "1g"
+    max-file: "10"
     compress: "true"
     tag: "igra-orchestra-${NETWORK}/{{.Name}}/{{.ID}}"
 
@@ -43,14 +43,10 @@ x-rpc-provider-environment: &rpc-provider-environment
   MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
   TX_ID_PREFIX: ${TX_ID_PREFIX}
 
-x-rpc-provider-base: &rpc-provider-base
+# Runtime config (no build) - for replica services
+x-rpc-provider-runtime: &rpc-provider-runtime
   <<: *default-service
-  build:
-    context: build/repos/igra-rpc-provider
-    dockerfile: Dockerfile
-    ssh:
-      - default
-  image: igranetwork/rpc-provider:latest
+  image: igranetwork/rpc-provider:2.0.0
   environment: *rpc-provider-environment
   expose:
     - "8535"
@@ -77,14 +73,19 @@ x-rpc-provider-base: &rpc-provider-base
     - "traefik.http.routers.health-http.entrypoints=web"
     - "traefik.http.routers.health-http.service=rpc0"
 
-x-kaswallet-base: &kaswallet-base
-  <<: *default-service
+# Build config (extends runtime) - for primary service only
+x-rpc-provider-build: &rpc-provider-build
+  <<: *rpc-provider-runtime
   build:
-    context: build/repos/kaswallet
+    context: build/repos/igra-rpc-provider
     dockerfile: Dockerfile
     ssh:
       - default
-  image: igranetwork/kaswallet:latest
+
+# Runtime config (no build) - for replica services
+x-kaswallet-runtime: &kaswallet-runtime
+  <<: *default-service
+  image: igranetwork/kaswallet:2.0.0
   expose:
     - "8082"
   environment:
@@ -105,6 +106,15 @@ x-kaswallet-base: &kaswallet-base
     exec /app/kaswallet-daemon $$ARGS
     '
 
+# Build config (extends runtime) - for primary service only
+x-kaswallet-build: &kaswallet-build
+  <<: *kaswallet-runtime
+  build:
+    context: build/repos/kaswallet
+    dockerfile: Dockerfile
+    ssh:
+      - default
+
 services:
   # Core Services
   kaspad:
@@ -114,8 +124,8 @@ services:
       dockerfile: build/Dockerfile.kaspad
       ssh:
         - default
-    image: kaspad
-    profiles: ["kaspad"]
+    image: igranetwork/kaspad:2.0.1
+    profiles: ["kaspad", "backend"]
     container_name: kaspad
     ports:
       - "${KASPAD_GRPC_PORT}:${KASPAD_GRPC_PORT}"
@@ -211,10 +221,10 @@ services:
         - default
       args:
         BUILD_PROFILE: release
-    image: reth
+    image: igranetwork/reth:2.0.2
     restart: "no"
     container_name: execution-layer
-    profiles: ["execution-layer"]
+    profiles: ["execution-layer", "backend"]
     entrypoint: /app/run-igra-el.sh
     ports:
       - "127.0.0.1:9545:8545"  # open 8545 on localhost for blockscout
@@ -234,8 +244,6 @@ services:
       - reth_data:/app/data/
       - ./keys/jwt.hex:/app/jwt.hex
       - reth_ipc:/app/socket
-      - ./build/repos/reth-private/igra/genesis.template.json:/app/genesis.template.json
-      - ./build/repos/reth-private/igra/run-igra-el.sh:/app/run-igra-el.sh
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.el_stats.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
@@ -249,22 +257,22 @@ services:
       test: ["CMD", "bash", "-c", "test -S /app/socket/auth.ipc"]
 
   node-health-check-client:
-    image: igranetwork/node-health-check-client:v0.2.2
-    profiles: ["node-health-check-client"]
+    image: igranetwork/node-health-check-client:2.0.1
+    profiles: ["node-health-check-client", "backend"]
     container_name: node-health-check-client
     networks:
       - igra-network
     environment:
       - NODE_RPC_URL=http://execution-layer:8545
-      - MONITOR_URL=http://65.108.195.238:8081
-      - NODE_ID=igra-orchestra-${NODE_ID}
+      - MONITOR_URL=http://${NODE_HEALTH_CHECK_URL}:8081
+      - NODE_ID=${NODE_ID}
       - API_KEY=${HEALTH_CHECK_API_KEY}
       - POLL_INTERVAL=5
     restart: unless-stopped
 
   # Worker Services
   rpc-provider-0:
-    <<: *rpc-provider-base
+    <<: *rpc-provider-build
     profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
     container_name: rpc-provider-0
     environment:
@@ -287,7 +295,7 @@ services:
         condition: service_healthy
 
   kaswallet-0:
-    <<: *kaswallet-base
+    <<: *kaswallet-build
     profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
     container_name: kaswallet-0
     ports:
@@ -305,7 +313,7 @@ services:
         ]
 
   rpc-provider-1:
-    <<: *rpc-provider-base
+    <<: *rpc-provider-runtime
     profiles: ["frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
     container_name: rpc-provider-1
     environment:
@@ -328,7 +336,7 @@ services:
         condition: service_healthy
 
   kaswallet-1:
-    <<: *kaswallet-base
+    <<: *kaswallet-runtime
     profiles: ["frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
     container_name: kaswallet-1
     volumes:
@@ -344,7 +352,7 @@ services:
         ]
 
   rpc-provider-2:
-    <<: *rpc-provider-base
+    <<: *rpc-provider-runtime
     profiles: ["frontend-w3", "frontend-w4", "frontend-w5"]
     container_name: rpc-provider-2
     environment:
@@ -367,7 +375,7 @@ services:
         condition: service_healthy
 
   kaswallet-2:
-    <<: *kaswallet-base
+    <<: *kaswallet-runtime
     profiles: ["frontend-w3", "frontend-w4", "frontend-w5"]
     container_name: kaswallet-2
     volumes:
@@ -383,7 +391,7 @@ services:
         ]
 
   rpc-provider-3:
-    <<: *rpc-provider-base
+    <<: *rpc-provider-runtime
     profiles: ["frontend-w4", "frontend-w5"]
     container_name: rpc-provider-3
     environment:
@@ -406,7 +414,7 @@ services:
         condition: service_healthy
 
   kaswallet-3:
-    <<: *kaswallet-base
+    <<: *kaswallet-runtime
     profiles: ["frontend-w4", "frontend-w5"]
     container_name: kaswallet-3
     volumes:
@@ -422,7 +430,7 @@ services:
         ]
 
   rpc-provider-4:
-    <<: *rpc-provider-base
+    <<: *rpc-provider-runtime
     profiles: ["frontend-w5"]
     container_name: rpc-provider-4
     environment:
@@ -445,7 +453,7 @@ services:
         condition: service_healthy
 
   kaswallet-4:
-    <<: *kaswallet-base
+    <<: *kaswallet-runtime
     profiles: ["frontend-w5"]
     container_name: kaswallet-4
     volumes:
@@ -549,7 +557,7 @@ services:
 
   atan-uploader:
     <<: *default-service
-    image: igranetwork/atan-uploader:latest
+    image: igranetwork/atan-uploader:2.0.1
     profiles: ["atan-uploader"]
     container_name: atan-uploader
     restart: unless-stopped

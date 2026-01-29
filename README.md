@@ -311,10 +311,8 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser kaspad watc
 
 ## Documentation
 
-- [Quick Setup with Pre-built Images](doc/quick-setup-prebuilt.md) - Simplified testnet deployment guide
-- [Mainnet Deployment Guide](doc/quick-setup-mainnet.md) - Production mainnet deployment
+- [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md) - Public testnet deployment with pre-built images
 - [Kaspa Wallet Guide](doc/kaspa-wallet.md) - Wallet setup for all networks
-- [Multi-Platform Builds](doc/multi-platform-quick.md) - Cross-platform build instructions
 
 ## Troubleshooting
 
