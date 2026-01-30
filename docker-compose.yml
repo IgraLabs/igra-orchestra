@@ -137,6 +137,7 @@ services:
       - ENABLE_PERF_DIAGNOSTICS
       - ENABLE_EVENT_LOGGING
       - WARM_START_BLOCK
+      - IGRA_SKIP_LOCK_SCRIPT_CHECK
       - ATAN_IMPORT_URL
       - CDN_BASE_URL
       - NETWORK
@@ -181,6 +182,7 @@ services:
         [ "$$ENABLE_PERF_DIAGNOSTICS" = "true" ] && ARGS="$$ARGS --igra-enable-perf-diagnostics"
         [ "$$ENABLE_EVENT_LOGGING" = "true" ] && ARGS="$$ARGS --igra-enable-event-logging"
         [ -n "$$WARM_START_BLOCK" ] && ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
+        [ "$$IGRA_SKIP_LOCK_SCRIPT_CHECK" = "true" ] && ARGS="$$ARGS --igra-skip-lock-script-check"
 
         # Auto-construct ATAN import URL from NETWORK and TX_ID_PREFIX, allow override via env
         if [ -n "$$ATAN_IMPORT_URL" ]; then
