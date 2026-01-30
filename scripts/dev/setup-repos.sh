@@ -3,7 +3,7 @@
 
 # Function to print help information
 function print_help() {
-    echo "Usage: ./setup-repos.sh"
+    echo "Usage: ./scripts/dev/setup-repos.sh"
     echo ""
     echo "Description:"
     echo "  This script clones and configures repositories for Igra Orchestra."
@@ -18,10 +18,10 @@ function print_help() {
     echo "    KASPA_MINER_BRANCH"
     echo ""
     echo "Examples:"
-    echo "  ./setup-repos.sh"
+    echo "  ./scripts/dev/setup-repos.sh"
     echo ""
     echo "  # Example with environment variables:"
-    echo "  KASWALLET_BRANCH=my-branch ./setup-repos.sh"
+    echo "  KASWALLET_BRANCH=my-branch ./scripts/dev/setup-repos.sh"
     echo ""
     echo "Notes:"
     echo "  - Ensure you have the required permissions and SSH key set up to clone from private repositories."
@@ -41,19 +41,21 @@ function log() {
 function panic() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
     echo >&2
-    echo "Try './setup-repos.sh --help'" >&2
+    echo "Try './scripts/dev/setup-repos.sh --help'" >&2
     exit 1
 }
 
-# Original working directory
-SCRIPT_DIR="$(pwd)"
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Project root is two levels up from scripts/dev/
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Load environment variables from .env file if it exists
-if [[ -f "$SCRIPT_DIR/.env" ]]; then
+if [[ -f "$PROJECT_DIR/.env" ]]; then
     log "Loading environment variables from .env file"
     set -a # Automatically export all variables
     # shellcheck source=/dev/null
-    source "$SCRIPT_DIR/.env"
+    source "$PROJECT_DIR/.env"
     set +a
 else
     log ".env file not found, using default branch settings or environment variables."
@@ -66,16 +68,19 @@ USE_PREBUILT_IMAGES=${USE_PREBUILT_IMAGES:-false}
 function clone_repo() {
     local repo_url=$1
     # Extract, e.g. kaspa-miner from git@github.com:elichai/kaspa-miner.git
-    local folder=$(basename -s .git "$repo_url")
+    local folder
+    folder=$(basename -s .git "$repo_url")
 
     log "Setting up $folder repository"
-    if [[ -d "$SCRIPT_DIR/build/repos/$folder" ]]; then
+    if [[ -d "$PROJECT_DIR/build/repos/$folder" ]]; then
         log "$folder repository already exists, skipping clone"
     else
         log "Cloning $folder repository..."
-        git clone $repo_url "$SCRIPT_DIR/build/repos/$folder" \
-            && log "Successfully cloned $folder repository" \
-            || panic "Failed to clone $folder repository"
+        if git clone "$repo_url" "$PROJECT_DIR/build/repos/$folder"; then
+            log "Successfully cloned $folder repository"
+        else
+            panic "Failed to clone $folder repository"
+        fi
     fi
 }
 
@@ -86,8 +91,9 @@ function configure_repo() {
     local branch=$3
 
     log "Configuring $repo_name repository"
-    local folder=$(basename -s .git "$repo_url")
-    cd "$SCRIPT_DIR/build/repos/$folder"
+    local folder
+    folder=$(basename -s .git "$repo_url")
+    cd "$PROJECT_DIR/build/repos/$folder" || panic "Failed to cd into $folder"
     log "Current directory: $(pwd)"
 
     log "Fetching latest changes..."
@@ -95,7 +101,7 @@ function configure_repo() {
         || panic "Failed to fetch changes for $repo_name"
 
     log "Checking out branch: $branch"
-    git checkout $branch \
+    git checkout "$branch" \
         || panic "Failed to checkout branch $branch for $repo_name"
 
     log "Pulling latest changes..."
@@ -105,8 +111,8 @@ function configure_repo() {
     log "Current branch info for $repo_name:"
     git --no-pager branch -v
 
-    # Return to the script directory
-    cd "$SCRIPT_DIR"
+    # Return to the project directory
+    cd "$PROJECT_DIR" || panic "Failed to cd back to project directory"
 }
 
 if [[ $# -gt 0 ]]; then

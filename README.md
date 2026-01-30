@@ -12,7 +12,7 @@ A Docker Compose-based development environment for IGRA Orchestra components.
 
 ## Repository Structure
 
-The `setup-repos.sh` script clones the necessary repositories into the `build/repos/` directory.
+The `./scripts/dev/setup-repos.sh` script clones the necessary repositories into the `build/repos/` directory.
 
 **Repositories:**
 
@@ -21,9 +21,9 @@ The `setup-repos.sh` script clones the necessary repositories into the `build/re
 *   `build/repos/kaswallet` - Wallet service for relaying transactions (repo: `IgraLabs/kaswallet`)
 *   `build/repos/rusty-kaspa-private` - Contains the Kaspad node (repo: `IgraLabs/rusty-kaspa-private`)
 
-The `setup-repos.sh` script also clones the `kaspa-miner` repository (repo: `elichai/kaspa-miner`) when building from source.
+The `./scripts/dev/setup-repos.sh` script also clones the `kaspa-miner` repository (repo: `elichai/kaspa-miner`) when building from source.
 
-Ensure these repositories are present before running the Docker Compose environment. The `setup-repos.sh` script handles cloning and configuring the correct branches.
+Ensure these repositories are present before running the Docker Compose environment. The `./scripts/dev/setup-repos.sh` script handles cloning and configuring the correct branches.
 
 ## Deployment Modes
 
@@ -56,7 +56,7 @@ cp .env.example .env
 
 # 2. Setup repositories and pull images
 # This will clone Kaspad and kaspa-miner and automatically pull/tag pre-built images
-./setup-repos.sh
+./scripts/dev/setup-repos.sh
 
 # 3. Create JWT secret
 openssl rand -hex 32 > ./keys/jwt.hex
@@ -75,7 +75,7 @@ cp .env.example .env
 # Keep USE_PREBUILT_IMAGES=false (default)
 
 # 2. Setup all repositories (including proprietary)
-./setup-repos.sh
+./scripts/dev/setup-repos.sh
 
 # 3. Create JWT secret
 openssl rand -hex 32 > ./keys/jwt.hex
@@ -121,11 +121,11 @@ Follow these steps before the first run:
 
 2.  **Clone and setup the repositories:**
     Run the setup script. It prioritizes branch names in the following order:
-    1.  Environment variables passed directly to the script (e.g., `KASWALLET_BRANCH=my-branch ./setup-repos.sh`).
+    1.  Environment variables passed directly to the script (e.g., `KASWALLET_BRANCH=my-branch ./scripts/dev/setup-repos.sh`).
     2.  Variables defined in the `.env` file (if it exists).
-    3.  Default values hardcoded in the `setup-repos.sh` script.
+    3.  Default values hardcoded in the `./scripts/dev/setup-repos.sh` script.
     ```bash
-    ./setup-repos.sh
+    ./scripts/dev/setup-repos.sh
     ```
 
 3.  **Create the JWT secret:**
@@ -320,7 +320,7 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser kaspad watc
 
 1. **Container name conflicts**: Stop existing containers before starting new ones
 2. **Missing worker keys**: Ensure required key files exist in the correct format
-3. **Missing repositories**: Run `setup-repos.sh` to clone the required repositories
+3. **Missing repositories**: Run `./scripts/dev/setup-repos.sh` to clone the required repositories
 4. **Permission issues**: Check data directory permissions
 5. **Profile dependencies**: Make sure to start profiles in the correct order (kaspad → explorer → workers)
 6. **Missing JWT file**: Ensure you've created the JWT file before starting services
