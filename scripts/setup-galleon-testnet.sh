@@ -12,8 +12,8 @@ set -euo pipefail
 # --- Configuration ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-KASWALLET_IMAGE="igranetwork/kaswallet:2.0.0"
-KASPAD_IMAGE="igranetwork/kaspad:2.0.1"
+KASWALLET_IMAGE="igranetwork/kaswallet:2.0.1"
+KASPAD_IMAGE="igranetwork/kaspad:2.0.3"
 
 # --- Helper Functions ---
 

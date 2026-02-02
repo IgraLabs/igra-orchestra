@@ -92,7 +92,7 @@ Check hash field: it should match specified in the .env file.
 
 Once kaspad is synced, you can monitor IGRA adapter activity:
 ```bash
-docker logs -f -n 10 kaspad | docker run --rm -i --entrypoint /app/adapter-stats igranetwork/kaspad:2.0.1
+docker logs -f -n 10 kaspad | docker run --rm -i --entrypoint /app/adapter-stats igranetwork/kaspad:2.0.3
 ```
 
 After kaspad sync, you should be able to see the progress of the building blocks:
@@ -157,7 +157,7 @@ Generate keys for each worker (0-4):
 ```bash
 for i in {0..4}; do
   docker run --rm -it -v $(pwd)/keys:/keys --entrypoint /app/kaswallet-create \
-    igranetwork/kaswallet:2.0.0 --testnet -k /keys/keys.kaswallet-$i.json
+    igranetwork/kaswallet:2.0.1 --testnet -k /keys/keys.kaswallet-$i.json
 done
 ```
 

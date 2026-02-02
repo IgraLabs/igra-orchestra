@@ -46,7 +46,7 @@ x-rpc-provider-environment: &rpc-provider-environment
 # Runtime config (no build) - for replica services
 x-rpc-provider-runtime: &rpc-provider-runtime
   <<: *default-service
-  image: igranetwork/rpc-provider:2.0.0
+  image: igranetwork/rpc-provider:2.0.1
   environment: *rpc-provider-environment
   expose:
     - "8535"
@@ -85,7 +85,7 @@ x-rpc-provider-build: &rpc-provider-build
 # Runtime config (no build) - for replica services
 x-kaswallet-runtime: &kaswallet-runtime
   <<: *default-service
-  image: igranetwork/kaswallet:2.0.0
+  image: igranetwork/kaswallet:2.0.1
   expose:
     - "8082"
   environment:
@@ -124,7 +124,7 @@ services:
       dockerfile: build/Dockerfile.kaspad
       ssh:
         - default
-    image: igranetwork/kaspad:2.0.1
+    image: igranetwork/kaspad:2.0.3
     profiles: ["kaspad", "backend"]
     container_name: kaspad
     ports:
@@ -223,7 +223,7 @@ services:
         - default
       args:
         BUILD_PROFILE: release
-    image: igranetwork/reth:2.0.2
+    image: igranetwork/reth:2.0.3
     restart: "no"
     container_name: execution-layer
     profiles: ["execution-layer", "backend"]
@@ -259,7 +259,7 @@ services:
       test: ["CMD", "bash", "-c", "test -S /app/socket/auth.ipc"]
 
   node-health-check-client:
-    image: igranetwork/node-health-check-client:2.0.1
+    image: igranetwork/node-health-check-client:2.0.2
     profiles: ["node-health-check-client", "backend"]
     container_name: node-health-check-client
     networks:
