@@ -1,4 +1,4 @@
-## Fix: Docker Volume Permission Denied (Non-Root User)
+# Fix: Docker Volume Permission Denied (Non-Root User)
 
 Symptom:
 - Container logs: `Permission denied` errors when writing to `/app/data/` or `/app/logs/`

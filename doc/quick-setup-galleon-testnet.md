@@ -2,7 +2,7 @@
 
 This guide covers deploying IGRA Orchestra on the Galleon public testnet with pre-built Docker images.
 
-#### Quick Start (Automated)
+## Quick Start (Automated)
 
 For a guided interactive setup, run:
 ```bash
@@ -10,18 +10,18 @@ For a guided interactive setup, run:
 ```
 This script handles all configuration, key generation, and service startup automatically.
 
-#### Manual Setup
+## Manual Setup
 
 If the automated script above doesn't work for your environment, follow these manual steps.
 
-#### Prerequisites
+## Prerequisites
 
 - Docker and Docker Compose installed
 - AMD64 or ARM64 machine
 - 32GB+ RAM recommended
 - Git and SSH access to github.com
 
-#### Galleon Testnet Chain Parameters
+## Galleon Testnet Chain Parameters
 
 | Parameter | Value |
 |-----------|-------|
@@ -39,7 +39,7 @@ If the automated script above doesn't work for your environment, follow these ma
 | gRPC Port | 16210 |
 | Bootstrap Peer | 65.109.78.124 |
 
-#### Steps
+## Steps
 
 1) Clone the repository
 
@@ -216,7 +216,7 @@ Check its logs:
 docker compose logs -f node-health-check-client
 ```
 
-#### Troubleshooting
+## Troubleshooting
 
 **Kaspad not syncing:**
 - Check network connectivity
@@ -233,7 +233,7 @@ docker compose logs -f node-health-check-client
 - Verify all testnet parameters are correctly set in `.env`
 - Ensure `IGRA_ENABLE=true` is set
 
-#### Optional: Enable RPC Transaction Submission
+## Optional: Enable RPC Transaction Submission
 
 By default, the RPC is configured as **read-only** (`RPC_READ_ONLY=true`). This means it can query blockchain state but cannot submit transactions.
 
@@ -264,7 +264,7 @@ Look for `default_address` field in the JSON output for each wallet.
 docker compose --profile frontend-w5 up -d --no-build
 ```
 
-#### Maintenance
+## Maintenance
 
 Restart services:
 ```bash

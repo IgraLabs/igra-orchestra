@@ -1,4 +1,4 @@
-## Fix: Traefik "non-existent certificate resolver"
+# Fix: Traefik "non-existent certificate resolver"
 
 Symptom:
 - Traefik log: resolver `myresolver` not found
@@ -9,7 +9,7 @@ Cause:
 
 Quick fix:
 ```bash
-cd /Users/igor/git/igra-labs/igra-orchestra
+cd igra-orchestra
 docker compose rm -sf traefik
 docker volume rm traefik_certs
 docker compose up -d traefik && docker logs -f traefik

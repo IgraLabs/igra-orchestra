@@ -1,0 +1,52 @@
+site_name: IGRA Orchestra
+site_description: Docker Compose-based deployment for IGRA Orchestra components
+site_url: https://igralabs.github.io/igra-orchestra/
+repo_url: https://github.com/IgraLabs/igra-orchestra
+repo_name: IgraLabs/igra-orchestra
+
+docs_dir: doc
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Deployment Guides:
+    - Galleon Testnet: quick-setup-galleon-testnet.md
+    - Galleon Mainnet: quick-setup-galleon-mainnet.md
+  - Operations:
+    - Kaspa Wallet: kaspa-wallet.md
+    - Log Management: log-management.md
+  - Troubleshooting:
+    - Docker Volume Permissions: troubleshooting/docker-volume-permissions.md
+    - SSL Certificate: troubleshooting/ssl-certificate.md
