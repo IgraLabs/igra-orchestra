@@ -51,7 +51,7 @@ To configure the deployment mode, set `USE_PREBUILT_IMAGES` in your `.env` file:
 
 ```bash
 # 1. Copy and configure environment
-cp .env.example .env
+cp .env.dev.example .env
 # Edit .env and set USE_PREBUILT_IMAGES=true
 
 # 2. Setup repositories and pull images
@@ -71,7 +71,7 @@ docker compose --profile kaspa-explorer up -d  # Optional
 
 ```bash
 # 1. Copy environment file
-cp .env.example .env
+cp .env.dev.example .env
 # Keep USE_PREBUILT_IMAGES=false (default)
 
 # 2. Setup all repositories (including proprietary)
@@ -110,7 +110,7 @@ Follow these steps before the first run:
 1.  **(Optional) Create a `.env` file to override default branches:**
     Copy the example file and edit it to set your desired `_BRANCH` variables. The script uses default branches if these are not set.
     ```bash
-    cp .env.example .env
+    cp .env.dev.example .env
     # Edit .env and add/modify lines like these:
     # RETH_BRANCH=production
     # KASWALLET_BRANCH=feature/new-api
@@ -166,7 +166,7 @@ The Docker Compose configuration uses profiles and YAML anchors for improved mai
 
 ## Configuration
 
-This project uses a `.env` file to manage environment variables. A `.env.example` file is provided with defaults.
+This project uses a `.env` file to manage environment variables. A `.env.dev.example` file is provided with defaults.
 
 ### Logging Driver
 
@@ -174,7 +174,7 @@ By default, Docker logs are sent to `syslog`. On **macOS**, the `syslog` driver 
 
 1.  Create a `.env` file by copying the example:
     ```bash
-    cp .env.example .env
+    cp .env.dev.example .env
     ```
 2.  Edit the `.env` file and change the `LOGGING_DRIVER` value:
     ```
@@ -311,7 +311,8 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser kaspad watc
 
 ## Documentation
 
-- [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md) - Public testnet deployment with pre-built images
+- [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md) - Public Galleon testnet deployment with pre-built images
+- [Galleon Mainnet Deployment Guide](doc/quick-setup-galleon-mainnet.md) - Public Galleon mainnet deployment with pre-built images
 - [Kaspa Wallet Guide](doc/kaspa-wallet.md) - Wallet setup for all networks
 
 ## Troubleshooting

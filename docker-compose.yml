@@ -46,7 +46,7 @@ x-rpc-provider-environment: &rpc-provider-environment
 # Runtime config (no build) - for replica services
 x-rpc-provider-runtime: &rpc-provider-runtime
   <<: *default-service
-  image: igranetwork/rpc-provider:2.0.1
+  image: igranetwork/rpc-provider:${RPC_PROVIDER_VERSION}
   environment: *rpc-provider-environment
   expose:
     - "8535"
@@ -85,7 +85,7 @@ x-rpc-provider-build: &rpc-provider-build
 # Runtime config (no build) - for replica services
 x-kaswallet-runtime: &kaswallet-runtime
   <<: *default-service
-  image: igranetwork/kaswallet:2.0.1
+  image: igranetwork/kaswallet:${KASWALLET_VERSION}
   expose:
     - "8082"
   environment:
@@ -124,7 +124,7 @@ services:
       dockerfile: build/Dockerfile.kaspad
       ssh:
         - default
-    image: igranetwork/kaspad:2.0.3
+    image: igranetwork/kaspad:${KASPAD_VERSION}
     profiles: ["kaspad", "backend"]
     container_name: kaspad
     ports:
@@ -223,7 +223,7 @@ services:
         - default
       args:
         BUILD_PROFILE: release
-    image: igranetwork/reth:2.0.3
+    image: igranetwork/reth:${RETH_VERSION}
     restart: "no"
     container_name: execution-layer
     profiles: ["execution-layer", "backend"]
@@ -259,7 +259,7 @@ services:
       test: ["CMD", "bash", "-c", "test -S /app/socket/auth.ipc"]
 
   node-health-check-client:
-    image: igranetwork/node-health-check-client:2.0.2
+    image: igranetwork/node-health-check-client:${NODE_HEALTH_CHECK_VERSION}
     profiles: ["node-health-check-client", "backend"]
     container_name: node-health-check-client
     networks:
@@ -548,10 +548,10 @@ services:
       sh -c '
       KASPAD=$(getent ahostsv4 kaspad | grep kaspad | grep -Eo "\\b([0-9]{1,3}\\.){3}[0-9]{1,3}\\b") &&
       exec /app/kaspa-miner
-      --mining-address ${MINING_ADDRESS}
+      --mining-address ${MINING_ADDRESS:-}
       --kaspad-address $$KASPAD
       --port ${KASPAD_GRPC_PORT}
-      --threads ${MINING_THREADS}
+      --threads ${MINING_THREADS:-1}
       --mine-when-not-synced
       '
     extra_hosts:
@@ -559,14 +559,14 @@ services:
 
   atan-uploader:
     <<: *default-service
-    image: igranetwork/atan-uploader:2.0.1
+    image: igranetwork/atan-uploader:${ATAN_UPLOADER_VERSION}
     profiles: ["atan-uploader"]
     container_name: atan-uploader
     restart: unless-stopped
     environment:
       # AWS credentials (required)
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       # AWS S3 configuration (with defaults)
       AWS_REGION: ${AWS_REGION:-us-east-1}
       S3_BUCKET: ${S3_BUCKET:-atan-import}
@@ -575,7 +575,7 @@ services:
       NETWORK: ${NETWORK}
       TX_ID_PREFIX: ${TX_ID_PREFIX}
       # Data directory path (required, must match NETWORK)
-      DATADIR: ${DATADIR}
+      DATADIR: ${DATADIR:-}
     volumes:
       - kaspad_data:/app/data/
     healthcheck:

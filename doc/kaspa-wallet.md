@@ -101,23 +101,23 @@ Mainnet:
 kaswallet-create --mainnet -k keys.kaswallet-0.json
 ```
 
-Docker (mainnet - use `--enable-mainnet-pre-launch`):
+Docker (mainnet - use `--enable-mainnet-pre-launch`). First, source the versions file: `source versions.env`
 ```bash
 docker run --rm -it -v $(pwd)/keys:/keys --entrypoint /app/kaswallet-create \
-  igranetwork/kaswallet:2.0.1 --enable-mainnet-pre-launch -k /keys/keys.kaswallet-0.json
+  igranetwork/kaswallet:${KASWALLET_VERSION} --enable-mainnet-pre-launch -k /keys/keys.kaswallet-0.json
 ```
 
 Docker (testnet - use `--testnet`):
 ```bash
 docker run --rm -it -v $(pwd)/keys:/keys --entrypoint /app/kaswallet-create \
-  igranetwork/kaswallet:2.0.1 --testnet -k /keys/keys.kaswallet-0.json
+  igranetwork/kaswallet:${KASWALLET_VERSION} --testnet -k /keys/keys.kaswallet-0.json
 ```
 
 Generate all 5 wallets (mainnet):
 ```bash
 for i in {0..4}; do
   docker run --rm -it -v $(pwd)/keys:/keys --entrypoint /app/kaswallet-create \
-    igranetwork/kaswallet:2.0.1 --enable-mainnet-pre-launch -k /keys/keys.kaswallet-$i.json
+    igranetwork/kaswallet:${KASWALLET_VERSION} --enable-mainnet-pre-launch -k /keys/keys.kaswallet-$i.json
 done
 ```
 

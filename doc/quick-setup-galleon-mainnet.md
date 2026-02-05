@@ -1,12 +1,12 @@
-# IGRA Galleon Public Testnet Deployment Guide
+# IGRA Galleon Public Mainnet Deployment Guide
 
-This guide covers deploying IGRA Orchestra on the Galleon public testnet with pre-built Docker images.
+This guide covers deploying IGRA Orchestra on the Galleon public mainnet with pre-built Docker images.
 
 #### Quick Start (Automated)
 
 For a guided interactive setup, run:
 ```bash
-./scripts/setup-galleon-testnet.sh
+./scripts/setup-galleon-mainnet.sh
 ```
 This script handles all configuration, key generation, and service startup automatically.
 
@@ -21,23 +21,21 @@ If the automated script above doesn't work for your environment, follow these ma
 - 32GB+ RAM recommended
 - Git and SSH access to github.com
 
-#### Galleon Testnet Chain Parameters
+#### Galleon Mainnet Chain Parameters
 
 | Parameter | Value |
 |-----------|-------|
-| `NETWORK` | testnet |
-| `IGRA_CHAIN_ID` | 38836 |
-| `TX_ID_PREFIX` | 97b4 |
-| `IGRA_LAUNCH_DAA_SCORE` | 368045400 |
-| `GENESIS_BLOCK_HASH` | 0xfa870bcc16b6fbb3225bcc89a92f38e02c95fdc3e3b51a58d066ac7e1e4162a2 |
-| `L1_REFERENCE_DAA_SCORE` | 361004030 |
-| `L1_REFERENCE_TIMESTAMP` | 1768475045 |
-| Lock script address | kaspatest:qpv5yg3hthdf3ag09gjdyl2qeu3z73s60uzl5zrrgc3kwa840lxvg6a57kr2r |
-| `IGRA_LOCK_SCRIPT_PUBKEY` | 203705fd429b0ab82518dc8b0bef2756c87d797d08bc16f2a25b9b3d4365ad1529ac |
-| Address prefix | kaspatest: |
-| P2P Port | 16211 |
-| gRPC Port | 16210 |
-| Bootstrap Peer | 65.109.78.124 |
+| `NETWORK` | mainnet |
+| `IGRA_CHAIN_ID` | 38837 |
+| `TX_ID_PREFIX` | 97b5 |
+| `IGRA_LAUNCH_DAA_SCORE` | 348074960 |
+| `GENESIS_BLOCK_HASH` | 0xc74895b494a1b1689871c8bfd30793749ab89c0dc1ac5c612cf31995290eef0f |
+| `L1_REFERENCE_DAA_SCORE` | 337567432 |
+| `L1_REFERENCE_TIMESTAMP` | 1769176427 |
+| Address prefix | kaspa: |
+| P2P Port | 16111 |
+| gRPC Port | 16110 |
+| Bootstrap Peer | 91.98.179.75 |
 
 #### Steps
 
@@ -51,11 +49,12 @@ cd igra-orchestra
 2) Configure environment
 
 ```bash
-cp .env.galleon-testnet.example .env
+cp .env.galleon-mainnet.example .env
 cat versions.env >> .env
 ```
 Edit `.env` and fill in your node-specific values:
-- `NODE_ID` - Your node identifier
+- `NODE_ID` - Your node identifier (will be prefixed with GMN-)
+- `KASPAD_ADD_PEER` - Bootstrap peer address (default: 91.98.179.75, contact IGRA Labs if needed)
 - `IGRA_ORCHESTRA_DOMAIN` - Your domain for HTTPS
 - `IGRA_ORCHESTRA_DOMAIN_EMAIL` - Email for Let's Encrypt
 - Worker wallet addresses and passwords (after generating keys in step 6)
@@ -104,10 +103,6 @@ After kaspad sync, you should be able to see the progress of the building blocks
 Block #101,992    │ Hash: 0x0e41b08e1042d8f731816cac63940e94b0d7043bf5322fe66da371807cd1e441 │ ISC: 0x2278885c5e73a9efab568cb025feaa27732e4eff3c1e0eba7151f05da355f71d │ Prev: 0x85ac62cd59ced93a07316319364a4695efc12df6192be05efb0ea57888906238 │
 Block #101,993    │ Hash: 0x321d540e55f6a6495030a51290286856269f50987f0a95770031f58ec980e914 │ ISC: 0x5f6a7dadae3ada7335c4807ee116a270c7e0ad282ba4bc9d673cabf4a1d606d3 │ Prev: 0x2278885c5e73a9efab568cb025feaa27732e4eff3c1e0eba7151f05da355f71d │
 Block #101,994    │ Hash: 0x884ec7671666b1285194ee3b31fd822b83caddc286ba3fe43f701a7378efc9ae │ ISC: 0x28a00eb3d0174f7c3b23fcab75cf127dee803be266cc148035aab6932f27de70 │ Prev: 0x5f6a7dadae3ada7335c4807ee116a270c7e0ad282ba4bc9d673cabf4a1d606d3 │
-Block #101,995    │ Hash: 0x89b244f95085c9970f4038daed48f886d32e83b5dd13f3314fc738fbea26f933 │ ISC: 0xf288ce24d30df53d6770f13ecdfae39e150eea76a840a740e693ca0edaff0e39 │ Prev: 0x28a00eb3d0174f7c3b23fcab75cf127dee803be266cc148035aab6932f27de70 │
-Block #101,996    │ Hash: 0x259be8f5188c2f11023952df3a97106a5fe565c916a69bbac02e4d6e7ddc46f9 │ ISC: 0xc6e8075a18543d200d8683f8508c3c4b7f54e975f25cd6914c46ed7d61c2de65 │ Prev: 0xf288ce24d30df53d6770f13ecdfae39e150eea76a840a740e693ca0edaff0e39 │
-Block #101,997    │ Hash: 0x5e566979f8c42eafcf5be66841b3d6d5b2cb15c99879e4355cb3af2d3e57136e │ ISC: 0x69c7e13dd8f7bab51e450b01b4f58ab9a1ee3dccec57f4f93fe4f7af04c31549 │ Prev: 0xc6e8075a18543d200d8683f8508c3c4b7f54e975f25cd6914c46ed7d61c2de65 │
-Block #101,998    │ Hash: 0x927b0baecdebfa0d8b4237827cbaf2d55a0f2bbf2942a41c3720a3cd3a2fa801 │ ISC: 0xec59b2dd7d6bef0576dc426b822da376a53fc220c15c09b992b3a950e016e2b4 │ Prev: 0x69c7e13dd8f7bab51e450b01b4f58ab9a1ee3dccec57f4f93fe4f7af04c31549 │
 ^C
 === FINAL SUMMARY ===
 ================================================================================
@@ -122,38 +117,11 @@ PIPELINE TIMING:
   verifier                       58           42        4,290      386
   translator                      0            0           13      386
   assembler                   4,786        4,637       30,638      385
-
-ASSEMBLER STAGES:
-  Stage                    Avg (us)     Med (us)     Max (us)    Calls
-  -------------------- ------------ ------------ ------------ --------
-  canonical_update              469          461          737      385
-  entry                           6            6           25      385
-  payload_build               1,661        1,531       27,207      385
-  regular                         6            6           44      385
-  state_validation                8            8           30      385
-  total                         267          237        7,433      385
-  tx_processing                 274          244        7,443      385
-
-RPC TIMING:
-  Method                             Avg (us)     Med (us)     Max (us)    Calls  Success %
-  ------------------------------ ------------ ------------ ------------ -------- ----------
-  admin_clearTxpool                       104          100          177      386      100.0
-  engine_forkchoiceUpdatedV3              175          168          522      770      100.0
-  engine_getPayloadV4                     438          437        1,643      385      100.0
-  engine_newPayloadV4                     668          652        1,452      385      100.0
-  eth_getBlockByHash                      107          105          224      385      100.0
-  eth_getBlockByNumber                    183          175          323      385      100.0
-  eth_sendRawTransaction                  151          148          243      381        0.0
-  txpool_content                           90           88          181      385      100.0
-
-PERFORMANCE:
-  Avg blocks/second:     385.0
-================================================================================
 ```
 
 Now you can wait till IGRA network is synced and reaches consensus with other nodes. Check the Grafana dashboard with your NODE_ID to monitor progress.
 
-6) Generate testnet wallet keys
+6) Generate mainnet wallet keys
 
 Generate keys for each worker (0-4):
 
@@ -161,7 +129,7 @@ Generate keys for each worker (0-4):
 source versions.env
 for i in {0..4}; do
   docker run --rm -it -v $(pwd)/keys:/keys --entrypoint /app/kaswallet-create \
-    igranetwork/kaswallet:${KASWALLET_VERSION} --testnet -k /keys/keys.kaswallet-$i.json
+    igranetwork/kaswallet:${KASWALLET_VERSION} --enable-mainnet-pre-launch -k /keys/keys.kaswallet-$i.json
 done
 ```
 
@@ -220,8 +188,8 @@ docker compose logs -f node-health-check-client
 
 **Kaspad not syncing:**
 - Check network connectivity
-- Verify no firewall blocking P2P port (16211)
-- Ensure `KASPAD_ADD_PEER=65.109.78.124` is set
+- Verify no firewall blocking P2P port (16111)
+- Ensure `KASPAD_ADD_PEER` is set to a valid bootstrap peer
 - Check logs: `docker compose logs kaspad`
 
 **Workers not connecting:**
@@ -230,7 +198,7 @@ docker compose logs -f node-health-check-client
 - Check kaswallet logs: `docker compose logs kaswallet-0`
 
 **IGRA adapter issues:**
-- Verify all testnet parameters are correctly set in `.env`
+- Verify all mainnet parameters are correctly set in `.env`
 - Ensure `IGRA_ENABLE=true` is set
 
 #### Optional: Enable RPC Transaction Submission
@@ -250,7 +218,7 @@ After IBD sync completes (IBD: 100%):
 ```
 Look for `default_address` field in the JSON output for each wallet.
 
-2. Top up each wallet address with KAS from a faucet or another wallet
+2. Top up each wallet address with KAS from an exchange or another wallet
 
 3. Update `.env` with the actual wallet addresses (W0_WALLET_TO_ADDRESS through W4_WALLET_TO_ADDRESS)
 

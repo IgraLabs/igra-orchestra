@@ -201,13 +201,21 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
     log ""
     log "Pulling pre-built images from Docker Hub..."
 
-    # Pull and tag images (versions must match docker-compose.yml)
+    # Source image versions
+    if [[ -f "$PROJECT_DIR/versions.env" ]]; then
+        # shellcheck source=/dev/null
+        source "$PROJECT_DIR/versions.env"
+    else
+        panic "versions.env not found in $PROJECT_DIR"
+    fi
+
+    # Pull and tag images (versions from versions.env)
     # Format: "image_name:version:local_tag"
     images=(
-        "kaspad:2.0.1:kaspad"
-        "reth:2.0.2:execution-layer"
-        "rpc-provider:2.0.0:rpc-provider"
-        "kaswallet:2.0.0:kaswallet"
+        "kaspad:${KASPAD_VERSION}:kaspad"
+        "reth:${RETH_VERSION}:execution-layer"
+        "rpc-provider:${RPC_PROVIDER_VERSION}:rpc-provider"
+        "kaswallet:${KASWALLET_VERSION}:kaswallet"
     )
     for entry in "${images[@]}"; do
         IFS=':' read -r image version local_tag <<< "$entry"
@@ -225,9 +233,9 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
     log "All images pulled and tagged successfully!"
     log ""
     log "You can now start services with:"
-    log "  docker-compose up -d"
+    log "  docker compose up -d"
     log ""
     log "Note: Docker will use the pulled images instead of building from source."
 else
-    log "You can now run docker-compose build && docker-compose up"
+    log "You can now run docker compose build && docker compose up"
 fi
