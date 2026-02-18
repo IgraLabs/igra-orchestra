@@ -14,6 +14,8 @@ tasks/
 .env.backup
 .env
 
+network-params/
+
 .DS_Store
 .cursor
 letsencrypt/

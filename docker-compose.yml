@@ -143,6 +143,8 @@ services:
       - NETWORK
       - TX_ID_PREFIX
       - IGRA_ENABLE
+      - POST_FORK_LOCK_SCRIPT_PUBKEY
+      - LOCK_SCRIPT_FORK_DAA_SCORE
       - RUST_LOG=info,kaspa_viaduct=trace,kaspa_igra_adapter=trace,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace
     entrypoint: |
       sh -c '
@@ -183,6 +185,14 @@ services:
         [ "$$ENABLE_EVENT_LOGGING" = "true" ] && ARGS="$$ARGS --igra-enable-event-logging"
         [ -n "$$WARM_START_BLOCK" ] && ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
         [ "$$IGRA_SKIP_LOCK_SCRIPT_CHECK" = "true" ] && ARGS="$$ARGS --igra-skip-lock-script-check"
+        if [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && [ -z "$$LOCK_SCRIPT_FORK_DAA_SCORE" ]; then
+          echo "Error: LOCK_SCRIPT_FORK_DAA_SCORE must be set when POST_FORK_LOCK_SCRIPT_PUBKEY is set" >&2; exit 1
+        fi
+        if [ -z "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ]; then
+          echo "Error: POST_FORK_LOCK_SCRIPT_PUBKEY must be set when LOCK_SCRIPT_FORK_DAA_SCORE is set" >&2; exit 1
+        fi
+        [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && ARGS="$$ARGS --igra-post-fork-lock-script-pubkey=$$POST_FORK_LOCK_SCRIPT_PUBKEY"
+        [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ] && ARGS="$$ARGS --igra-lock-script-fork-daa-score=$$LOCK_SCRIPT_FORK_DAA_SCORE"
 
         # Auto-construct ATAN import URL from NETWORK and TX_ID_PREFIX, allow override via env
         if [ -n "$$ATAN_IMPORT_URL" ]; then
@@ -242,10 +252,21 @@ services:
       CHAIN_ID: ${IGRA_CHAIN_ID}
       ONE_TIME_ADDRESS: ${EL_ONE_TIME_ADDRESS}
       IGRA_LAUNCH_DAA_SCORE: ${IGRA_LAUNCH_DAA_SCORE}
+      TX_ID_PREFIX: ${TX_ID_PREFIX}
+      MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
+      IGRA_LOCK_SCRIPT_PUBKEY: ${IGRA_LOCK_SCRIPT_PUBKEY:-}
+      IGRA_ENTRY_MIN_AMOUNT: ${IGRA_ENTRY_MIN_AMOUNT}
+      BITCOIN_BLOCK_HASH: ${BITCOIN_BLOCK_HASH}
+      ETHEREUM_BLOCK_HASH: ${ETHEREUM_BLOCK_HASH}
+      KASPA_BLOCK_HASH: ${KASPA_BLOCK_HASH}
+      POST_FORK_LOCK_SCRIPT_PUBKEY: ${POST_FORK_LOCK_SCRIPT_PUBKEY:-}
+      LOCK_SCRIPT_FORK_DAA_SCORE: ${LOCK_SCRIPT_FORK_DAA_SCORE:-}
+      NETWORK_PARAMS_OUTPUT: /app/network-params/network-params.md
     volumes:
       - reth_data:/app/data/
       - ./keys/jwt.hex:/app/jwt.hex
       - reth_ipc:/app/socket
+      - ./network-params:/app/network-params
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.el_stats.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
