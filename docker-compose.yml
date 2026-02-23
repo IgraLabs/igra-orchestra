@@ -56,11 +56,11 @@ x-rpc-provider-runtime: &rpc-provider-runtime
     - traefik-network
   labels:
     - "traefik.enable=true"
-    - "traefik.http.routers.rpc0.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
+    - "traefik.http.routers.rpc0.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`) && PathPrefix(`/v1`)"
     - "traefik.http.routers.rpc0.entrypoints=rpc"
     - "traefik.http.routers.rpc0.tls=true"
     - "traefik.http.routers.rpc0.tls.certresolver=myresolver"
-    - "traefik.http.routers.rpc0.middlewares=cors"
+    - "traefik.http.routers.rpc0.middlewares=rpc-stripprefix,cors"
     - "traefik.http.services.rpc0.loadbalancer.server.port=8535"
     # Health check router - HTTPS (port 443) for load balancer health checks
     - "traefik.http.routers.health.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`) && PathPrefix(`/health`) && Method(`GET`)"
@@ -530,6 +530,7 @@ services:
       - traefik-network
     labels:
       - "traefik.enable=true"
+      - "traefik.http.middlewares.rpc-stripprefix.stripprefix.prefixes=/v1"
       - "traefik.http.middlewares.cors.headers.accesscontrolallowmethods=GET,OPTIONS,PUT,POST,DELETE"
       - "traefik.http.middlewares.cors.headers.accesscontrolalloworiginlist=*"
       - "traefik.http.middlewares.cors.headers.accesscontrolallowheaders=*"
