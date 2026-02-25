@@ -290,7 +290,7 @@ services:
       - MONITOR_URL=http://${NODE_HEALTH_CHECK_URL}:8081
       - NODE_ID=${NODE_ID}
       - API_KEY=${HEALTH_CHECK_API_KEY}
-      - POLL_INTERVAL=32
+      - POLL_INTERVAL=8
     restart: unless-stopped
 
   # Worker Services

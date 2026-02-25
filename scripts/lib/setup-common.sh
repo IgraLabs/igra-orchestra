@@ -137,6 +137,11 @@ check_prerequisites() {
         die "jq is not installed. Please install it first:\n  - macOS: brew install jq\n  - Ubuntu/Debian: sudo apt install jq"
     fi
     log "jq: OK"
+
+    if ! command -v expect &> /dev/null; then
+        die "expect is not installed. Please install it first:\n  - macOS: brew install expect\n  - Ubuntu/Debian: sudo apt install expect"
+    fi
+    log "expect: OK"
 }
 
 update_env_var() {
@@ -291,7 +296,7 @@ print_summary() {
     echo "  ./scripts/debug/wallet-status.sh                # Check wallet balances"
     echo
     echo "Block building stats (after IBD sync):"
-    echo "  docker logs -f -n 10 kaspad | docker run --rm -i --entrypoint /app/adapter-stats $KASPAD_IMAGE"
+    echo "  docker logs -f -n 10 kaspad | docker run --rm -i --entrypoint /app/adapter-stats igranetwork/kaspad:\$(grep KASPAD_VERSION versions.env | cut -d= -f2)"
     echo
     echo "=== Optional: Enable Transaction Submission (RPC) ==="
     echo
@@ -493,13 +498,6 @@ run_setup() {
     # Ask for password if we need to generate new wallets
     WALLET_PASSWORD=""
     if [[ ${#MISSING_WALLETS[@]} -gt 0 ]]; then
-        # Check for expect only when needed for wallet generation
-        if ! command -v expect &> /dev/null; then
-            die "expect is not installed. Please install it first:
-  - macOS: brew install expect
-  - Ubuntu/Debian: sudo apt install expect"
-        fi
-
         echo "Enter a password for the wallet keys (used for all workers)."
         echo "Press Enter for empty password."
         WALLET_PASSWORD=$(prompt_password "Wallet password")

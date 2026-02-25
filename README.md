@@ -329,7 +329,7 @@ CDN_BASE_URL=https://dyehoijgeqfp8.cloudfront.net
 Analyze kaspad adapter performance by piping logs to the adapter-stats tool:
 
 ```bash
-docker logs -f -n 1000 kaspad 2>&1 | docker run --rm -i --entrypoint /app/adapter-stats kaspad
+docker logs -f -n 1000 kaspad 2>&1 | docker run --rm -i --entrypoint /app/adapter-stats igranetwork/kaspad:$(grep KASPAD_VERSION versions.env | cut -d= -f2)
 ```
 
 #### Transaction Parser
@@ -337,7 +337,7 @@ docker logs -f -n 1000 kaspad 2>&1 | docker run --rm -i --entrypoint /app/adapte
 When event logging is enabled, transaction logs are written to `./logs/`. Use the igra-tx-parser to watch and analyze them:
 
 ```bash
-docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser kaspad watch --logs-dir /app/logs
+docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork/kaspad:$(grep KASPAD_VERSION versions.env | cut -d= -f2) watch --logs-dir /app/logs
 ```
 
 ## Documentation
