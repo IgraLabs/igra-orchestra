@@ -112,36 +112,59 @@ EOF
 
 check_prerequisites() {
     log "Checking prerequisites..."
+    local missing_tools=()
+    local errors=()
 
+    # Check Docker
     if ! command -v docker &> /dev/null; then
-        die "Docker is not installed. Please install Docker first."
-    fi
-    log "Docker: OK"
+        errors+=("Docker is not installed. Please install Docker: https://docs.docker.com/get-docker/")
+    else
+        log "Docker: OK"
 
-    if ! docker compose version &> /dev/null; then
-        die "Docker Compose is not installed. Please install Docker Compose first."
-    fi
-    log "Docker Compose: OK"
+        if ! docker compose version &> /dev/null; then
+            errors+=("Docker Compose plugin is not available. Please update Docker or install the Compose plugin.")
+        else
+            log "Docker Compose: OK"
+        fi
 
-    if ! docker info &> /dev/null; then
-        die "Docker daemon is not running. Please start Docker first."
+        if ! docker info &> /dev/null; then
+            errors+=("Docker daemon is not running. Please start Docker.")
+        else
+            log "Docker daemon: OK"
+        fi
     fi
-    log "Docker daemon: OK"
 
+    # Check CLI tools
     if ! command -v openssl &> /dev/null; then
-        die "openssl is not installed. Please install it first:\n  - macOS: brew install openssl\n  - Ubuntu/Debian: sudo apt install openssl"
+        missing_tools+=("openssl")
+    else
+        log "openssl: OK"
     fi
-    log "openssl: OK"
 
     if ! command -v jq &> /dev/null; then
-        die "jq is not installed. Please install it first:\n  - macOS: brew install jq\n  - Ubuntu/Debian: sudo apt install jq"
+        missing_tools+=("jq")
+    else
+        log "jq: OK"
     fi
-    log "jq: OK"
 
     if ! command -v expect &> /dev/null; then
-        die "expect is not installed. Please install it first:\n  - macOS: brew install expect\n  - Ubuntu/Debian: sudo apt install expect"
+        missing_tools+=("expect")
+    else
+        log "expect: OK"
     fi
-    log "expect: OK"
+
+    if [[ ${#missing_tools[@]} -gt 0 ]]; then
+        errors+=("Missing tools: ${missing_tools[*]}\n  macOS:         brew install ${missing_tools[*]}\n  Ubuntu/Debian: sudo apt install ${missing_tools[*]}")
+    fi
+
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        echo >&2
+        for err in "${errors[@]}"; do
+            error "$err"
+        done
+        echo >&2
+        die "Please fix the above issues and re-run this script."
+    fi
 }
 
 update_env_var() {
@@ -489,10 +512,16 @@ run_setup() {
                 mv "keys/keys.kaswallet-${i}.json" "$backup_dir/"
             done
             log "Backed up existing wallets to $backup_dir"
-            mapfile -t MISSING_WALLETS < <(seq 0 $((NUM_WORKERS - 1)))
+            MISSING_WALLETS=()
+            for i in $(seq 0 $((NUM_WORKERS - 1))); do
+                MISSING_WALLETS+=("$i")
+            done
         fi
     else
-        mapfile -t MISSING_WALLETS < <(seq 0 $((NUM_WORKERS - 1)))
+        MISSING_WALLETS=()
+        for i in $(seq 0 $((NUM_WORKERS - 1))); do
+            MISSING_WALLETS+=("$i")
+        done
     fi
 
     # Ask for password if we need to generate new wallets
