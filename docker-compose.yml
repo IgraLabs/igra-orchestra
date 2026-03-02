@@ -597,6 +597,8 @@ services:
       TX_ID_PREFIX: ${TX_ID_PREFIX}
       # Data directory path (required, must match NETWORK)
       DATADIR: ${DATADIR:-}
+      # Upload jitter for multi-node stagger (seconds, 0 = disabled)
+      UPLOAD_JITTER_MAX_SECONDS: ${UPLOAD_JITTER_MAX_SECONDS:-60}
     volumes:
       - kaspad_data:/app/data/
     healthcheck:
