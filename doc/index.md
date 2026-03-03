@@ -6,8 +6,9 @@ A Docker Compose-based deployment environment for IGRA Orchestra components.
 
 Choose your deployment guide:
 
-- **[Galleon Testnet](quick-setup-galleon-testnet.md)** - Public testnet deployment with pre-built images
-- **[Galleon Mainnet](quick-setup-galleon-mainnet.md)** - Public mainnet deployment with pre-built images
+- **[Mainnet](quick-setup-mainnet.md)** - Public mainnet deployment with pre-built images
+- **[Galleon Testnet](quick-setup-galleon-testnet.md)** - Public Galleon testnet deployment with pre-built images
+- **[Galleon Mainnet](quick-setup-galleon-mainnet.md)** - Public Galleon mainnet deployment with pre-built images
 
 ## Operations
 
@@ -30,10 +31,13 @@ Choose your deployment guide:
 For the fastest setup, use the automated scripts:
 
 ```bash
-# Testnet
+# IGRA Mainnet
+./scripts/setup-mainnet.sh
+
+# Galleon Testnet
 ./scripts/setup-galleon-testnet.sh
 
-# Mainnet
+# Galleon Mainnet
 ./scripts/setup-galleon-mainnet.sh
 ```
 

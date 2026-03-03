@@ -42,6 +42,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Deployment Guides:
+    - Mainnet: quick-setup-mainnet.md
     - Galleon Testnet: quick-setup-galleon-testnet.md
     - Galleon Mainnet: quick-setup-galleon-mainnet.md
   - Operations:

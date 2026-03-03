@@ -5,7 +5,7 @@ A Docker Compose-based deployment environment for IGRA Orchestra components. Sup
 ## Setup Requirements
 
 - Docker Engine 23.0+ and Docker Compose V2+
-- At least 4GB of RAM
+- 32GB+ RAM recommended (4GB minimum for development)
 - Git (for cloning repositories)
 - Worker keys in the `./keys` directory (required for worker services)
 - JWT secret in `./keys/jwt.hex` (must be created manually)
@@ -52,16 +52,20 @@ To configure the deployment mode, set `USE_PREBUILT_IMAGES` in your `.env` file:
 The fastest way to get started is using the interactive setup scripts:
 
 ```bash
-# Testnet
+# IGRA Mainnet
+./scripts/setup-mainnet.sh
+
+# Galleon Testnet
 ./scripts/setup-galleon-testnet.sh
 
-# Mainnet
+# Galleon Mainnet
 ./scripts/setup-galleon-mainnet.sh
 ```
 
 These scripts handle environment configuration, image pulling, and service startup.
 
 For detailed guides, see:
+- [Mainnet Deployment Guide](doc/quick-setup-mainnet.md)
 - [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md)
 - [Galleon Mainnet Deployment Guide](doc/quick-setup-galleon-mainnet.md)
 
@@ -69,9 +73,11 @@ For detailed guides, see:
 
 ```bash
 # 1. Copy and configure environment (choose your network)
-cp .env.galleon-testnet.example .env   # For testnet
+cp .env.mainnet.example .env           # For IGRA mainnet
 # OR
-cp .env.galleon-mainnet.example .env   # For mainnet
+cp .env.galleon-testnet.example .env   # For Galleon testnet
+# OR
+cp .env.galleon-mainnet.example .env   # For Galleon mainnet
 # Edit .env and set USE_PREBUILT_IMAGES=true
 
 # 2. Setup repositories and pull images
@@ -127,6 +133,8 @@ Follow these steps before the first run:
     Copy one of the example files and edit it. The script uses default branches if not set.
     ```bash
     cp .env.dev.example .env                    # For development (build from source)
+    # OR
+    cp .env.mainnet.example .env               # For IGRA mainnet (pre-built images)
     # OR
     cp .env.galleon-testnet.example .env        # For Galleon testnet (pre-built images)
     # OR
@@ -342,6 +350,7 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork
 
 ## Documentation
 
+- [Mainnet Deployment Guide](doc/quick-setup-mainnet.md) - Public mainnet deployment with pre-built images
 - [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md) - Public Galleon testnet deployment with pre-built images
 - [Galleon Mainnet Deployment Guide](doc/quick-setup-galleon-mainnet.md) - Public Galleon mainnet deployment with pre-built images
 - [Kaspa Wallet Guide](doc/kaspa-wallet.md) - Wallet setup for all networks
