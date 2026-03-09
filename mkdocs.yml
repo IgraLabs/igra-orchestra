@@ -44,7 +44,6 @@ nav:
   - Deployment Guides:
     - Mainnet: quick-setup-mainnet.md
     - Galleon Testnet: quick-setup-galleon-testnet.md
-    - Galleon Mainnet: quick-setup-galleon-mainnet.md
   - Operations:
     - Kaspa Wallet: kaspa-wallet.md
     - Log Management: log-management.md

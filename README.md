@@ -57,9 +57,6 @@ The fastest way to get started is using the interactive setup scripts:
 
 # Galleon Testnet
 ./scripts/setup-galleon-testnet.sh
-
-# Galleon Mainnet
-./scripts/setup-galleon-mainnet.sh
 ```
 
 These scripts handle environment configuration, image pulling, and service startup.
@@ -67,7 +64,6 @@ These scripts handle environment configuration, image pulling, and service start
 For detailed guides, see:
 - [Mainnet Deployment Guide](doc/quick-setup-mainnet.md)
 - [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md)
-- [Galleon Mainnet Deployment Guide](doc/quick-setup-galleon-mainnet.md)
 
 **Manual setup (alternative):**
 
@@ -76,8 +72,6 @@ For detailed guides, see:
 cp .env.mainnet.example .env           # For IGRA mainnet
 # OR
 cp .env.galleon-testnet.example .env   # For Galleon testnet
-# OR
-cp .env.galleon-mainnet.example .env   # For Galleon mainnet
 # Edit .env and set USE_PREBUILT_IMAGES=true
 
 # 2. Setup repositories and pull images
@@ -137,8 +131,6 @@ Follow these steps before the first run:
     cp .env.mainnet.example .env               # For IGRA mainnet (pre-built images)
     # OR
     cp .env.galleon-testnet.example .env        # For Galleon testnet (pre-built images)
-    # OR
-    cp .env.galleon-mainnet.example .env        # For Galleon mainnet (pre-built images)
     # Edit .env and add/modify lines like these:
     # RETH_BRANCH=production
     # KASWALLET_BRANCH=feature/new-api
@@ -216,7 +208,7 @@ Docker Compose will automatically pick up this variable when you run `docker com
 
 ### Image Versions
 
-Docker image versions are centrally pinned in `versions.env`. This file is used by `docker-compose.yml`, setup scripts, and deployment tools. Update versions there when upgrading services.
+Docker image versions are centrally pinned in per-network version files: `versions.mainnet.env` and `versions.testnet.env`. These files are used by `docker-compose.yml`, setup scripts, and deployment tools. Update versions there when upgrading services.
 
 ## Running the Stack
 
@@ -337,7 +329,7 @@ CDN_BASE_URL=https://dyehoijgeqfp8.cloudfront.net
 Analyze kaspad adapter performance by piping logs to the adapter-stats tool:
 
 ```bash
-docker logs -f -n 1000 kaspad 2>&1 | docker run --rm -i --entrypoint /app/adapter-stats igranetwork/kaspad:$(grep KASPAD_VERSION versions.env | cut -d= -f2)
+docker logs -f -n 1000 kaspad 2>&1 | docker run --rm -i --entrypoint /app/adapter-stats igranetwork/kaspad:$(grep KASPAD_VERSION versions.mainnet.env | cut -d= -f2)
 ```
 
 #### Transaction Parser
@@ -345,14 +337,13 @@ docker logs -f -n 1000 kaspad 2>&1 | docker run --rm -i --entrypoint /app/adapte
 When event logging is enabled, transaction logs are written to `./logs/`. Use the igra-tx-parser to watch and analyze them:
 
 ```bash
-docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork/kaspad:$(grep KASPAD_VERSION versions.env | cut -d= -f2) watch --logs-dir /app/logs
+docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork/kaspad:$(grep KASPAD_VERSION versions.mainnet.env | cut -d= -f2) watch --logs-dir /app/logs
 ```
 
 ## Documentation
 
 - [Mainnet Deployment Guide](doc/quick-setup-mainnet.md) - Public mainnet deployment with pre-built images
 - [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md) - Public Galleon testnet deployment with pre-built images
-- [Galleon Mainnet Deployment Guide](doc/quick-setup-galleon-mainnet.md) - Public Galleon mainnet deployment with pre-built images
 - [Kaspa Wallet Guide](doc/kaspa-wallet.md) - Wallet setup for all networks
 - [Log Management](doc/log-management.md) - Automated log cleanup for servers
 - [Docker Volume Permissions](doc/troubleshooting/docker-volume-permissions.md) - Fix permission denied errors

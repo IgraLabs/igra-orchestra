@@ -18,7 +18,7 @@ x-default-logging: &default-logging
   driver: "${LOGGING_DRIVER:-json-file}"
   options:
     max-size: "1g"
-    max-file: "10"
+    max-file: "500"
     compress: "true"
     tag: "igra-orchestra-${NETWORK}/{{.Name}}/{{.ID}}"
 
@@ -217,7 +217,7 @@ services:
       '
     volumes:
       - kaspad_data:/app/data/
-      - ./logs/:/app/logs/  # Event logs when ENABLE_EVENT_LOGGING=true
+      - ./logs/kaspad/:/app/logs/  # Event logs when ENABLE_EVENT_LOGGING=true
       - ./keys/jwt.hex:/app/jwt.hex:ro
     networks:
       - igra-network

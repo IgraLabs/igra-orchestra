@@ -101,7 +101,7 @@ Mainnet:
 kaswallet-create --mainnet -k keys.kaswallet-0.json
 ```
 
-Docker (mainnet - use `--enable-mainnet-pre-launch`). First, source the versions file: `source versions.env`
+Docker (mainnet - use `--enable-mainnet-pre-launch`). First, source the versions file: `source versions.mainnet.env`
 ```bash
 docker run --rm -it -v $(pwd)/keys:/keys --entrypoint /app/kaswallet-create \
   igranetwork/kaswallet:${KASWALLET_VERSION} --enable-mainnet-pre-launch -k /keys/keys.kaswallet-0.json
