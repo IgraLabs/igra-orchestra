@@ -52,7 +52,7 @@ cd igra-orchestra
 
 ```bash
 cp .env.galleon-testnet.example .env
-cat versions.env >> .env
+cat versions.testnet.env >> .env
 ```
 Edit `.env` and fill in your node-specific values:
 - `NODE_ID` - Your node identifier
@@ -95,7 +95,7 @@ Check hash field: it should match specified in the .env file.
 
 Once kaspad is synced, you can monitor IGRA adapter activity:
 ```bash
-docker logs -f -n 10 kaspad | docker run --rm -i --entrypoint /app/adapter-stats igranetwork/kaspad:$(grep KASPAD_VERSION versions.env | cut -d= -f2)
+docker logs -f -n 10 kaspad | docker run --rm -i --entrypoint /app/adapter-stats igranetwork/kaspad:$(grep KASPAD_VERSION versions.testnet.env | cut -d= -f2)
 ```
 
 After kaspad sync, you should be able to see the progress of the building blocks:
@@ -158,7 +158,7 @@ Now you can wait till IGRA network is synced and reaches consensus with other no
 Generate keys for each worker (0-4):
 
 ```bash
-source versions.env
+source versions.testnet.env
 for i in {0..4}; do
   docker run --rm -it -v $(pwd)/keys:/keys --entrypoint /app/kaswallet-create \
     igranetwork/kaswallet:${KASWALLET_VERSION} --testnet -k /keys/keys.kaswallet-$i.json

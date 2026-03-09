@@ -18,6 +18,9 @@ NODE_ID_PREFIX="MN-"
 # shellcheck disable=SC2034
 KASWALLET_FLAG="--enable-mainnet-pre-launch"
 
+# Version file for this network
+VERSIONS_FILE="versions.mainnet.env"
+
 # Source common library and run setup
 source "$SCRIPT_DIR/lib/setup-common.sh"
 run_setup "$@"

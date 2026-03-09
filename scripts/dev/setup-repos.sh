@@ -202,14 +202,14 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
     log "Pulling pre-built images from Docker Hub..."
 
     # Source image versions
-    if [[ -f "$PROJECT_DIR/versions.env" ]]; then
+    if [[ -f "$PROJECT_DIR/versions.mainnet.env" ]]; then
         # shellcheck source=/dev/null
-        source "$PROJECT_DIR/versions.env"
+        source "$PROJECT_DIR/versions.mainnet.env"
     else
-        panic "versions.env not found in $PROJECT_DIR"
+        panic "versions.mainnet.env not found in $PROJECT_DIR"
     fi
 
-    # Pull and tag images (versions from versions.env)
+    # Pull and tag images (versions from versions.mainnet.env)
     # Format: "image_name:version:local_tag"
     images=(
         "kaspad:${KASPAD_VERSION}:kaspad"

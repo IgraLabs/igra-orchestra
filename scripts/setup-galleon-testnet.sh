@@ -18,6 +18,9 @@ NODE_ID_PREFIX="GTN-"
 # shellcheck disable=SC2034
 KASWALLET_FLAG="--testnet"
 
+# Version file for this network
+VERSIONS_FILE="versions.testnet.env"
+
 # Source common library and run setup
 source "$SCRIPT_DIR/lib/setup-common.sh"
 run_setup "$@"

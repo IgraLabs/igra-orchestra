@@ -8,7 +8,6 @@ Choose your deployment guide:
 
 - **[Mainnet](quick-setup-mainnet.md)** - Public mainnet deployment with pre-built images
 - **[Galleon Testnet](quick-setup-galleon-testnet.md)** - Public Galleon testnet deployment with pre-built images
-- **[Galleon Mainnet](quick-setup-galleon-mainnet.md)** - Public Galleon mainnet deployment with pre-built images
 
 ## Operations
 
@@ -36,9 +35,6 @@ For the fastest setup, use the automated scripts:
 
 # Galleon Testnet
 ./scripts/setup-galleon-testnet.sh
-
-# Galleon Mainnet
-./scripts/setup-galleon-mainnet.sh
 ```
 
 For full details, see the [README on GitHub](https://github.com/IgraLabs/igra-orchestra).

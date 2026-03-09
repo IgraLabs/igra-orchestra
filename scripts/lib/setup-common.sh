@@ -13,12 +13,15 @@ set -euo pipefail
 SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Source image versions from central versions file
+# Source image versions from network-specific versions file
+if [[ -z "${VERSIONS_FILE:-}" ]]; then
+    die "VERSIONS_FILE not set"
+fi
 # shellcheck source=/dev/null
-if [[ -f "$PROJECT_DIR/versions.env" ]]; then
-    source "$PROJECT_DIR/versions.env"
+if [[ -f "$PROJECT_DIR/$VERSIONS_FILE" ]]; then
+    source "$PROJECT_DIR/$VERSIONS_FILE"
 else
-    echo "ERROR: versions.env not found in $PROJECT_DIR" >&2
+    echo "ERROR: $VERSIONS_FILE not found in $PROJECT_DIR" >&2
     exit 1
 fi
 KASWALLET_IMAGE="igranetwork/kaswallet:${KASWALLET_VERSION}"
@@ -319,7 +322,7 @@ print_summary() {
     echo "  ./scripts/debug/wallet-status.sh                # Check wallet balances"
     echo
     echo "Block building stats (after IBD sync):"
-    echo "  docker logs -f -n 10 kaspad | docker run --rm -i --entrypoint /app/adapter-stats igranetwork/kaspad:\$(grep KASPAD_VERSION versions.env | cut -d= -f2)"
+    echo "  docker logs -f -n 10 kaspad | docker run --rm -i --entrypoint /app/adapter-stats igranetwork/kaspad:\$(grep KASPAD_VERSION $VERSIONS_FILE | cut -d= -f2)"
     echo
     echo "=== Optional: Enable Transaction Submission (RPC) ==="
     echo
@@ -369,7 +372,7 @@ validate_required_variables() {
             ;;
     esac
 
-    for var in ENV_NAME ENV_FILE NODE_ID_PREFIX KASWALLET_FLAG; do
+    for var in ENV_NAME ENV_FILE NODE_ID_PREFIX KASWALLET_FLAG VERSIONS_FILE; do
         if [[ -z "${!var:-}" ]]; then
             missing+=("$var")
         fi
@@ -417,8 +420,8 @@ run_setup() {
 
     # Always copy template to .env and append image versions
     cp "$ENV_FILE" .env
-    printf '\n# --- Image Versions (from versions.env) ---\n' >> .env
-    cat "$PROJECT_DIR/versions.env" >> .env
+    printf '\n# --- Image Versions (from %s) ---\n' "$VERSIONS_FILE" >> .env
+    cat "$PROJECT_DIR/$VERSIONS_FILE" >> .env
     chmod 600 .env  # Protect .env file containing sensitive credentials
     log "Created .env from template (with image versions)"
 
