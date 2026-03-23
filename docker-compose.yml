@@ -33,6 +33,9 @@ x-default-service: &default-service
     - igra-network
   logging: *default-logging
 
+x-service-restart-policy: &service-restart-policy "${SERVICE_RESTART_POLICY:-no}"
+x-dependency-watch-volume: &dependency-watch-volume ./scripts/lib/watch-dependencies.sh:/app/watch-dependencies.sh:ro
+
 x-rpc-provider-environment: &rpc-provider-environment
   RUST_LOG: ${RUST_LOG}
   SERVER_HOST: "0.0.0.0"
@@ -48,13 +51,36 @@ x-rpc-provider-environment: &rpc-provider-environment
 x-rpc-provider-runtime: &rpc-provider-runtime
   <<: *default-service
   image: igranetwork/rpc-provider:${RPC_PROVIDER_VERSION}
+  restart: *service-restart-policy
   environment: *rpc-provider-environment
   expose:
     - "8535"
-  entrypoint: ["/app/igra-rpc-provider"]
+  entrypoint:
+    - sh
+    - -ec
+    - |
+      exec sh /app/watch-dependencies.sh \
+        --tcp execution-layer execution-layer 8545 \
+        --tcp-if READ_ONLY false kaswallet "$$KASWALLET_HOST" 8082 \
+        -- /app/igra-rpc-provider
+  volumes:
+    - *dependency-watch-volume
   networks:
     - igra-network
     - traefik-network
+  depends_on:
+    execution-layer:
+      condition: service_healthy
+  healthcheck:
+    <<: *default-healthcheck
+    test:
+      - CMD-SHELL
+      - >
+        bash -lc ': > /dev/tcp/127.0.0.1/8535' &&
+        bash -lc ': > /dev/tcp/execution-layer/8545' &&
+        if [ "$$READ_ONLY" = "false" ]; then
+          bash -lc ": > /dev/tcp/$$KASWALLET_HOST/8082";
+        fi
   labels:
     - "traefik.enable=true"
     - "traefik.http.routers.rpc0.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
@@ -87,6 +113,7 @@ x-rpc-provider-build: &rpc-provider-build
 x-kaswallet-runtime: &kaswallet-runtime
   <<: *default-service
   image: igranetwork/kaswallet:${KASWALLET_VERSION}
+  restart: *service-restart-policy
   expose:
     - "8082"
   environment:
@@ -96,16 +123,29 @@ x-kaswallet-runtime: &kaswallet-runtime
     - KASPAD_GRPC_PORT
   extra_hosts:
     - "host.docker.internal:host-gateway"
-  entrypoint: |
-    sh -c '
-    ARGS="--logs-level=$${RUST_LOG} --keys /app/keys.json --server grpc://$${KASPAD_HOST}:$${KASPAD_GRPC_PORT} --listen 0.0.0.0:8082"
-    if [ "$${NETWORK}" = "mainnet" ]; then
-      ARGS="--enable-mainnet-pre-launch $$ARGS"
-    else
-      ARGS="--$${NETWORK} $$ARGS"
-    fi
-    exec /app/kaswallet-daemon $$ARGS
-    '
+  depends_on:
+    kaspad:
+      condition: service_healthy
+  entrypoint:
+    - sh
+    - -ec
+    - |
+      ARGS="--logs-level=$$RUST_LOG --keys /app/keys.json --server grpc://$$KASPAD_HOST:$$KASPAD_GRPC_PORT --listen 0.0.0.0:8082"
+      if [ "$$NETWORK" = "mainnet" ]; then
+        ARGS="--enable-mainnet-pre-launch $$ARGS"
+      else
+        ARGS="--$$NETWORK $$ARGS"
+      fi
+      exec sh /app/watch-dependencies.sh \
+        --tcp kaspad "$$KASPAD_HOST" "$$KASPAD_GRPC_PORT" \
+        -- /app/kaswallet-daemon $$ARGS
+  healthcheck:
+    <<: *default-healthcheck
+    test:
+      - CMD-SHELL
+      - >
+        bash -lc ': > /dev/tcp/127.0.0.1/8082' &&
+        bash -lc ": > /dev/tcp/$$KASPAD_HOST/$$KASPAD_GRPC_PORT"
 
 # Build config (extends runtime) - for primary service only
 x-kaswallet-build: &kaswallet-build
@@ -126,8 +166,12 @@ services:
       ssh:
         - default
     image: igranetwork/kaspad:${KASPAD_VERSION}
-    profiles: ["kaspad", "backend"]
+    restart: *service-restart-policy
+    profiles: ["kaspad", "backend", "frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
     container_name: kaspad
+    depends_on:
+      execution-layer:
+        condition: service_healthy
     ports:
       - "${KASPAD_GRPC_PORT}:${KASPAD_GRPC_PORT}"
       - "${KASPAD_P2P_PORT}:${KASPAD_P2P_PORT}"
@@ -147,83 +191,85 @@ services:
       - POST_FORK_LOCK_SCRIPT_PUBKEY
       - LOCK_SCRIPT_FORK_DAA_SCORE
       - RUST_LOG=info,kaspa_viaduct=trace,kaspa_igra_adapter=trace,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace
-    entrypoint: |
-      sh -c '
-      # Base kaspad arguments
-      ARGS="--disable-upnp \
-        --rpclisten-borsh=0.0.0.0 \
-        --rpclisten=0.0.0.0 \
-        --rpclisten-json=0.0.0.0 \
-        --listen=0.0.0.0 \
-        --utxoindex \
-        --logdir=/app/logs \
-        --appdir=/app/data"
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        ARGS="--disable-upnp \
+          --rpclisten-borsh=0.0.0.0 \
+          --rpclisten=0.0.0.0 \
+          --rpclisten-json=0.0.0.0 \
+          --listen=0.0.0.0 \
+          --utxoindex \
+          --logdir=/app/logs \
+          --appdir=/app/data"
 
-      # Network-specific flags (mainnet is default, no flag needed)
-      if [ "$${NETWORK}" != "mainnet" ]; then
-        ARGS="--$${NETWORK} --nodnsseed $$ARGS"
-      fi
-
-      # IGRA-specific arguments
-      IGRA_ENABLED="$${IGRA_ENABLE:-true}"
-      if [ "$$IGRA_ENABLED" = "true" ]; then
-        ARGS="$$ARGS \
-          --igra-enable \
-          --atan-listen \
-          --atan-transaction-id-prefix=${TX_ID_PREFIX} \
-          --viaduct-start-daa-score=${IGRA_LAUNCH_DAA_SCORE} \
-          --igra-l1-reference-timestamp=${L1_REFERENCE_TIMESTAMP} \
-          --igra-l1-reference-daa-score=${L1_REFERENCE_DAA_SCORE} \
-          --igra-genesis-hash=${GENESIS_BLOCK_HASH} \
-          --igra-min-fee-per-gas-gwei=${MIN_PROTOCOL_FEE_PER_GAS_GWEI} \
-          --igra-jwt-path=/app/jwt.hex \
-          --igra-lock-script-pubkey=${IGRA_LOCK_SCRIPT_PUBKEY} \
-          --igra-entry-min-amount=${IGRA_ENTRY_MIN_AMOUNT} \
-          --igra-el-host=http://execution-layer"
-
-        # Optional IGRA diagnostics flags
-        [ "$$ENABLE_PERF_DIAGNOSTICS" = "true" ] && ARGS="$$ARGS --igra-enable-perf-diagnostics"
-        [ "$$ENABLE_EVENT_LOGGING" = "true" ] && ARGS="$$ARGS --igra-enable-event-logging"
-        [ -n "$$WARM_START_BLOCK" ] && ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
-        [ "$$IGRA_SKIP_LOCK_SCRIPT_CHECK" = "true" ] && ARGS="$$ARGS --igra-skip-lock-script-check"
-        if [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && [ -z "$$LOCK_SCRIPT_FORK_DAA_SCORE" ]; then
-          echo "Error: LOCK_SCRIPT_FORK_DAA_SCORE must be set when POST_FORK_LOCK_SCRIPT_PUBKEY is set" >&2; exit 1
+        if [ "$$NETWORK" != "mainnet" ]; then
+          ARGS="--$$NETWORK --nodnsseed $$ARGS"
         fi
-        if [ -z "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ]; then
-          echo "Error: POST_FORK_LOCK_SCRIPT_PUBKEY must be set when LOCK_SCRIPT_FORK_DAA_SCORE is set" >&2; exit 1
-        fi
-        [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && ARGS="$$ARGS --igra-post-fork-lock-script-pubkey=$$POST_FORK_LOCK_SCRIPT_PUBKEY"
-        [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ] && ARGS="$$ARGS --igra-lock-script-fork-daa-score=$$LOCK_SCRIPT_FORK_DAA_SCORE"
 
-        # Auto-construct ATAN import URL from NETWORK and TX_ID_PREFIX, allow override via env
-        if [ -n "$$ATAN_IMPORT_URL" ]; then
-          ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
-        elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ] && [ -n "$$TX_ID_PREFIX" ]; then
-          ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$TX_ID_PREFIX/index.pb"
+        IGRA_ENABLED="$${IGRA_ENABLE:-true}"
+        if [ "$$IGRA_ENABLED" = "true" ]; then
+          ARGS="$$ARGS \
+            --igra-enable \
+            --atan-listen \
+            --atan-transaction-id-prefix=${TX_ID_PREFIX} \
+            --viaduct-start-daa-score=${IGRA_LAUNCH_DAA_SCORE} \
+            --igra-l1-reference-timestamp=${L1_REFERENCE_TIMESTAMP} \
+            --igra-l1-reference-daa-score=${L1_REFERENCE_DAA_SCORE} \
+            --igra-genesis-hash=${GENESIS_BLOCK_HASH} \
+            --igra-min-fee-per-gas-gwei=${MIN_PROTOCOL_FEE_PER_GAS_GWEI} \
+            --igra-jwt-path=/app/jwt.hex \
+            --igra-lock-script-pubkey=${IGRA_LOCK_SCRIPT_PUBKEY} \
+            --igra-entry-min-amount=${IGRA_ENTRY_MIN_AMOUNT} \
+            --igra-el-host=http://execution-layer"
+
+          [ "$$ENABLE_PERF_DIAGNOSTICS" = "true" ] && ARGS="$$ARGS --igra-enable-perf-diagnostics"
+          [ "$$ENABLE_EVENT_LOGGING" = "true" ] && ARGS="$$ARGS --igra-enable-event-logging"
+          [ -n "$$WARM_START_BLOCK" ] && ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
+          [ "$$IGRA_SKIP_LOCK_SCRIPT_CHECK" = "true" ] && ARGS="$$ARGS --igra-skip-lock-script-check"
+          if [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && [ -z "$$LOCK_SCRIPT_FORK_DAA_SCORE" ]; then
+            echo "Error: LOCK_SCRIPT_FORK_DAA_SCORE must be set when POST_FORK_LOCK_SCRIPT_PUBKEY is set" >&2; exit 1
+          fi
+          if [ -z "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ]; then
+            echo "Error: POST_FORK_LOCK_SCRIPT_PUBKEY must be set when LOCK_SCRIPT_FORK_DAA_SCORE is set" >&2; exit 1
+          fi
+          [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && ARGS="$$ARGS --igra-post-fork-lock-script-pubkey=$$POST_FORK_LOCK_SCRIPT_PUBKEY"
+          [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ] && ARGS="$$ARGS --igra-lock-script-fork-daa-score=$$LOCK_SCRIPT_FORK_DAA_SCORE"
+
+          if [ -n "$$ATAN_IMPORT_URL" ]; then
+            ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
+          elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ] && [ -n "$$TX_ID_PREFIX" ]; then
+            ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$TX_ID_PREFIX/index.pb"
+          else
+            echo "Error: CDN_BASE_URL, NETWORK and TX_ID_PREFIX must be set for ATAN import" >&2
+            exit 1
+          fi
+        fi
+
+        if [ -n "$$KASPAD_ADD_PEER" ]; then
+          ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
         else
-          echo "Error: CDN_BASE_URL, NETWORK and TX_ID_PREFIX must be set for ATAN import" >&2
-          exit 1
+          ARGS="$$ARGS --enable-unsynced-mining"
         fi
-      fi
 
-      # Peer configuration
-      if [ -n "$$KASPAD_ADD_PEER" ]; then
-        ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
-      else
-        ARGS="$$ARGS --enable-unsynced-mining"
-      fi
-
-      exec /app/kaspad $$ARGS
-      '
+        exec sh /app/watch-dependencies.sh \
+          --tcp execution-layer execution-layer 8545 \
+          -- /app/kaspad $$ARGS
     volumes:
       - kaspad_data:/app/data/
       - ./logs/kaspad/:/app/logs/  # Event logs when ENABLE_EVENT_LOGGING=true
       - ./keys/jwt.hex:/app/jwt.hex:ro
+      - *dependency-watch-volume
     networks:
       - igra-network
     healthcheck:
       <<: *default-healthcheck
-      test: ["CMD", "bash", "-c", "echo hello > /dev/tcp/kaspad/${KASPAD_GRPC_PORT}"]
+      test:
+        - CMD-SHELL
+        - >
+          bash -lc ': > /dev/tcp/127.0.0.1/${KASPAD_GRPC_PORT}' &&
+          bash -lc ': > /dev/tcp/execution-layer/8545'
 
   execution-layer:
     <<: *default-service
@@ -235,9 +281,9 @@ services:
       args:
         BUILD_PROFILE: release
     image: igranetwork/reth:${RETH_VERSION}
-    restart: "no"
+    restart: *service-restart-policy
     container_name: execution-layer
-    profiles: ["execution-layer", "backend"]
+    profiles: ["execution-layer", "kaspad", "backend", "frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
     entrypoint: /app/run-igra-el.sh
     ports:
       - "127.0.0.1:9545:8545"  # open 8545 on localhost for blockscout
@@ -278,7 +324,11 @@ services:
       - "traefik.http.services.el_stats_svc.loadbalancer.server.port=9001"
     healthcheck:
       <<: *default-healthcheck
-      test: ["CMD", "bash", "-c", "test -S /app/socket/auth.ipc"]
+      test:
+        - CMD-SHELL
+        - >
+          test -S /app/socket/auth.ipc &&
+          bash -lc ': > /dev/tcp/127.0.0.1/8545'
 
   node-health-check-client:
     image: igranetwork/node-health-check-client:${NODE_HEALTH_CHECK_VERSION}
@@ -309,22 +359,10 @@ services:
     container_name: rpc-provider-0
     environment:
       <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-0
       WALLET_DAEMON_URI: http://kaswallet-0:8082
       WALLET_TO_ADDRESS: ${W0_WALLET_TO_ADDRESS}
       KASWALLET_PASSWORD: ${W0_KASWALLET_PASSWORD}
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
-          echo hello > /dev/tcp/execution-layer/8545 && \
-          echo hello > /dev/tcp/kaswallet-0/8082",
-        ]
-    depends_on:
-      kaswallet-0:
-        condition: service_healthy
 
   kaswallet-0:
     <<: *kaswallet-build
@@ -334,15 +372,7 @@ services:
       - "127.0.0.1:8082:8082"  # open 8082 on localhost for entry transactions
     volumes:
       - ./keys/keys.kaswallet-0.json:/app/keys.json
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
-        ]
+      - *dependency-watch-volume
 
   rpc-provider-1:
     <<: *rpc-provider-runtime
@@ -350,22 +380,10 @@ services:
     container_name: rpc-provider-1
     environment:
       <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-1
       WALLET_DAEMON_URI: http://kaswallet-1:8082
       WALLET_TO_ADDRESS: ${W1_WALLET_TO_ADDRESS}
       KASWALLET_PASSWORD: ${W1_KASWALLET_PASSWORD}
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
-          echo hello > /dev/tcp/execution-layer/8545 && \
-          echo hello > /dev/tcp/kaswallet-1/8082",
-        ]
-    depends_on:
-      kaswallet-1:
-        condition: service_healthy
 
   kaswallet-1:
     <<: *kaswallet-runtime
@@ -373,15 +391,7 @@ services:
     container_name: kaswallet-1
     volumes:
       - ./keys/keys.kaswallet-1.json:/app/keys.json
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
-        ]
+      - *dependency-watch-volume
 
   rpc-provider-2:
     <<: *rpc-provider-runtime
@@ -389,22 +399,10 @@ services:
     container_name: rpc-provider-2
     environment:
       <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-2
       WALLET_DAEMON_URI: http://kaswallet-2:8082
       WALLET_TO_ADDRESS: ${W2_WALLET_TO_ADDRESS}
       KASWALLET_PASSWORD: ${W2_KASWALLET_PASSWORD}
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
-          echo hello > /dev/tcp/execution-layer/8545 && \
-          echo hello > /dev/tcp/kaswallet-2/8082",
-        ]
-    depends_on:
-      kaswallet-2:
-        condition: service_healthy
 
   kaswallet-2:
     <<: *kaswallet-runtime
@@ -412,15 +410,7 @@ services:
     container_name: kaswallet-2
     volumes:
       - ./keys/keys.kaswallet-2.json:/app/keys.json
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
-        ]
+      - *dependency-watch-volume
 
   rpc-provider-3:
     <<: *rpc-provider-runtime
@@ -428,22 +418,10 @@ services:
     container_name: rpc-provider-3
     environment:
       <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-3
       WALLET_DAEMON_URI: http://kaswallet-3:8082
       WALLET_TO_ADDRESS: ${W3_WALLET_TO_ADDRESS}
       KASWALLET_PASSWORD: ${W3_KASWALLET_PASSWORD}
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
-          echo hello > /dev/tcp/execution-layer/8545 && \
-          echo hello > /dev/tcp/kaswallet-3/8082",
-        ]
-    depends_on:
-      kaswallet-3:
-        condition: service_healthy
 
   kaswallet-3:
     <<: *kaswallet-runtime
@@ -451,15 +429,7 @@ services:
     container_name: kaswallet-3
     volumes:
       - ./keys/keys.kaswallet-3.json:/app/keys.json
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
-        ]
+      - *dependency-watch-volume
 
   rpc-provider-4:
     <<: *rpc-provider-runtime
@@ -467,22 +437,10 @@ services:
     container_name: rpc-provider-4
     environment:
       <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-4
       WALLET_DAEMON_URI: http://kaswallet-4:8082
       WALLET_TO_ADDRESS: ${W4_WALLET_TO_ADDRESS}
       KASWALLET_PASSWORD: ${W4_KASWALLET_PASSWORD}
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8535 && \
-          echo hello > /dev/tcp/execution-layer/8545 && \
-          echo hello > /dev/tcp/kaswallet-4/8082",
-        ]
-    depends_on:
-      kaswallet-4:
-        condition: service_healthy
 
   kaswallet-4:
     <<: *kaswallet-runtime
@@ -490,22 +448,23 @@ services:
     container_name: kaswallet-4
     volumes:
       - ./keys/keys.kaswallet-4.json:/app/keys.json
-    healthcheck:
-      <<: *default-healthcheck
-      test: [
-          "CMD",
-          "bash",
-          "-c",
-          "echo hello > /dev/tcp/$$HOSTNAME/8082 && \
-          echo hello > /dev/tcp/${KASPAD_HOST}/${KASPAD_GRPC_PORT}",
-        ]
+      - *dependency-watch-volume
 
   # Traefik Service
   traefik:
     <<: *default-service
     image: traefik:v3
+    restart: *service-restart-policy
     profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
     container_name: traefik
+    entrypoint:
+      - sh
+      - /app/watch-dependencies.sh
+      - --http-any
+      - rpc-backends
+      - http://rpc-provider-0:8535/health,http://rpc-provider-1:8535/health,http://rpc-provider-2:8535/health,http://rpc-provider-3:8535/health,http://rpc-provider-4:8535/health
+      - --
+      - traefik
     command:
       - "--api.dashboard=true"
       - "--api.insecure=true"
@@ -534,6 +493,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./config/traefik:/etc/traefik
       - traefik_certs:/letsencrypt
+      - *dependency-watch-volume
     networks:
       - igra-network
       - traefik-network
@@ -558,8 +518,18 @@ services:
       - "traefik.http.routers.websecure-router.tls.certresolver=myresolver"
     healthcheck:
       <<: *default-healthcheck
-      test: ["CMD", "wget", "--spider", "http://localhost:8080"]
-      timeout: 5s
+      test:
+        - CMD-SHELL
+        - >
+          wget --quiet --spider --tries=1 --timeout=2 http://localhost:8080 &&
+          (
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-0:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-1:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-2:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-3:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-4:8535/health
+          )
+      timeout: 12s
 
   # Miscellaneous Services
   kaspa-miner:
