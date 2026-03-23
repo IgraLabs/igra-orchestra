@@ -17,6 +17,7 @@ Choose your deployment guide:
 ## Troubleshooting
 
 - **[Docker Volume Permissions](troubleshooting/docker-volume-permissions.md)** - Fix permission denied errors
+- **[Service Restart Debugging](troubleshooting/service-restart-debugging.md)** - Diagnose fail-fast exits, restart loops, and Docker log persistence
 - **[SSL Certificate Issues](troubleshooting/ssl-certificate.md)** - Fix Traefik certificate resolver errors
 
 ## Requirements

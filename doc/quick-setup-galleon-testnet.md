@@ -182,6 +182,12 @@ For all 5 workers:
 docker compose --profile frontend-w5 up -d --no-build
 ```
 
+This assumes the backend profile is already running. To start backend and frontend together in one command:
+
+```bash
+docker compose --profile backend --profile frontend-w5 up -d --no-build
+```
+
 Or start with fewer workers:
 - 1 worker: `--profile frontend-w1`
 - 2 workers: `--profile frontend-w2`
@@ -266,10 +272,18 @@ docker compose --profile frontend-w5 up -d --no-build
 
 ## Maintenance
 
-Restart services:
+Restart frontend services without touching backend:
 ```bash
-docker compose --profile backend --profile frontend-w5 restart
+docker compose --profile frontend-w5 restart
 ```
+
+Stop frontend only without touching backend:
+```bash
+docker compose --profile frontend-w5 down
+docker compose --profile frontend-w5 up -d --no-build
+```
+
+For fewer workers, replace `frontend-w5` with `frontend-w1` through `frontend-w4`.
 
 Update to latest images:
 ```bash
