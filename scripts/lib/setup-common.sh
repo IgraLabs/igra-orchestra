@@ -91,6 +91,46 @@ run_docker_compose() {
     fi
 }
 
+wait_for_container_ready() {
+    local name="$1"
+    local timeout_seconds="${2:-300}"
+    local waited=0
+    local state
+    local health
+
+    while (( waited < timeout_seconds )); do
+        state="$(docker inspect -f '{{.State.Status}}' "$name" 2>/dev/null || true)"
+        health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$name" 2>/dev/null || true)"
+
+        if [[ "$state" == "running" && ( "$health" == "healthy" || "$health" == "none" ) ]]; then
+            return 0
+        fi
+
+        if [[ "$state" == "exited" || "$state" == "dead" ]]; then
+            error "$name exited before becoming ready"
+            return 1
+        fi
+
+        sleep 2
+        waited=$((waited + 2))
+    done
+
+    error "Timed out waiting for $name to become ready"
+    return 1
+}
+
+wait_for_backend_readiness() {
+    log "Waiting for backend services to become ready..."
+
+    if ! wait_for_container_ready execution-layer 300; then
+        return 1
+    fi
+
+    if ! wait_for_container_ready kaspad 300; then
+        return 1
+    fi
+}
+
 print_help() {
     local script_name
     script_name="$(basename "$0")"
@@ -287,8 +327,9 @@ start_services() {
     log "Backend services started"
     echo
 
-    log "Waiting 10 seconds for backend services to initialize..."
-    sleep 10
+    if ! wait_for_backend_readiness; then
+        die "Backend services did not become ready."
+    fi
 
     log "Starting worker services ($num_workers workers)..."
     if ! run_docker_compose --profile "frontend-w${num_workers}" up -d --no-build; then
@@ -311,6 +352,9 @@ print_summary() {
     echo
     echo "NOTE: kaswallet services may NOT start until kaspad completes IBD sync."
     echo "      This typically takes 4-6 hours for initial sync."
+    echo
+    echo "Core services exit when a required upstream dependency disappears."
+    echo "Mainnet templates restart them automatically; testnet and dev do not."
     echo
     echo "Useful commands:"
     echo "  docker compose logs -f kaspad                   # Monitor kaspad sync progress"
