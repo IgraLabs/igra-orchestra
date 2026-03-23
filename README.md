@@ -227,7 +227,7 @@ The recommended way to run the IGRA Orchestra stack is:
    ```
 
 3. **Start Worker Services**
-   Choose the profile based on how many workers you need:
+   Choose the profile based on how many workers you need. This assumes the backend profile is already running. If you want to start the full stack in one command, include both profiles (for example `docker compose --profile backend --profile frontend-w5 up -d`).
    ```bash
    # For 1 worker
    docker compose --profile frontend-w1 up -d
@@ -245,14 +245,22 @@ The recommended way to run the IGRA Orchestra stack is:
    docker compose --profile frontend-w5 up -d
    ```
 
-4. **Stopping Services**
+4. **Stopping Or Restarting Services**
    ```bash
    # Stop all services
    docker compose down
 
-   # Stop specific profile
-   docker compose --profile <profile-name> down
+   # Restart frontend only (5 workers)
+   docker compose --profile frontend-w5 restart
+
+   # Stop frontend only (5 workers) without touching backend
+   docker compose --profile frontend-w5 down
+
+   # Start frontend again
+   docker compose --profile frontend-w5 up -d
    ```
+
+   For fewer workers, replace `frontend-w5` with `frontend-w1` through `frontend-w4`.
 
 ## Logs and Monitoring
 
@@ -347,6 +355,7 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork
 - [Kaspa Wallet Guide](doc/kaspa-wallet.md) - Wallet setup for all networks
 - [Log Management](doc/log-management.md) - Automated log cleanup for servers
 - [Docker Volume Permissions](doc/troubleshooting/docker-volume-permissions.md) - Fix permission denied errors
+- [Service Restart Debugging](doc/troubleshooting/service-restart-debugging.md) - Diagnose fail-fast exits, restart loops, and Docker log persistence
 - [SSL Certificate Issues](doc/troubleshooting/ssl-certificate.md) - Fix Traefik certificate resolver errors
 
 ## Troubleshooting

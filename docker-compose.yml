@@ -71,6 +71,7 @@ x-rpc-provider-runtime: &rpc-provider-runtime
   depends_on:
     execution-layer:
       condition: service_healthy
+      required: false
   healthcheck:
     <<: *default-healthcheck
     test:
@@ -126,6 +127,7 @@ x-kaswallet-runtime: &kaswallet-runtime
   depends_on:
     kaspad:
       condition: service_healthy
+      required: false
   entrypoint:
     - sh
     - -ec
@@ -167,7 +169,7 @@ services:
         - default
     image: igranetwork/kaspad:${KASPAD_VERSION}
     restart: *service-restart-policy
-    profiles: ["kaspad", "backend", "frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
+    profiles: ["kaspad", "backend"]
     container_name: kaspad
     depends_on:
       execution-layer:
@@ -283,7 +285,7 @@ services:
     image: igranetwork/reth:${RETH_VERSION}
     restart: *service-restart-policy
     container_name: execution-layer
-    profiles: ["execution-layer", "kaspad", "backend", "frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
+    profiles: ["execution-layer", "kaspad", "backend"]
     entrypoint: /app/run-igra-el.sh
     ports:
       - "127.0.0.1:9545:8545"  # open 8545 on localhost for blockscout

@@ -49,4 +49,5 @@ nav:
     - Log Management: log-management.md
   - Troubleshooting:
     - Docker Volume Permissions: troubleshooting/docker-volume-permissions.md
+    - Service Restart Debugging: troubleshooting/service-restart-debugging.md
     - SSL Certificate: troubleshooting/ssl-certificate.md
