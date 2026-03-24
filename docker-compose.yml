@@ -249,10 +249,9 @@ services:
           fi
         fi
 
+        # Peer configuration
         if [ -n "$$KASPAD_ADD_PEER" ]; then
           ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
-        else
-          ARGS="$$ARGS --enable-unsynced-mining"
         fi
 
         exec sh /app/watch-dependencies.sh \
@@ -554,7 +553,6 @@ services:
       --kaspad-address $$KASPAD
       --port ${KASPAD_GRPC_PORT}
       --threads ${MINING_THREADS:-1}
-      --mine-when-not-synced
       '
     extra_hosts:
       - "host.docker.internal:host-gateway"
