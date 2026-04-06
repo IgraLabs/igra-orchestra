@@ -1,8 +1,9 @@
 #!/bin/bash
 
-# Query all kaswallet containers (0-4) and output their status as JSON
+# Query running kaswallet containers and output their status as JSON
 # Requires: docker, jq
 # Usage: ./wallet-status.sh [count] [--debug]
+#   count  Number of wallets to query, 1-20 (default: auto-detect running containers)
 
 set -e
 
@@ -15,14 +16,40 @@ for cmd in docker jq; do
 done
 
 DEBUG=false
-WALLET_COUNT=5
+WALLET_COUNT=""
+MAX_WORKERS=20
 
 for arg in "$@"; do
     case $arg in
         --debug|-d) DEBUG=true ;;
-        [0-9]*) WALLET_COUNT=$arg ;;
+        [0-9]*)
+            if ! [[ "$arg" =~ ^[0-9]+$ ]]; then
+                echo "Error: count must be a positive integer, got '$arg'" >&2
+                exit 1
+            fi
+            WALLET_COUNT=$arg ;;
     esac
 done
+
+if [[ -n "$WALLET_COUNT" ]] && { [[ "$WALLET_COUNT" -lt 1 ]] || [[ "$WALLET_COUNT" -gt "$MAX_WORKERS" ]]; }; then
+    echo "Error: count must be between 1 and $MAX_WORKERS" >&2
+    exit 1
+fi
+
+# Auto-detect running kaswallet containers if count not specified
+if [[ -z "$WALLET_COUNT" ]]; then
+    WALLET_COUNT=0
+    for i in $(seq 0 $((MAX_WORKERS - 1))); do
+        if docker inspect --format='{{.State.Running}}' "kaswallet-$i" 2>/dev/null | grep -q "true"; then
+            WALLET_COUNT=$((i + 1))
+        fi
+    done
+    if [[ "$WALLET_COUNT" -eq 0 ]]; then
+        echo "Error: No running kaswallet containers found" >&2
+        exit 1
+    fi
+    echo "Auto-detected $WALLET_COUNT wallet(s) (querying kaswallet-0 through kaswallet-$((WALLET_COUNT - 1)))" >&2
+fi
 
 log_debug() {
     if $DEBUG; then
@@ -72,3 +99,11 @@ done
 
 # Output final JSON
 echo "$wallets_json" | jq '{wallets: .}'
+
+# Check for low-balance wallets (< 1 KAS)
+low_balance=$(echo "$wallets_json" | jq -r '.[] | select(.total.available_kas < 1) | "  WARNING: kaswallet-\(.index) balance is \(.total.available_kas) KAS"')
+if [[ -n "$low_balance" ]]; then
+    echo "" >&2
+    echo "Low balance wallets (< 1 KAS):" >&2
+    echo "$low_balance" >&2
+fi

@@ -257,6 +257,7 @@ generate_wallet() {
     # Use expect to handle interactive password prompts
     # Pass password via environment variable to avoid command injection
     # Use --user to ensure files are created with correct ownership
+    # shellcheck disable=SC2016 # Variables are intentionally spliced via quote-breaking, not expanded inside single quotes
     if ! WALLET_PASS="$password" expect -c '
         log_user 0
         spawn docker run --rm -it --user '"$(id -u):$(id -g)"' \
@@ -378,7 +379,7 @@ print_summary() {
     echo "     - Get wallet addresses: ./scripts/debug/wallet-status.sh"
     echo "     - Top up each wallet address with KAS (for L1 gas fees)"
     echo "     - Update .env with the actual wallet addresses"
-    echo "  3. Restart workers: docker compose --profile frontend-w5 up -d"
+    echo "  3. Restart workers: docker compose --profile frontend-w${NUM_WORKERS} up -d"
     echo
 }
 
@@ -456,7 +457,8 @@ run_setup() {
     if [[ -f .env ]]; then
         log "Existing .env file found. It will be replaced with the template."
         if prompt_confirm "Do you want to backup the existing .env first?" "y"; then
-            local backup_file=".env.backup.$(date +%Y%m%d_%H%M%S)"
+            local backup_file
+            backup_file=".env.backup.$(date +%Y%m%d_%H%M%S)"
             cp .env "$backup_file"
             log "Backed up to $backup_file"
         fi
@@ -531,8 +533,11 @@ run_setup() {
         log "JWT secret already exists: keys/jwt.hex"
     fi
 
-    # Number of workers (fixed at 5)
-    NUM_WORKERS=5
+    # Number of workers (configurable via NUM_WORKERS env var, default: 5, max: 20)
+    NUM_WORKERS="${NUM_WORKERS:-5}"
+    if ! [[ "$NUM_WORKERS" =~ ^[0-9]+$ ]] || [[ "$NUM_WORKERS" -lt 1 ]] || [[ "$NUM_WORKERS" -gt 20 ]]; then
+        die "NUM_WORKERS must be a number between 1 and 20 (got: $NUM_WORKERS)"
+    fi
 
     # Check for existing wallet files
     EXISTING_WALLETS=()

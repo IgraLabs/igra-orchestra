@@ -356,7 +356,7 @@ services:
   # Worker Services
   rpc-provider-0:
     <<: *rpc-provider-build
-    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
+    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: rpc-provider-0
     environment:
       <<: *rpc-provider-environment
@@ -367,7 +367,7 @@ services:
 
   kaswallet-0:
     <<: *kaswallet-build
-    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
+    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-0
     ports:
       - "127.0.0.1:8082:8082"  # open 8082 on localhost for entry transactions
@@ -377,7 +377,7 @@ services:
 
   rpc-provider-1:
     <<: *rpc-provider-runtime
-    profiles: ["frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
+    profiles: ["frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: rpc-provider-1
     environment:
       <<: *rpc-provider-environment
@@ -388,7 +388,7 @@ services:
 
   kaswallet-1:
     <<: *kaswallet-runtime
-    profiles: ["frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
+    profiles: ["frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-1
     volumes:
       - ./keys/keys.kaswallet-1.json:/app/keys.json
@@ -396,7 +396,7 @@ services:
 
   rpc-provider-2:
     <<: *rpc-provider-runtime
-    profiles: ["frontend-w3", "frontend-w4", "frontend-w5"]
+    profiles: ["frontend-w3", "frontend-w4", "frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: rpc-provider-2
     environment:
       <<: *rpc-provider-environment
@@ -407,7 +407,7 @@ services:
 
   kaswallet-2:
     <<: *kaswallet-runtime
-    profiles: ["frontend-w3", "frontend-w4", "frontend-w5"]
+    profiles: ["frontend-w3", "frontend-w4", "frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-2
     volumes:
       - ./keys/keys.kaswallet-2.json:/app/keys.json
@@ -415,7 +415,7 @@ services:
 
   rpc-provider-3:
     <<: *rpc-provider-runtime
-    profiles: ["frontend-w4", "frontend-w5"]
+    profiles: ["frontend-w4", "frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: rpc-provider-3
     environment:
       <<: *rpc-provider-environment
@@ -426,7 +426,7 @@ services:
 
   kaswallet-3:
     <<: *kaswallet-runtime
-    profiles: ["frontend-w4", "frontend-w5"]
+    profiles: ["frontend-w4", "frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-3
     volumes:
       - ./keys/keys.kaswallet-3.json:/app/keys.json
@@ -434,7 +434,7 @@ services:
 
   rpc-provider-4:
     <<: *rpc-provider-runtime
-    profiles: ["frontend-w5"]
+    profiles: ["frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: rpc-provider-4
     environment:
       <<: *rpc-provider-environment
@@ -445,10 +445,295 @@ services:
 
   kaswallet-4:
     <<: *kaswallet-runtime
-    profiles: ["frontend-w5"]
+    profiles: ["frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-4
     volumes:
       - ./keys/keys.kaswallet-4.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-5:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: rpc-provider-5
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-5
+      WALLET_DAEMON_URI: http://kaswallet-5:8082
+      WALLET_TO_ADDRESS: ${W5_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W5_KASWALLET_PASSWORD}
+
+  kaswallet-5:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: kaswallet-5
+    volumes:
+      - ./keys/keys.kaswallet-5.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-6:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: rpc-provider-6
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-6
+      WALLET_DAEMON_URI: http://kaswallet-6:8082
+      WALLET_TO_ADDRESS: ${W6_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W6_KASWALLET_PASSWORD}
+
+  kaswallet-6:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: kaswallet-6
+    volumes:
+      - ./keys/keys.kaswallet-6.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-7:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: rpc-provider-7
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-7
+      WALLET_DAEMON_URI: http://kaswallet-7:8082
+      WALLET_TO_ADDRESS: ${W7_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W7_KASWALLET_PASSWORD}
+
+  kaswallet-7:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: kaswallet-7
+    volumes:
+      - ./keys/keys.kaswallet-7.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-8:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: rpc-provider-8
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-8
+      WALLET_DAEMON_URI: http://kaswallet-8:8082
+      WALLET_TO_ADDRESS: ${W8_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W8_KASWALLET_PASSWORD}
+
+  kaswallet-8:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: kaswallet-8
+    volumes:
+      - ./keys/keys.kaswallet-8.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-9:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: rpc-provider-9
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-9
+      WALLET_DAEMON_URI: http://kaswallet-9:8082
+      WALLET_TO_ADDRESS: ${W9_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W9_KASWALLET_PASSWORD}
+
+  kaswallet-9:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: kaswallet-9
+    volumes:
+      - ./keys/keys.kaswallet-9.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-10:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: rpc-provider-10
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-10
+      WALLET_DAEMON_URI: http://kaswallet-10:8082
+      WALLET_TO_ADDRESS: ${W10_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W10_KASWALLET_PASSWORD}
+
+  kaswallet-10:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: kaswallet-10
+    volumes:
+      - ./keys/keys.kaswallet-10.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-11:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: rpc-provider-11
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-11
+      WALLET_DAEMON_URI: http://kaswallet-11:8082
+      WALLET_TO_ADDRESS: ${W11_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W11_KASWALLET_PASSWORD}
+
+  kaswallet-11:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: kaswallet-11
+    volumes:
+      - ./keys/keys.kaswallet-11.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-12:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: rpc-provider-12
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-12
+      WALLET_DAEMON_URI: http://kaswallet-12:8082
+      WALLET_TO_ADDRESS: ${W12_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W12_KASWALLET_PASSWORD}
+
+  kaswallet-12:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: kaswallet-12
+    volumes:
+      - ./keys/keys.kaswallet-12.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-13:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: rpc-provider-13
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-13
+      WALLET_DAEMON_URI: http://kaswallet-13:8082
+      WALLET_TO_ADDRESS: ${W13_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W13_KASWALLET_PASSWORD}
+
+  kaswallet-13:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: kaswallet-13
+    volumes:
+      - ./keys/keys.kaswallet-13.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-14:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: rpc-provider-14
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-14
+      WALLET_DAEMON_URI: http://kaswallet-14:8082
+      WALLET_TO_ADDRESS: ${W14_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W14_KASWALLET_PASSWORD}
+
+  kaswallet-14:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: kaswallet-14
+    volumes:
+      - ./keys/keys.kaswallet-14.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-15:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: rpc-provider-15
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-15
+      WALLET_DAEMON_URI: http://kaswallet-15:8082
+      WALLET_TO_ADDRESS: ${W15_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W15_KASWALLET_PASSWORD}
+
+  kaswallet-15:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: kaswallet-15
+    volumes:
+      - ./keys/keys.kaswallet-15.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-16:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: rpc-provider-16
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-16
+      WALLET_DAEMON_URI: http://kaswallet-16:8082
+      WALLET_TO_ADDRESS: ${W16_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W16_KASWALLET_PASSWORD}
+
+  kaswallet-16:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: kaswallet-16
+    volumes:
+      - ./keys/keys.kaswallet-16.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-17:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: rpc-provider-17
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-17
+      WALLET_DAEMON_URI: http://kaswallet-17:8082
+      WALLET_TO_ADDRESS: ${W17_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W17_KASWALLET_PASSWORD}
+
+  kaswallet-17:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w18", "frontend-w19", "frontend-w20"]
+    container_name: kaswallet-17
+    volumes:
+      - ./keys/keys.kaswallet-17.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-18:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w19", "frontend-w20"]
+    container_name: rpc-provider-18
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-18
+      WALLET_DAEMON_URI: http://kaswallet-18:8082
+      WALLET_TO_ADDRESS: ${W18_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W18_KASWALLET_PASSWORD}
+
+  kaswallet-18:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w19", "frontend-w20"]
+    container_name: kaswallet-18
+    volumes:
+      - ./keys/keys.kaswallet-18.json:/app/keys.json
+      - *dependency-watch-volume
+
+  rpc-provider-19:
+    <<: *rpc-provider-runtime
+    profiles: ["frontend-w20"]
+    container_name: rpc-provider-19
+    environment:
+      <<: *rpc-provider-environment
+      KASWALLET_HOST: kaswallet-19
+      WALLET_DAEMON_URI: http://kaswallet-19:8082
+      WALLET_TO_ADDRESS: ${W19_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W19_KASWALLET_PASSWORD}
+
+  kaswallet-19:
+    <<: *kaswallet-runtime
+    profiles: ["frontend-w20"]
+    container_name: kaswallet-19
+    volumes:
+      - ./keys/keys.kaswallet-19.json:/app/keys.json
       - *dependency-watch-volume
 
   # Traefik Service
@@ -456,14 +741,14 @@ services:
     <<: *default-service
     image: traefik:v3
     restart: *service-restart-policy
-    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5"]
+    profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: traefik
     entrypoint:
       - sh
       - /app/watch-dependencies.sh
       - --http-any
       - rpc-backends
-      - http://rpc-provider-0:8535/health,http://rpc-provider-1:8535/health,http://rpc-provider-2:8535/health,http://rpc-provider-3:8535/health,http://rpc-provider-4:8535/health
+      - http://rpc-provider-0:8535/health,http://rpc-provider-1:8535/health,http://rpc-provider-2:8535/health,http://rpc-provider-3:8535/health,http://rpc-provider-4:8535/health,http://rpc-provider-5:8535/health,http://rpc-provider-6:8535/health,http://rpc-provider-7:8535/health,http://rpc-provider-8:8535/health,http://rpc-provider-9:8535/health,http://rpc-provider-10:8535/health,http://rpc-provider-11:8535/health,http://rpc-provider-12:8535/health,http://rpc-provider-13:8535/health,http://rpc-provider-14:8535/health,http://rpc-provider-15:8535/health,http://rpc-provider-16:8535/health,http://rpc-provider-17:8535/health,http://rpc-provider-18:8535/health,http://rpc-provider-19:8535/health
       - --
       - traefik
     command:
@@ -528,7 +813,22 @@ services:
             wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-1:8535/health ||
             wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-2:8535/health ||
             wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-3:8535/health ||
-            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-4:8535/health
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-4:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-5:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-6:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-7:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-8:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-9:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-10:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-11:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-12:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-13:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-14:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-15:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-16:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-17:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-18:8535/health ||
+            wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-19:8535/health
           )
       timeout: 12s
 
