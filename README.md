@@ -108,15 +108,15 @@ docker compose build
 docker compose --profile kaspad up -d
 docker compose --profile backend up -d
 # 6. Start worker services based on your needs
-docker compose --profile frontend-w1 up -d  # 1 worker
+docker compose --profile frontend-w1 up -d   # 1 worker
 # OR
-docker compose --profile frontend-w2 up -d  # 2 workers
+docker compose --profile frontend-w2 up -d   # 2 workers
 # OR
-docker compose --profile frontend-w3 up -d  # 3 workers
+docker compose --profile frontend-w5 up -d   # 5 workers
 # OR
-docker compose --profile frontend-w4 up -d  # 4 workers
+docker compose --profile frontend-w10 up -d  # 10 workers
 # OR
-docker compose --profile frontend-w5 up -d  # 5 workers
+docker compose --profile frontend-w20 up -d  # 20 workers
 ```
 
 ## Initial Setup
@@ -154,7 +154,15 @@ Follow these steps before the first run:
     ```
 
 4.  **Create worker keys:**
-    Generate the necessary key files for the wallet services. At minimum, you need `keys.kaswallet-0.json` for one worker. Additional workers require corresponding files (e.g., `keys.kaswallet-1.json`, `keys.kaswallet-2.json`).
+    Generate the necessary key files for the wallet services. At minimum, you need `keys.kaswallet-0.json` for one worker. Additional workers require corresponding files (e.g., `keys.kaswallet-1.json`, `keys.kaswallet-2.json`, up to `keys.kaswallet-19.json` for 20 workers).
+
+5.  **Sync wallet addresses (after wallets are running):**
+    Once the kaswallet containers are running (requires kaspad to have completed IBD sync), sync their addresses into `.env`:
+    ```bash
+    ./scripts/debug/sync-wallet-addresses.sh        # auto-detect running wallets
+    ./scripts/debug/sync-wallet-addresses.sh 10     # sync first 10 wallets
+    ```
+    This updates `W{N}_WALLET_TO_ADDRESS` entries in `.env` by querying each running kaswallet container. Restart workers after syncing to apply the new addresses.
 
 ## Docker Compose Configuration
 
@@ -170,15 +178,15 @@ The Docker Compose configuration uses profiles and YAML anchors for improved mai
 - **Kaspa Miner** (profile: `kaspa-miner`):
   - `kaspa-miner` - Kaspa mining service
 
-- **Worker Services** (profiles: `frontend-w1`, `frontend-w2`, `frontend-w3`, `frontend-w4`, `frontend-w5`):
-  - `rpc-provider-0` to `rpc-provider-4` - RPC endpoints for API requests
-  - `kaswallet-0` to `kaswallet-4` - Wallet services for transaction relay
+- **Worker Services** (profiles: `frontend-w1` through `frontend-w20`):
+  - `rpc-provider-0` to `rpc-provider-19` - RPC endpoints for API requests
+  - `kaswallet-0` to `kaswallet-19` - Wallet services for transaction relay
 
 - **Core Services** (profile: `backend`):
   - `kaspad` - Kaspa node with integrated Igra adapter (L1-L2 bridge and block building)
   - `execution-layer` - Ethereum-compatible execution layer
 
-- **Traefik** (profiles: `frontend-w1` through `frontend-w5`):
+- **Traefik** (profiles: `frontend-w1` through `frontend-w20`):
   - `traefik` - Reverse proxy and load balancer (starts with any worker profile)
 
 - **Node Health Check** (profile: `node-health-check-client` or `backend`):
@@ -232,17 +240,14 @@ The recommended way to run the IGRA Orchestra stack is:
    # For 1 worker
    docker compose --profile frontend-w1 up -d
 
-   # For 2 workers
-   docker compose --profile frontend-w2 up -d
-
-   # For 3 workers
-   docker compose --profile frontend-w3 up -d
-
-   # For 4 workers
-   docker compose --profile frontend-w4 up -d
-
    # For 5 workers
    docker compose --profile frontend-w5 up -d
+
+   # For 10 workers
+   docker compose --profile frontend-w10 up -d
+
+   # For 20 workers
+   docker compose --profile frontend-w20 up -d
    ```
 
 4. **Stopping Or Restarting Services**
@@ -260,7 +265,7 @@ The recommended way to run the IGRA Orchestra stack is:
    docker compose --profile frontend-w5 up -d
    ```
 
-   For fewer workers, replace `frontend-w5` with `frontend-w1` through `frontend-w4`.
+   All profiles from `frontend-w1` through `frontend-w20` are available. Replace `frontend-w5` with your desired worker count.
 
 ## Logs and Monitoring
 
