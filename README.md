@@ -195,6 +195,55 @@ The Docker Compose configuration uses profiles and YAML anchors for improved mai
 - **ATAN Uploader** (profile: `atan-uploader`):
   - `atan-uploader` - Uploads ATAN chain data to S3 and maintains index
 
+- **Wallet Balance API** (profile: `wallet-api`):
+  - `wallet-balance-api` - HTTP endpoint that returns live wallet balances as JSON
+
+## Wallet Balance API
+
+The `wallet-api` profile starts a lightweight HTTP service that queries all running kaswallet containers and returns their addresses and balances as JSON. It is exposed through Traefik with HTTPS and BasicAuth protection.
+
+### Setup
+
+1. Generate BasicAuth credentials (requires `htpasswd` -- from `apache2-utils` on Debian/Ubuntu or `httpd` on macOS via Homebrew):
+    ```bash
+    htpasswd -nb admin your-secure-password | sed 's/\$/\$\$/g'
+    ```
+    The `sed` command escapes `$` to `$$` which is required for Docker Compose environment variable interpolation.
+
+2. Add the output to your `.env` file as `WALLET_API_BASICAUTH` (do not wrap the value in quotes):
+    ```bash
+    WALLET_API_BASICAUTH=admin:$$apr1$$...
+    ```
+
+3. Start the service:
+    ```bash
+    docker compose --profile wallet-api up -d
+    ```
+
+4. Query wallet balances:
+    ```bash
+    curl -u admin:your-secure-password https://your-domain/internal/wallets
+    ```
+
+### Response Format
+
+```json
+{
+  "wallets": [
+    {
+      "index": 0,
+      "default_address": "kaspatest:qpt9pq...",
+      "total": {
+        "available_sompi": 93156363183,
+        "available_kas": 931.56363183,
+        "pending_sompi": 0,
+        "pending_kas": 0
+      }
+    }
+  ]
+}
+```
+
 ## Configuration
 
 This project uses a `.env` file to manage environment variables. A `.env.dev.example` file is provided with defaults.

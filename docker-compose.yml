@@ -797,9 +797,10 @@ services:
       - "traefik.http.routers.web-redirect.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
       - "traefik.http.routers.web-redirect.entrypoints=web"
       - "traefik.http.routers.web-redirect.middlewares=redirect-to-https"
-      # Define a router for websecure (HTTPS)
+      # Define a router for websecure (HTTPS) — low priority so specific path routers win
       - "traefik.http.routers.websecure-router.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
       - "traefik.http.routers.websecure-router.entrypoints=websecure"
+      - "traefik.http.routers.websecure-router.priority=1"
       - "traefik.http.routers.websecure-router.tls=true"
       - "traefik.http.routers.websecure-router.tls.certresolver=myresolver"
     healthcheck:
@@ -831,6 +832,43 @@ services:
             wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-19:8535/health
           )
       timeout: 12s
+
+  # Wallet Balance API
+  wallet-balance-api:
+    <<: *default-service
+    image: docker:27-cli
+    profiles: ["wallet-api"]
+    container_name: wallet-balance-api
+    restart: *service-restart-policy
+    environment:
+      - WALLET_API_BASICAUTH
+    entrypoint: ["sh", "/app/serve.sh"]
+    volumes:
+      # Docker socket for querying kaswallet containers (same pattern as Traefik).
+      # Protected by Traefik BasicAuth + rate limiting.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./scripts/wallet-balance-api.sh:/app/serve.sh:ro
+    expose:
+      - "8090"
+    networks:
+      - igra-network
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wallet-api.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`) && Path(`/internal/wallets`)"
+      - "traefik.http.routers.wallet-api.priority=200"
+      - "traefik.http.routers.wallet-api.entrypoints=websecure"
+      - "traefik.http.routers.wallet-api.tls=true"
+      - "traefik.http.routers.wallet-api.tls.certresolver=myresolver"
+      - "traefik.http.routers.wallet-api.middlewares=wallet-ratelimit,wallet-auth"
+      - "traefik.http.middlewares.wallet-ratelimit.ratelimit.average=5"
+      - "traefik.http.middlewares.wallet-ratelimit.ratelimit.period=10s"
+      - "traefik.http.middlewares.wallet-ratelimit.ratelimit.burst=10"
+      - "traefik.http.middlewares.wallet-auth.basicauth.users=${WALLET_API_BASICAUTH}"
+      - "traefik.http.services.wallet-api.loadbalancer.server.port=8090"
+    # Note: no healthcheck — Traefik filters containers with failing/starting healthchecks,
+    # and the apk install at startup delays socat readiness. Traefik will route to this
+    # container as soon as it's running. The /health endpoint is still available internally.
 
   # Miscellaneous Services
   kaspa-miner:
