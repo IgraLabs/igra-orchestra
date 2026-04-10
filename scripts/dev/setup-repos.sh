@@ -201,15 +201,31 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
     log ""
     log "Pulling pre-built images from Docker Hub..."
 
-    # Source image versions
-    if [[ -f "$PROJECT_DIR/versions.mainnet.env" ]]; then
+    # Pick the same version file docker-compose and the deployment guides use per network.
+    # Without this, testnet (Galleon) users still pulled mainnet-pinned tags if those files diverge.
+    network="${NETWORK:-mainnet}"
+    case "$network" in
+        mainnet)
+            versions_file="$PROJECT_DIR/versions.mainnet.env"
+            ;;
+        testnet)
+            versions_file="$PROJECT_DIR/versions.testnet.env"
+            ;;
+        *)
+            log "NETWORK=$network is not mainnet or testnet; using versions.mainnet.env for image pulls"
+            versions_file="$PROJECT_DIR/versions.mainnet.env"
+            ;;
+    esac
+
+    if [[ -f "$versions_file" ]]; then
+        log "Sourcing image versions from $(basename "$versions_file") (NETWORK=$network)"
         # shellcheck source=/dev/null
-        source "$PROJECT_DIR/versions.mainnet.env"
+        source "$versions_file"
     else
-        panic "versions.mainnet.env not found in $PROJECT_DIR"
+        panic "Version file not found: $versions_file (NETWORK=$network)"
     fi
 
-    # Pull and tag images (versions from versions.mainnet.env)
+    # Pull and tag images (versions from the selected versions.*.env)
     # Format: "image_name:version:local_tag"
     images=(
         "kaspad:${KASPAD_VERSION}:kaspad"
