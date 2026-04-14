@@ -11,6 +11,7 @@ Choose your deployment guide:
 
 ## Operations
 
+- **[Node Operations](node-operations.md)** - Worker config, wallet API, balance monitoring, and health check integration
 - **[Kaspa Wallet Guide](kaspa-wallet.md)** - Wallet setup and management for all networks
 - **[Log Management](log-management.md)** - Automated log cleanup for servers
 
