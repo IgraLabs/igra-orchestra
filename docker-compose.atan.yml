@@ -1,0 +1,104 @@
+name: atan-${NETWORK}
+
+volumes:
+  kaspad_data:
+
+x-default-logging: &default-logging
+  driver: "${LOGGING_DRIVER:-json-file}"
+  options:
+    max-size: "1g"
+    max-file: "10"
+    compress: "true"
+    tag: "atan-${NETWORK}/{{.Name}}/{{.ID}}"
+
+x-default-healthcheck: &default-healthcheck
+  interval: 10s
+  timeout: 2s
+  retries: 3
+  start_period: 5s
+
+services:
+  kaspad:
+    image: igranetwork/kaspad:${KASPAD_VERSION}
+    restart: ${SERVICE_RESTART_POLICY:-unless-stopped}
+    container_name: kaspad-atan
+    logging: *default-logging
+    ports:
+      - "127.0.0.1:${KASPAD_GRPC_PORT}:${KASPAD_GRPC_PORT}"
+      - "${KASPAD_P2P_PORT}:${KASPAD_P2P_PORT}"
+      - "127.0.0.1:${KASPAD_BORSH_PORT}:${KASPAD_BORSH_PORT}"
+      - "127.0.0.1:${KASPAD_JSON_PORT}:${KASPAD_JSON_PORT}"
+    environment:
+      - KASPAD_ADD_PEER
+      - ATAN_IMPORT_URL
+      - CDN_BASE_URL
+      - NETWORK
+      - TX_ID_PREFIX
+      - RUST_LOG=${RUST_LOG:-info,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace}
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        ARGS="--disable-upnp \
+          --rpclisten-borsh=0.0.0.0 \
+          --rpclisten=0.0.0.0 \
+          --rpclisten-json=0.0.0.0 \
+          --listen=0.0.0.0 \
+          --utxoindex \
+          --logdir=/app/logs \
+          --appdir=/app/data"
+
+        if [ "$$NETWORK" != "mainnet" ]; then
+          ARGS="--$$NETWORK --nodnsseed $$ARGS"
+        fi
+
+        # ATAN-only flags (no IGRA)
+        ARGS="$$ARGS \
+          --atan-listen \
+          --atan-transaction-id-prefix=${TX_ID_PREFIX}"
+
+        if [ -n "$$ATAN_IMPORT_URL" ]; then
+          ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
+        elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ] && [ -n "$$TX_ID_PREFIX" ]; then
+          ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$TX_ID_PREFIX/index.pb"
+        else
+          echo "Warning: No ATAN import URL configured. Set ATAN_IMPORT_URL or CDN_BASE_URL+NETWORK+TX_ID_PREFIX to import historical data." >&2
+        fi
+
+        # Peer configuration
+        if [ -n "$$KASPAD_ADD_PEER" ]; then
+          ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
+        fi
+
+        exec /app/kaspad $$ARGS
+    volumes:
+      - kaspad_data:/app/data/
+      - ./logs/kaspad/:/app/logs/
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "bash -lc ': > /dev/tcp/127.0.0.1/${KASPAD_GRPC_PORT}'"]
+
+  atan-uploader:
+    image: igranetwork/atan-uploader:${ATAN_UPLOADER_VERSION}
+    container_name: atan-uploader
+    profiles: ["atan-uploader"]
+    restart: ${SERVICE_RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    depends_on:
+      kaspad:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-atan-import}
+      CDN_BASE_URL: ${CDN_BASE_URL}
+      NETWORK: ${NETWORK}
+      TX_ID_PREFIX: ${TX_ID_PREFIX}
+      DATADIR: ${DATADIR:-}
+      UPLOAD_JITTER_MAX_SECONDS: ${UPLOAD_JITTER_MAX_SECONDS:-60}
+    volumes:
+      - kaspad_data:/app/data/
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "pgrep -f atan-uploader > /dev/null || exit 1"]

@@ -45,6 +45,13 @@ nav:
     - Mainnet: quick-setup-mainnet.md
     - Galleon Testnet: quick-setup-galleon-testnet.md
   - Operations:
+    - Node Operations:
+      - Overview: node-operations/index.md
+      - Worker Configuration: node-operations/worker-configuration.md
+      - Wallet Management: node-operations/wallet-management.md
+      - Health Check: node-operations/health-check.md
+      - ATAN-Only Mode: node-operations/atan-only.md
+      - Environment Reference: node-operations/environment-reference.md
     - Kaspa Wallet: kaspa-wallet.md
     - Log Management: log-management.md
   - Troubleshooting:
