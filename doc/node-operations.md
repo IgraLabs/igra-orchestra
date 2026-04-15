@@ -166,4 +166,4 @@ All operational variables across the stack:
 | `RPC_WALLET_AUTH_{i}` | health-check `.env` | BasicAuth user:pass to query node's wallet API |
 | `RPC_MIN_BALANCE_KAS_{i}` | health-check `.env` | Min wallet balance threshold in KAS (default: 1.0) |
 | `SLACK_WEBHOOK_URL` | health-check `.env` | Slack webhook for alerts including low-balance warnings |
-| `RPC_READ_ONLY` | orchestra `.env` | Set to `false` to enable transaction submission via RPC |
+| `RPC_READ_ONLY` | orchestra `.env` | Transaction submission enabled by default (`false`); set to `true` for read-only RPC |

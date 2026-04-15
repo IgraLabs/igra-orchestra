@@ -371,11 +371,10 @@ print_summary() {
     echo
     echo "=== Optional: Enable Transaction Submission (RPC) ==="
     echo
-    echo "By default, RPC is read-only (RPC_READ_ONLY=true)."
-    echo "If you want to accept and submit user transactions:"
+    echo "By default, RPC accepts transactions (RPC_READ_ONLY=false)."
+    echo "To enable transaction submission, fund the wallets:"
     echo
-    echo "  1. Set RPC_READ_ONLY=false in .env"
-    echo "  2. After IBD sync completes (IBD: 100%):"
+    echo "  1. After IBD sync completes (IBD: 100%):"
     echo "     - Get wallet addresses: ./scripts/debug/wallet-status.sh"
     echo "     - Top up each wallet address with KAS (for L1 gas fees)"
     echo "     - Update .env with the actual wallet addresses"
