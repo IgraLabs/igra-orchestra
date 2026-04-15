@@ -206,12 +206,13 @@ docker compose logs -f node-health-check-client
 
 ## Optional: Enable RPC Transaction Submission
 
-By default, the RPC is configured as **read-only** (`RPC_READ_ONLY=true`). This means it can query blockchain state but cannot submit transactions.
+By default, the RPC is configured to **accept transactions** (`RPC_READ_ONLY=false`). This means it can both query blockchain state and submit transactions.
 
-If you want to use this node as an RPC endpoint that accepts transactions from users:
+If you want to use this node as a read-only RPC endpoint (no transaction submission), set `RPC_READ_ONLY=true` in your `.env` file.
 
-1. Set `RPC_READ_ONLY=false` in your `.env` file
-2. Top up the 5 kaswallets with KAS (you will pay for L1 gas fees)
+To enable transaction submission, you need to fund the wallets:
+
+1. Top up the 5 kaswallets with KAS (you will pay for L1 gas fees)
 
 After IBD sync completes (IBD: 100%):
 
