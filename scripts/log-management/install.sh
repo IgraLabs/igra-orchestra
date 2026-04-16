@@ -46,7 +46,7 @@ check_distribution() {
     
     . /etc/os-release
     
-    if [[ "$ID" != "ubuntu" ]] && [[ "$ID_LIKE" != *"ubuntu"* ]]; then
+    if [[ "$ID" != "ubuntu" ]] && [[ "${ID_LIKE:-}" != *"ubuntu"* ]]; then
         print_message "$YELLOW" "Warning: This script is designed for Ubuntu systems"
         print_message "$YELLOW" "Current distribution: $ID"
         read -p "Continue anyway? (y/N): " -n 1 -r
