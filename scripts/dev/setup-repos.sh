@@ -202,9 +202,15 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
     log "Pulling pre-built images from Docker Hub..."
 
     # Pick the same version file docker-compose and the deployment guides use per network.
-    # Without this, testnet (Galleon) users still pulled mainnet-pinned tags if those files diverge.
-    network="${NETWORK:-mainnet}"
-    case "$network" in
+    # Fail loudly on unknown/missing NETWORK rather than silently pulling mainnet tags onto a
+    # testnet datadir (or vice versa) — mixing image versions across networks is a deploy footgun.
+    # Reject mixed-case (e.g. "Mainnet") at the source: docker-compose interpolates ${NETWORK}
+    # verbatim into kaspad CLI flags (--$NETWORK) and the compose project name, so a value that
+    # passes here but isn't lowercase would break compose-up downstream.
+    if [[ -z "${NETWORK:-}" ]]; then
+        panic "NETWORK is not set. Configure it in .env or export it before running with USE_PREBUILT_IMAGES=true."
+    fi
+    case "$NETWORK" in
         mainnet)
             versions_file="$PROJECT_DIR/versions.mainnet.env"
             ;;
@@ -212,17 +218,16 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
             versions_file="$PROJECT_DIR/versions.testnet.env"
             ;;
         *)
-            log "NETWORK=$network is not mainnet or testnet; using versions.mainnet.env for image pulls"
-            versions_file="$PROJECT_DIR/versions.mainnet.env"
+            panic "Unsupported NETWORK='$NETWORK'. Set NETWORK to lowercase 'mainnet' or 'testnet'."
             ;;
     esac
 
     if [[ -f "$versions_file" ]]; then
-        log "Sourcing image versions from $(basename "$versions_file") (NETWORK=$network)"
+        log "Sourcing image versions from $(basename "$versions_file") (NETWORK=$NETWORK)"
         # shellcheck source=/dev/null
         source "$versions_file"
     else
-        panic "Version file not found: $versions_file (NETWORK=$network)"
+        panic "Version file not found: $versions_file (NETWORK=$NETWORK)"
     fi
 
     # Pull and tag images (versions from the selected versions.*.env)
