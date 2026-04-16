@@ -45,18 +45,26 @@ check_distribution() {
     fi
     
     . /etc/os-release
-    
-    if [[ "$ID" != "ubuntu" ]] && [[ "${ID_LIKE:-}" != *"ubuntu"* ]]; then
-        print_message "$YELLOW" "Warning: This script is designed for Ubuntu systems"
-        print_message "$YELLOW" "Current distribution: $ID"
+
+    # Renamed from `id` to avoid shadowing the bash builtin `id` command.
+    local os_id="${ID:-unknown}"
+    # Pad both sides so word-boundary matching avoids false positives like "xubuntu-derivative".
+    # ID_LIKE is space-separated per the os-release spec.
+    local os_id_like=" ${ID_LIKE:-} "
+
+    # Accept Ubuntu, Debian, and any distro that derives from either (e.g. Mint, Pop!_OS, Raspbian).
+    if [[ "$os_id" == "ubuntu" || "$os_id" == "debian" \
+        || "$os_id_like" == *" ubuntu "* || "$os_id_like" == *" debian "* ]]; then
+        print_message "$GREEN" "✓ Supported distribution detected: ${PRETTY_NAME:-$os_id}"
+    else
+        print_message "$YELLOW" "Warning: This script is designed for Ubuntu/Debian systems"
+        print_message "$YELLOW" "Current distribution: $os_id"
         read -p "Continue anyway? (y/N): " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             print_message "$RED" "Installation cancelled"
             exit 1
         fi
-    else
-        print_message "$GREEN" "✓ Ubuntu distribution detected: $PRETTY_NAME"
     fi
 }
 
