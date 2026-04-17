@@ -18,6 +18,12 @@ NODE_ID_PREFIX="GTN-"
 # shellcheck disable=SC2034
 KASWALLET_FLAG="--testnet"
 
+# Upstream RPC load balancer hostname for this network. setup-common.sh
+# resolves this and writes ORCHESTRA_TRUSTED_PROXIES into .env so orchestra's
+# Traefik trusts the LB's X-Forwarded-For header (ENG-1020).
+# shellcheck disable=SC2034
+RPC_LB_HOSTNAME="galleon-testnet.igralabs.com"
+
 # Version file for this network
 VERSIONS_FILE="versions.testnet.env"
 

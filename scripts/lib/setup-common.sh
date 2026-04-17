@@ -210,6 +210,30 @@ check_prerequisites() {
     fi
 }
 
+# Resolves a hostname to its A/AAAA records, comma-joined. Empty on
+# resolution failure — caller decides whether that's fatal. Tries getent
+# first (reliable on Linux); falls back to dig on macOS where getent is
+# present but doesn't actually resolve via the system resolver.
+resolve_lb_ips() {
+    local host="$1"
+    local v4 v6 ips=""
+    if command -v getent &> /dev/null; then
+        ips=$(
+            {
+                getent ahostsv4 "$host" 2>/dev/null
+                getent ahostsv6 "$host" 2>/dev/null
+            } | awk '{print $1}' | sort -u | paste -sd, -
+        )
+    fi
+    if [[ -z "$ips" ]] && command -v dig &> /dev/null; then
+        log "getent returned empty for $host, trying dig..."
+        v4=$(dig +short A "$host" 2>/dev/null | grep -E '^[0-9.]+$' || true)
+        v6=$(dig +short AAAA "$host" 2>/dev/null | grep -E '^[0-9a-fA-F:]+$' || true)
+        ips=$(printf '%s\n%s\n' "$v4" "$v6" | grep -v '^$' | sort -u | paste -sd, - || true)
+    fi
+    printf '%s' "$ips"
+}
+
 update_env_var() {
     local file="$1"
     local var="$2"
@@ -469,6 +493,25 @@ run_setup() {
     cat "$PROJECT_DIR/$VERSIONS_FILE" >> .env
     chmod 600 .env  # Protect .env file containing sensitive credentials
     log "Created .env from template (with image versions)"
+
+    # Auto-populate upstream RPC load balancer trust config (ENG-1020).
+    # setup-mainnet.sh / setup-galleon-testnet.sh export RPC_LB_HOSTNAME;
+    # we resolve it to IPs so orchestra's Traefik trusts XFF from the LB.
+    if [[ -n "${RPC_LB_HOSTNAME:-}" ]]; then
+        update_env_var .env "RPC_LB_HOSTNAME" "$RPC_LB_HOSTNAME"
+        local lb_ips
+        lb_ips=$(resolve_lb_ips "$RPC_LB_HOSTNAME")
+        if [[ -n "$lb_ips" ]]; then
+            update_env_var .env "ORCHESTRA_TRUSTED_PROXIES" "$lb_ips"
+            log "Resolved $RPC_LB_HOSTNAME -> $lb_ips (ORCHESTRA_TRUSTED_PROXIES)"
+        else
+            echo >&2
+            echo "WARN: could not resolve $RPC_LB_HOSTNAME; ORCHESTRA_TRUSTED_PROXIES left empty." >&2
+            echo "      Rate limiting will key on proxy IP, not real client IP if behind an LB." >&2
+            echo "      Edit .env manually once DNS is reachable, or re-run this script." >&2
+            echo >&2
+        fi
+    fi
 
     # Configure Environment
     echo
