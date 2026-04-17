@@ -424,3 +424,26 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork
 6. **Missing JWT file**: Ensure you've created the JWT file before starting services
 7. **Service connectivity**: Ensure all services can properly connect by starting profiles in the correct order and allowing time for services to initialize
 8. **SSH authentication during build**: If `docker compose build` fails with "failed to authenticate when downloading repository", ensure your SSH agent is running with your GitHub key loaded: `eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_ed25519`
+
+## DoS Hygiene (ENG-1020)
+
+Traefik applies per-real-IP rate limiting, concurrent in-flight caps, request-body size caps, and entry-point read/write/idle timeouts on every public entry point (`rpc`, `websecure`, `web`, `explorer_*`, `el_stats`). The `wallet-api`, `health`, `health-http`, and `web-redirect` routers are intentionally left untouched.
+
+Tunable env vars (all optional, defaults shown):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ORCHESTRA_TRUSTED_PROXIES` | `""` | Comma-separated IP(s)/CIDRs of upstream proxies whose `X-Forwarded-For` to trust. |
+| `RPC_RATE_LIMIT_AVERAGE` | `200` | Avg req/s per real client IP. |
+| `RPC_RATE_LIMIT_BURST` | `400` | Burst capacity. |
+| `RPC_RATE_LIMIT_PERIOD` | `1s` | Token-refill period. |
+| `RPC_MAX_IN_FLIGHT` | `128` | Max concurrent requests per real client IP. |
+| `MAX_REQUEST_BODY_BYTES` | `10485760` | Max request body (10 MB); larger requests get HTTP 413. |
+| `MEM_REQUEST_BODY_BYTES` | `1048576` | Memory buffer before spilling to disk (1 MB). |
+| `ENTRYPOINT_READ_TIMEOUT` | `30s` | Header + body read timeout (slow-loris protection). |
+| `ENTRYPOINT_WRITE_TIMEOUT` | `30s` | Response write timeout. |
+| `ENTRYPOINT_IDLE_TIMEOUT` | `60s` | Keep-alive idle timeout. |
+
+**Trusted-proxy caveat:** when orchestra sits behind another proxy (e.g. an RPC load balancer), set `ORCHESTRA_TRUSTED_PROXIES` to the proxy's egress IP(s) so rate-limit buckets key on the real client IP, not the proxy. Leaving it empty is correct for direct-internet deployments.
+
+Responses: oversized bodies return **HTTP 413**; rate-limited or over-the-concurrency-cap requests return **HTTP 429**. Both are recorded in the Traefik access log for observability.
