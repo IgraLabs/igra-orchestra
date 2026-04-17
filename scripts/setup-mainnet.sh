@@ -18,6 +18,12 @@ NODE_ID_PREFIX="MN-"
 # shellcheck disable=SC2034
 KASWALLET_FLAG="--enable-mainnet-pre-launch"
 
+# Upstream RPC load balancer hostname for this network. setup-common.sh
+# resolves this and writes ORCHESTRA_TRUSTED_PROXIES into .env so orchestra's
+# Traefik trusts the LB's X-Forwarded-For header (ENG-1020).
+# shellcheck disable=SC2034
+RPC_LB_HOSTNAME="rpc.igralabs.com"
+
 # Version file for this network
 VERSIONS_FILE="versions.mainnet.env"
 

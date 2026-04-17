@@ -446,4 +446,6 @@ Tunable env vars (all optional, defaults shown):
 
 **Trusted-proxy caveat:** when orchestra sits behind another proxy (e.g. an RPC load balancer), set `ORCHESTRA_TRUSTED_PROXIES` to the proxy's egress IP(s) so rate-limit buckets key on the real client IP, not the proxy. Leaving it empty is correct for direct-internet deployments.
 
+**Auto-populated by setup scripts:** `scripts/setup-mainnet.sh` and `scripts/setup-galleon-testnet.sh` resolve the known LB hostname (`rpc.igralabs.com` / `galleon-testnet.igralabs.com`) and write `RPC_LB_HOSTNAME` + `ORCHESTRA_TRUSTED_PROXIES` into `.env` automatically. Re-run the setup script or edit `.env` manually if the LB IP ever changes.
+
 Responses: oversized bodies return **HTTP 413**; rate-limited or over-the-concurrency-cap requests return **HTTP 429**. Both are recorded in the Traefik access log for observability.
