@@ -88,17 +88,19 @@ x-rpc-provider-runtime: &rpc-provider-runtime
     - "traefik.http.routers.rpc0.entrypoints=rpc"
     - "traefik.http.routers.rpc0.tls=true"
     - "traefik.http.routers.rpc0.tls.certresolver=myresolver"
-    - "traefik.http.routers.rpc0.middlewares=cors"
+    - "traefik.http.routers.rpc0.middlewares=cors,rpc-rate-limit,rpc-in-flight,rpc-buffering"
     - "traefik.http.services.rpc0.loadbalancer.server.port=8535"
     # Health check router - HTTPS (port 443) for load balancer health checks
     - "traefik.http.routers.health.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`) && PathPrefix(`/health`) && Method(`GET`)"
     - "traefik.http.routers.health.entrypoints=websecure"
     - "traefik.http.routers.health.tls=true"
     - "traefik.http.routers.health.tls.certresolver=myresolver"
+    - "traefik.http.routers.health.middlewares=health-rate-limit"
     - "traefik.http.routers.health.service=rpc0"
     # Health check router - HTTP (port 80) - bypasses HTTP-to-HTTPS redirect for load balancers
     - "traefik.http.routers.health-http.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`) && PathPrefix(`/health`) && Method(`GET`)"
     - "traefik.http.routers.health-http.entrypoints=web"
+    - "traefik.http.routers.health-http.middlewares=health-rate-limit"
     - "traefik.http.routers.health-http.service=rpc0"
 
 # Build config (extends runtime) - for primary service only
@@ -322,6 +324,7 @@ services:
       - "traefik.http.routers.el_stats.service=el_stats_svc"
       - "traefik.http.routers.el_stats.tls=true"
       - "traefik.http.routers.el_stats.tls.certresolver=myresolver"
+      - "traefik.http.routers.el_stats.middlewares=cors,rpc-rate-limit,rpc-in-flight,rpc-buffering"
       - "traefik.http.services.el_stats_svc.loadbalancer.server.port=9001"
     healthcheck:
       <<: *default-healthcheck
@@ -763,7 +766,40 @@ services:
       - "--entrypoints.explorer_ws.address=:8001"
       - "--entrypoints.explorer_rest.address=:8010"
       - "--entrypoints.el_stats.address=:9001"
-      - "--log.level=DEBUG"
+      - "--log.level=${TRAEFIK_LOG_LEVEL:-WARN}"
+      # DoS hygiene (ENG-1020): entry-point responding timeouts and XFF trust
+      # for every public entry point. Empty ORCHESTRA_TRUSTED_PROXIES = trust no
+      # proxy (use TCP peer IP); set it to the RPC LB egress IP(s) when this
+      # orchestra sits behind the LB.
+      - "--entrypoints.rpc.transport.respondingTimeouts.readTimeout=${ENTRYPOINT_READ_TIMEOUT:-30s}"
+      - "--entrypoints.rpc.transport.respondingTimeouts.writeTimeout=${ENTRYPOINT_WRITE_TIMEOUT:-30s}"
+      - "--entrypoints.rpc.transport.respondingTimeouts.idleTimeout=${ENTRYPOINT_IDLE_TIMEOUT:-60s}"
+      - "--entrypoints.rpc.forwardedHeaders.trustedIPs=${ORCHESTRA_TRUSTED_PROXIES:-}"
+      - "--entrypoints.websecure.transport.respondingTimeouts.readTimeout=${ENTRYPOINT_READ_TIMEOUT:-30s}"
+      - "--entrypoints.websecure.transport.respondingTimeouts.writeTimeout=${ENTRYPOINT_WRITE_TIMEOUT:-30s}"
+      - "--entrypoints.websecure.transport.respondingTimeouts.idleTimeout=${ENTRYPOINT_IDLE_TIMEOUT:-60s}"
+      - "--entrypoints.websecure.forwardedHeaders.trustedIPs=${ORCHESTRA_TRUSTED_PROXIES:-}"
+      - "--entrypoints.web.transport.respondingTimeouts.readTimeout=${ENTRYPOINT_READ_TIMEOUT:-30s}"
+      - "--entrypoints.web.transport.respondingTimeouts.writeTimeout=${ENTRYPOINT_WRITE_TIMEOUT:-30s}"
+      - "--entrypoints.web.transport.respondingTimeouts.idleTimeout=${ENTRYPOINT_IDLE_TIMEOUT:-60s}"
+      - "--entrypoints.web.forwardedHeaders.trustedIPs=${ORCHESTRA_TRUSTED_PROXIES:-}"
+      - "--entrypoints.explorer_http.transport.respondingTimeouts.readTimeout=${ENTRYPOINT_READ_TIMEOUT:-30s}"
+      - "--entrypoints.explorer_http.transport.respondingTimeouts.writeTimeout=${ENTRYPOINT_WRITE_TIMEOUT:-30s}"
+      - "--entrypoints.explorer_http.transport.respondingTimeouts.idleTimeout=${ENTRYPOINT_IDLE_TIMEOUT:-60s}"
+      - "--entrypoints.explorer_http.forwardedHeaders.trustedIPs=${ORCHESTRA_TRUSTED_PROXIES:-}"
+      # WebSocket: readTimeout=0 and writeTimeout=0 so long-lived streams aren't dropped.
+      - "--entrypoints.explorer_ws.transport.respondingTimeouts.readTimeout=${ENTRYPOINT_WS_READ_TIMEOUT:-0}"
+      - "--entrypoints.explorer_ws.transport.respondingTimeouts.writeTimeout=${ENTRYPOINT_WS_WRITE_TIMEOUT:-0}"
+      - "--entrypoints.explorer_ws.transport.respondingTimeouts.idleTimeout=${ENTRYPOINT_IDLE_TIMEOUT:-60s}"
+      - "--entrypoints.explorer_ws.forwardedHeaders.trustedIPs=${ORCHESTRA_TRUSTED_PROXIES:-}"
+      - "--entrypoints.explorer_rest.transport.respondingTimeouts.readTimeout=${ENTRYPOINT_READ_TIMEOUT:-30s}"
+      - "--entrypoints.explorer_rest.transport.respondingTimeouts.writeTimeout=${ENTRYPOINT_WRITE_TIMEOUT:-30s}"
+      - "--entrypoints.explorer_rest.transport.respondingTimeouts.idleTimeout=${ENTRYPOINT_IDLE_TIMEOUT:-60s}"
+      - "--entrypoints.explorer_rest.forwardedHeaders.trustedIPs=${ORCHESTRA_TRUSTED_PROXIES:-}"
+      - "--entrypoints.el_stats.transport.respondingTimeouts.readTimeout=${ENTRYPOINT_READ_TIMEOUT:-30s}"
+      - "--entrypoints.el_stats.transport.respondingTimeouts.writeTimeout=${ENTRYPOINT_WRITE_TIMEOUT:-30s}"
+      - "--entrypoints.el_stats.transport.respondingTimeouts.idleTimeout=${ENTRYPOINT_IDLE_TIMEOUT:-60s}"
+      - "--entrypoints.el_stats.forwardedHeaders.trustedIPs=${ORCHESTRA_TRUSTED_PROXIES:-}"
       - "--certificatesresolvers.myresolver.acme.email=${IGRA_ORCHESTRA_DOMAIN_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
       - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
@@ -793,6 +829,25 @@ services:
       # Add redirect middleware for HTTP to HTTPS
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+      # Lightweight rate limit for health endpoints to prevent abuse while
+      # still allowing LB health probes through.
+      - "traefik.http.middlewares.health-rate-limit.ratelimit.average=10"
+      - "traefik.http.middlewares.health-rate-limit.ratelimit.burst=20"
+      - "traefik.http.middlewares.health-rate-limit.ratelimit.period=1s"
+      # DoS hygiene (ENG-1020): per-real-IP rate limit, in-flight cap, and body
+      # buffering. sourceCriterion.ipStrategy.excludedIPs strips trusted proxy
+      # hops from X-Forwarded-For so buckets key on the real client IP.
+      - "traefik.http.middlewares.rpc-rate-limit.ratelimit.average=${RPC_RATE_LIMIT_AVERAGE:-200}"
+      - "traefik.http.middlewares.rpc-rate-limit.ratelimit.burst=${RPC_RATE_LIMIT_BURST:-400}"
+      - "traefik.http.middlewares.rpc-rate-limit.ratelimit.period=${RPC_RATE_LIMIT_PERIOD:-1s}"
+      - "traefik.http.middlewares.rpc-rate-limit.ratelimit.sourcecriterion.ipstrategy.excludedips=${ORCHESTRA_TRUSTED_PROXIES:-}"
+      - "traefik.http.middlewares.rpc-in-flight.inflightreq.amount=${RPC_MAX_IN_FLIGHT:-128}"
+      - "traefik.http.middlewares.rpc-in-flight.inflightreq.sourcecriterion.ipstrategy.excludedips=${ORCHESTRA_TRUSTED_PROXIES:-}"
+      - "traefik.http.middlewares.rpc-buffering.buffering.maxrequestbodybytes=${MAX_REQUEST_BODY_BYTES:-10485760}"
+      - "traefik.http.middlewares.rpc-buffering.buffering.memrequestbodybytes=${MEM_REQUEST_BODY_BYTES:-1048576}"
+      # No retryexpression: JSON-RPC POSTs are not always idempotent
+      # (e.g. eth_sendRawTransaction), so retrying on network error risks
+      # duplicate transaction submission.
       # Apply redirect to web entrypoint for the specified host
       - "traefik.http.routers.web-redirect.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
       - "traefik.http.routers.web-redirect.entrypoints=web"
@@ -803,6 +858,7 @@ services:
       - "traefik.http.routers.websecure-router.priority=1"
       - "traefik.http.routers.websecure-router.tls=true"
       - "traefik.http.routers.websecure-router.tls.certresolver=myresolver"
+      - "traefik.http.routers.websecure-router.middlewares=rpc-rate-limit,rpc-in-flight,rpc-buffering"
     healthcheck:
       <<: *default-healthcheck
       test:
