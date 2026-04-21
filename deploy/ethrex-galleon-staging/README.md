@@ -62,7 +62,8 @@ Edit `.env` before first launch:
 - Set a unique `NODE_ID`.
 - Keep the `GENESIS_BLOCK_HASH` from `.env.example`; it is the canonical
   Galleon env value. Some older docs contain a stale value.
-- Fill `BITCOIN_BLOCK_HASH`, `ETHEREUM_BLOCK_HASH`, and `KASPA_BLOCK_HASH`.
+- Keep `BITCOIN_BLOCK_HASH`, `ETHEREUM_BLOCK_HASH`, and `KASPA_BLOCK_HASH`
+  aligned with `.env.example` unless the Galleon network definition changes.
 - Replace wallet placeholders before starting frontend profiles.
 
 Generate the JWT file:
