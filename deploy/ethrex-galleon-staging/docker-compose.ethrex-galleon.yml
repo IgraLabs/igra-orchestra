@@ -12,6 +12,7 @@ services:
     build:
       context: build/repos/ethrex
       dockerfile: Dockerfile
+      ssh: !override []
       args: !override
         PROFILE: release
     image: igranetwork/ethrex:${ETHREX_VERSION}
