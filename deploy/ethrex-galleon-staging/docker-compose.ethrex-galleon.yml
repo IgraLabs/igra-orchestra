@@ -1,0 +1,172 @@
+volumes:
+  ethrex_data:
+  ethrex_ipc:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=10m
+
+services:
+  execution-layer:
+    build:
+      context: build/repos/ethrex
+      dockerfile: Dockerfile
+      args: !override
+        PROFILE: release
+    image: igranetwork/ethrex:${ETHREX_VERSION}
+    container_name: galleon-execution-layer
+    entrypoint: /app/run-igra-el.sh
+    ports: !override
+      - "127.0.0.1:19545:8545"
+      - "127.0.0.1:19546:8546"
+    expose: !override
+      - "8545"
+      - "8546"
+      - "8551"
+      - "9001"
+    volumes: !override
+      - ethrex_data:/app/data/
+      - ./keys/jwt.hex:/app/jwt.hex
+      - ethrex_ipc:/app/socket
+      - ./network-params:/app/network-params
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          bash -lc ': > /dev/tcp/127.0.0.1/8545' &&
+          bash -lc ': > /dev/tcp/127.0.0.1/8546' &&
+          bash -lc ': > /dev/tcp/127.0.0.1/8551'
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 5s
+
+  kaspad:
+    container_name: galleon-kaspad
+    ports: !override
+      - "46210:16210"
+      - "46211:16211"
+      - "47210:17210"
+      - "48210:18210"
+
+  node-health-check-client:
+    container_name: galleon-node-health-check-client
+    environment:
+      - NODE_RPC_URL=http://execution-layer:8545
+      - MONITOR_URL=http://${NODE_HEALTH_CHECK_URL}:8081
+      - NODE_ID=${NODE_ID}
+      - API_KEY=${HEALTH_CHECK_API_KEY}
+      - POLL_INTERVAL=8
+      - NETWORK=${NETWORK}
+      - GENESIS_BLOCK_HASH=${GENESIS_BLOCK_HASH}
+      - KASPAD_VERSION=${KASPAD_VERSION}
+      - RETH_VERSION=${ETHREX_VERSION}
+      - ETHREX_VERSION=${ETHREX_VERSION}
+      - KASWALLET_VERSION=${KASWALLET_VERSION}
+      - RPC_PROVIDER_VERSION=${RPC_PROVIDER_VERSION}
+      - NODE_HEALTH_CHECK_VERSION=${NODE_HEALTH_CHECK_VERSION}
+      - ATAN_UPLOADER_VERSION=${ATAN_UPLOADER_VERSION}
+
+  rpc-provider-0:
+    container_name: galleon-rpc-provider-0
+  kaswallet-0:
+    container_name: galleon-kaswallet-0
+    ports: !override
+      - "127.0.0.1:18082:8082"
+  rpc-provider-1:
+    container_name: galleon-rpc-provider-1
+  kaswallet-1:
+    container_name: galleon-kaswallet-1
+  rpc-provider-2:
+    container_name: galleon-rpc-provider-2
+  kaswallet-2:
+    container_name: galleon-kaswallet-2
+  rpc-provider-3:
+    container_name: galleon-rpc-provider-3
+  kaswallet-3:
+    container_name: galleon-kaswallet-3
+  rpc-provider-4:
+    container_name: galleon-rpc-provider-4
+  kaswallet-4:
+    container_name: galleon-kaswallet-4
+  rpc-provider-5:
+    container_name: galleon-rpc-provider-5
+  kaswallet-5:
+    container_name: galleon-kaswallet-5
+  rpc-provider-6:
+    container_name: galleon-rpc-provider-6
+  kaswallet-6:
+    container_name: galleon-kaswallet-6
+  rpc-provider-7:
+    container_name: galleon-rpc-provider-7
+  kaswallet-7:
+    container_name: galleon-kaswallet-7
+  rpc-provider-8:
+    container_name: galleon-rpc-provider-8
+  kaswallet-8:
+    container_name: galleon-kaswallet-8
+  rpc-provider-9:
+    container_name: galleon-rpc-provider-9
+  kaswallet-9:
+    container_name: galleon-kaswallet-9
+  rpc-provider-10:
+    container_name: galleon-rpc-provider-10
+  kaswallet-10:
+    container_name: galleon-kaswallet-10
+  rpc-provider-11:
+    container_name: galleon-rpc-provider-11
+  kaswallet-11:
+    container_name: galleon-kaswallet-11
+  rpc-provider-12:
+    container_name: galleon-rpc-provider-12
+  kaswallet-12:
+    container_name: galleon-kaswallet-12
+  rpc-provider-13:
+    container_name: galleon-rpc-provider-13
+  kaswallet-13:
+    container_name: galleon-kaswallet-13
+  rpc-provider-14:
+    container_name: galleon-rpc-provider-14
+  kaswallet-14:
+    container_name: galleon-kaswallet-14
+  rpc-provider-15:
+    container_name: galleon-rpc-provider-15
+  kaswallet-15:
+    container_name: galleon-kaswallet-15
+  rpc-provider-16:
+    container_name: galleon-rpc-provider-16
+  kaswallet-16:
+    container_name: galleon-kaswallet-16
+  rpc-provider-17:
+    container_name: galleon-rpc-provider-17
+  kaswallet-17:
+    container_name: galleon-kaswallet-17
+  rpc-provider-18:
+    container_name: galleon-rpc-provider-18
+  kaswallet-18:
+    container_name: galleon-kaswallet-18
+  rpc-provider-19:
+    container_name: galleon-rpc-provider-19
+  kaswallet-19:
+    container_name: galleon-kaswallet-19
+
+  traefik:
+    container_name: galleon-traefik
+    ports: !override
+      - "18080:80"
+      - "18443:443"
+      - "18081:8080"
+      - "18001:8001"
+      - "18010:8010"
+      - "18545:8545"
+      - "19001:9001"
+
+  wallet-balance-api:
+    container_name: galleon-wallet-balance-api
+
+  kaspa-miner:
+    container_name: galleon-kaspa-miner
+
+  atan-uploader:
+    container_name: galleon-atan-uploader
