@@ -53,6 +53,14 @@ services:
 
   node-health-check-client:
     container_name: galleon-node-health-check-client
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - grep -a -q node-health-check-client /proc/1/cmdline
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
     environment:
       - NODE_RPC_URL=http://execution-layer:8545
       - MONITOR_URL=http://${NODE_HEALTH_CHECK_URL}:8081
