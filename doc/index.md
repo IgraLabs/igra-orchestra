@@ -8,6 +8,8 @@ Choose your deployment guide:
 
 - **[Mainnet](quick-setup-mainnet.md)** - Public mainnet deployment with pre-built images
 - **[Galleon Testnet](quick-setup-galleon-testnet.md)** - Public Galleon testnet deployment with pre-built images
+- **[Ethrex Mainnet Override](https://github.com/IgraLabs/igra-orchestra/blob/ethrex-integration/deploy/ethrex-mainnet/README.md)** - Mainnet deployment package that swaps `reth` for `ethrex`
+- **[Ethrex Galleon Override](https://github.com/IgraLabs/igra-orchestra/blob/ethrex-integration/deploy/ethrex-galleon-staging/README.md)** - Galleon deployment package for `ethrex`
 
 ## Operations
 

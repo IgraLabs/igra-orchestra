@@ -64,6 +64,8 @@ These scripts handle environment configuration, image pulling, and service start
 For detailed guides, see:
 - [Mainnet Deployment Guide](doc/quick-setup-mainnet.md)
 - [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md)
+- [Ethrex Mainnet Override](deploy/ethrex-mainnet/README.md)
+- [Ethrex Galleon Override](deploy/ethrex-galleon-staging/README.md)
 
 **Manual setup (alternative):**
 
@@ -406,6 +408,8 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork
 
 - [Mainnet Deployment Guide](doc/quick-setup-mainnet.md) - Public mainnet deployment with pre-built images
 - [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md) - Public Galleon testnet deployment with pre-built images
+- [Ethrex Mainnet Override](deploy/ethrex-mainnet/README.md) - Replace mainnet `execution-layer` with `ethrex`
+- [Ethrex Galleon Override](deploy/ethrex-galleon-staging/README.md) - Galleon-specific `ethrex` deployment package
 - [Kaspa Wallet Guide](doc/kaspa-wallet.md) - Wallet setup for all networks
 - [Log Management](doc/log-management.md) - Automated log cleanup for servers
 - [Docker Volume Permissions](doc/troubleshooting/docker-volume-permissions.md) - Fix permission denied errors
