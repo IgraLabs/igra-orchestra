@@ -62,6 +62,7 @@ mkdir -p build/repos
 git clone git@github.com:IgraLabs/ethrex.git build/repos/ethrex
 cd build/repos/ethrex
 git switch igra-mainnet-ethrex-integration
+git checkout c19d255e1d99797e08493396005762349173b9b2
 cd ../../..
 ```
 
@@ -145,6 +146,17 @@ Expected chain ID:
 ```text
 0x97b1
 ```
+
+Check the ethrex binary ref:
+
+```sh
+curl -sS http://127.0.0.1:9545 \
+  -H 'Content-Type: application/json' \
+  --data '{"jsonrpc":"2.0","method":"web3_clientVersion","params":[],"id":2}'
+```
+
+The result should include `c19d255e1d99797e08493396005762349173b9b2`
+unless you intentionally advanced `ETHREX_SOURCE_REF`.
 
 Check sync:
 
