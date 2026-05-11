@@ -44,6 +44,7 @@ nav:
   - Deployment Guides:
     - Mainnet: quick-setup-mainnet.md
     - Galleon Testnet: quick-setup-galleon-testnet.md
+    - Frigate Testnet: quick-setup-frigate-testnet.md
   - Operations:
     - Node Operations:
       - Overview: node-operations/index.md
@@ -52,9 +53,11 @@ nav:
       - Health Check: node-operations/health-check.md
       - ATAN-Only Mode: node-operations/atan-only.md
       - Environment Reference: node-operations/environment-reference.md
+      - Galleon → testnet-10 Migration: node-operations/migrate-galleon-to-testnet-10.md
     - Kaspa Wallet: kaspa-wallet.md
     - Log Management: log-management.md
   - Troubleshooting:
     - Docker Volume Permissions: troubleshooting/docker-volume-permissions.md
+    - Kaspad DB Upgrade Prompt: troubleshooting/kaspad-db-upgrade.md
     - Service Restart Debugging: troubleshooting/service-restart-debugging.md
     - SSL Certificate: troubleshooting/ssl-certificate.md

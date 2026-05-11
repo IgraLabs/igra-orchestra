@@ -7,3 +7,4 @@ Operational reference for running Igra Orchestra nodes.
 - **[Health Check Integration](health-check.md)** - Monitoring, Slack alerts, and health check configuration
 - **[ATAN-Only Mode](atan-only.md)** - Run kaspad saving finality periods without the full IGRA stack
 - **[Environment Reference](environment-reference.md)** - All operational environment variables
+- **[Galleon → testnet-10 Migration](migrate-galleon-to-testnet-10.md)** - One-shot upgrade for existing Galleon operators on `NETWORK=testnet` to the uniform `NETWORK=testnet-10` schema (preserves IBD state)

@@ -7,25 +7,11 @@ set -euo pipefail
 #   ENV_NAME        - Display name (e.g., "Galleon Testnet")
 #   ENV_FILE        - Template file (e.g., ".env.galleon-testnet.example")
 #   NODE_ID_PREFIX  - Node ID prefix (e.g., "GTN-", "GMN-")
-#   KASWALLET_FLAG  - Flag for key generation (e.g., "--testnet", "--enable-mainnet-pre-launch")
+#   KASWALLET_FLAG  - Flags for key generation (e.g., "--testnet --testnet-suffix=12")
 
 # --- Configuration ---
 SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-# Source image versions from network-specific versions file
-if [[ -z "${VERSIONS_FILE:-}" ]]; then
-    die "VERSIONS_FILE not set"
-fi
-# shellcheck source=/dev/null
-if [[ -f "$PROJECT_DIR/$VERSIONS_FILE" ]]; then
-    source "$PROJECT_DIR/$VERSIONS_FILE"
-else
-    echo "ERROR: $VERSIONS_FILE not found in $PROJECT_DIR" >&2
-    exit 1
-fi
-KASWALLET_IMAGE="igranetwork/kaswallet:${KASWALLET_VERSION}"
-KASPAD_IMAGE="igranetwork/kaspad:${KASPAD_VERSION}"
 
 # --- Helper Functions ---
 
@@ -41,6 +27,97 @@ die() {
     error "$@"
     exit 1
 }
+
+read_env_value() {
+    local file="$1"
+    local var="$2"
+    local line key value result=""
+
+    [[ -f "$file" ]] || return 0
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%$'\r'}"
+        [[ "$line" =~ ^[[:space:]]*($|#) ]] && continue
+        [[ "$line" == *"="* ]] || continue
+
+        key="${line%%=*}"
+        key="${key#"${key%%[![:space:]]*}"}"
+        key="${key%"${key##*[![:space:]]}"}"
+        [[ "$key" == "$var" ]] || continue
+
+        value="${line#*=}"
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        if [[ ${#value} -ge 2 ]]; then
+            case "$value" in
+                \"*\"|\'*\') value="${value:1:${#value}-2}" ;;
+            esac
+        fi
+        result="$value"
+    done < "$file"
+
+    printf '%s' "$result"
+}
+
+find_unresolved_placeholders() {
+    local file
+
+    for file in "$@"; do
+        [[ -f "$file" ]] || continue
+        awk '
+            /^[[:space:]]*(#|$)/ { next }
+            /TODO_[A-Z0-9_]*(_REPLACE_ME)?/ {
+                printf "%s:%d:%s\n", FILENAME, FNR, $0
+            }
+        ' "$file"
+    done
+}
+
+refresh_image_versions_from_env() {
+    local env_file="${1:-.env}"
+    local var value
+
+    for var in KASPAD_VERSION RETH_VERSION RPC_PROVIDER_VERSION KASWALLET_VERSION NODE_HEALTH_CHECK_VERSION ATAN_UPLOADER_VERSION; do
+        value="$(read_env_value "$env_file" "$var")"
+        if [[ -n "$value" ]]; then
+            printf -v "$var" '%s' "$value"
+        fi
+    done
+
+    KASWALLET_IMAGE="igranetwork/kaswallet:${KASWALLET_VERSION:-}"
+    KASPAD_IMAGE="igranetwork/kaspad:${KASPAD_VERSION:-}"
+}
+
+validate_required_image_versions() {
+    local missing=()
+    local var value
+
+    for var in KASPAD_VERSION RETH_VERSION RPC_PROVIDER_VERSION KASWALLET_VERSION NODE_HEALTH_CHECK_VERSION ATAN_UPLOADER_VERSION; do
+        value="${!var:-}"
+        if [[ -z "$value" || "$value" == TODO_* ]]; then
+            missing+=("$var")
+        fi
+    done
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        die "Required image versions are missing or still TODO placeholders: ${missing[*]}. Fill them in .env before re-running setup."
+    fi
+}
+
+load_default_image_versions() {
+    if [[ -z "${VERSIONS_FILE:-}" ]]; then
+        die "VERSIONS_FILE not set"
+    fi
+    if [[ -f "$PROJECT_DIR/$VERSIONS_FILE" ]]; then
+        # shellcheck source=/dev/null
+        source "$PROJECT_DIR/$VERSIONS_FILE"
+        refresh_image_versions_from_env "$PROJECT_DIR/$VERSIONS_FILE"
+    else
+        die "$VERSIONS_FILE not found in $PROJECT_DIR"
+    fi
+}
+
+load_default_image_versions
 
 prompt_input() {
     local prompt="$1"
@@ -146,7 +223,7 @@ This script will:
   1. Check prerequisites (Docker, Docker Compose)
   2. Configure environment (.env file)
   3. Generate JWT secret and wallet keys
-  4. Start all services automatically
+  4. Start all services automatically once required placeholders are filled
   5. Optionally show live block building stats
 
 For manual setup, see the documentation in doc/
@@ -210,10 +287,7 @@ check_prerequisites() {
     fi
 }
 
-# Resolves a hostname to its A/AAAA records, comma-joined. Empty on
-# resolution failure — caller decides whether that's fatal. Tries getent
-# first (reliable on Linux); falls back to dig on macOS where getent is
-# present but doesn't actually resolve via the system resolver.
+# Resolve A/AAAA records, comma-joined. Fall back to dig where getent is unreliable.
 resolve_lb_ips() {
     local host="$1"
     local v4 v6 ips=""
@@ -240,9 +314,7 @@ update_env_var() {
     local value="$3"
     local tmpfile
 
-    # Use a temp file approach to safely handle special characters in values
     if grep -q "^${var}=" "$file"; then
-        # Create temp file, replace the line, then move back
         tmpfile=$(mktemp) || { error "Failed to create temp file"; return 1; }
         chmod 600 "$tmpfile" || { rm -f "$tmpfile"; error "Failed to secure temp file"; return 1; }
 
@@ -278,9 +350,14 @@ generate_wallet() {
         die "PROJECT_DIR contains unsafe characters: $PROJECT_DIR"
     fi
 
-    # Use expect to handle interactive password prompts
-    # Pass password via environment variable to avoid command injection
-    # Use --user to ensure files are created with correct ownership
+    # Pre-create with mode 600 before tee writes prompt output.
+    local wallet_log="$PROJECT_DIR/keys/.wallet-gen.log"
+    if [[ ! -f "$wallet_log" ]]; then
+        (umask 077 && : > "$wallet_log")
+    fi
+    chmod 600 "$wallet_log" 2>/dev/null || true
+
+    # Use expect for password prompts; pass the password via env and run as the caller.
     # shellcheck disable=SC2016 # Variables are intentionally spliced via quote-breaking, not expanded inside single quotes
     if ! WALLET_PASS="$password" expect -c '
         log_user 0
@@ -294,10 +371,10 @@ generate_wallet() {
         expect "password"
         send -- "$env(WALLET_PASS)\r"
         expect eof
-    ' 2>&1 | tee -a "$PROJECT_DIR/keys/.wallet-gen.log" > /dev/null; then
+    ' 2>&1 | tee -a "$wallet_log" > /dev/null; then
         die "Failed to generate wallet $index. Check Docker and try again."
     fi
-    chmod 600 "$PROJECT_DIR/keys/.wallet-gen.log" 2>/dev/null || true
+    chmod 600 "$wallet_log" 2>/dev/null || true
 
     if [[ ! -f "$keyfile" ]]; then
         die "Wallet key file $keyfile was not created. Something went wrong."
@@ -395,14 +472,21 @@ print_summary() {
     echo
     echo "=== Optional: Enable Transaction Submission (RPC) ==="
     echo
-    echo "By default, RPC accepts transactions (RPC_READ_ONLY=false)."
-    echo "To enable transaction submission, fund the wallets:"
+    local rpc_read_only
+    rpc_read_only="$(awk -F= '$1 == "RPC_READ_ONLY" { print $2; exit }' .env 2>/dev/null || true)"
+    if [[ "$rpc_read_only" == "true" ]]; then
+        echo "RPC is currently read-only (RPC_READ_ONLY=true)."
+        echo "To enable transaction submission, fund the wallets and set RPC_READ_ONLY=false:"
+    else
+        echo "RPC currently accepts transactions (RPC_READ_ONLY=false)."
+        echo "Before exposing transaction submission, fund the wallets:"
+    fi
     echo
     echo "  1. After IBD sync completes (IBD: 100%):"
     echo "     - Get wallet addresses: ./scripts/debug/wallet-status.sh"
     echo "     - Top up each wallet address with KAS (for L1 gas fees)"
     echo "     - Update .env with the actual wallet addresses"
-    echo "  3. Restart workers: docker compose --profile frontend-w${NUM_WORKERS} up -d"
+    echo "  2. Restart workers: docker compose --profile frontend-w${NUM_WORKERS} up -d"
     echo
 }
 
@@ -432,13 +516,11 @@ validate_required_variables() {
     local var
 
     # Validate KASWALLET_FLAG is a known-safe value
-    case "${KASWALLET_FLAG:-}" in
-        --testnet|--enable-mainnet-pre-launch)
-            ;;
-        *)
-            die "Invalid KASWALLET_FLAG: ${KASWALLET_FLAG:-<unset>}. Must be --testnet or --enable-mainnet-pre-launch"
-            ;;
-    esac
+    if [[ "${KASWALLET_FLAG:-}" != "--testnet" \
+        && "${KASWALLET_FLAG:-}" != "--enable-mainnet-pre-launch" \
+        && ! "${KASWALLET_FLAG:-}" =~ ^--testnet[[:space:]]+--testnet-suffix=[0-9]+$ ]]; then
+        die "Invalid KASWALLET_FLAG: ${KASWALLET_FLAG:-<unset>}. Must be --testnet, --testnet --testnet-suffix=<digits>, or --enable-mainnet-pre-launch"
+    fi
 
     for var in ENV_NAME ENV_FILE NODE_ID_PREFIX KASWALLET_FLAG VERSIONS_FILE; do
         if [[ -z "${!var:-}" ]]; then
@@ -451,10 +533,25 @@ validate_required_variables() {
     fi
 }
 
+validate_no_unresolved_placeholders() {
+    local files=("$@")
+    local matches
+
+    if [[ ${#files[@]} -eq 0 ]]; then
+        files=(.env)
+    fi
+
+    matches="$(find_unresolved_placeholders "${files[@]}")"
+    if [[ -n "$matches" ]]; then
+        error "Unresolved placeholders found; replace these values before running setup:"
+        printf '%s\n' "$matches" | sed 's|^|  |' >&2
+        die "Setup aborted before generating wallets or starting services."
+    fi
+}
+
 run_setup() {
     validate_required_variables
 
-    # Parse arguments
     if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
         print_help
         exit 0
@@ -467,46 +564,69 @@ run_setup() {
     echo "========================================"
     echo
 
-    # Step 1: Prerequisites Check
     check_prerequisites
     echo
 
-    # Check template exists
     if [[ ! -f "$ENV_FILE" ]]; then
         die "Template file $ENV_FILE not found in $PROJECT_DIR"
     fi
 
-    # Check for existing .env and offer backup
-    if [[ -f .env ]]; then
-        log "Existing .env file found. It will be replaced with the template."
-        if prompt_confirm "Do you want to backup the existing .env first?" "y"; then
-            local backup_file
-            backup_file=".env.backup.$(date +%Y%m%d_%H%M%S)"
-            cp .env "$backup_file"
-            log "Backed up to $backup_file"
-        fi
+    local template_network existing_network template_has_placeholders replace_env=true
+    template_network="$(read_env_value "$ENV_FILE" NETWORK)"
+    existing_network="$(read_env_value .env NETWORK)"
+    if [[ -n "$(find_unresolved_placeholders "$ENV_FILE" "$PROJECT_DIR/$VERSIONS_FILE")" ]]; then
+        template_has_placeholders=true
+    else
+        template_has_placeholders=false
     fi
 
-    # Always copy template to .env and append image versions
-    cp "$ENV_FILE" .env
-    printf '\n# --- Image Versions (from %s) ---\n' "$VERSIONS_FILE" >> .env
-    cat "$PROJECT_DIR/$VERSIONS_FILE" >> .env
-    chmod 600 .env  # Protect .env file containing sensitive credentials
-    log "Created .env from template (with image versions)"
+    # Preserve same-network pre-launch .env files so operators can fill placeholders.
+    if [[ -f .env && "$template_has_placeholders" == "true" && "$existing_network" == "$template_network" ]]; then
+        replace_env=false
+        log "Existing .env for NETWORK=$existing_network found; preserving operator-edited values."
+    fi
 
-    # Auto-populate upstream RPC load balancer trust config (ENG-1020).
-    # setup-mainnet.sh / setup-galleon-testnet.sh export RPC_LB_HOSTNAME;
-    # we resolve it to IPs so orchestra's Traefik trusts XFF from the LB.
-    if [[ -n "${RPC_LB_HOSTNAME:-}" ]]; then
-        update_env_var .env "RPC_LB_HOSTNAME" "$RPC_LB_HOSTNAME"
+    if [[ "$replace_env" == "true" ]]; then
+        if [[ -f .env ]]; then
+            log "Existing .env file found. It will be replaced with the template."
+            if prompt_confirm "Do you want to backup the existing .env first?" "y"; then
+                local backup_file
+                backup_file=".env.backup.$(date +%Y%m%d_%H%M%S)"
+                # Backup contains .env credentials, so create it with restrictive perms.
+                (umask 077 && cp .env "$backup_file")
+                chmod 600 "$backup_file" || die "Failed to chmod backup $backup_file; refusing to leave it world-readable."
+                log "Backed up to $backup_file"
+            fi
+        fi
+
+        cp "$ENV_FILE" .env
+        printf '\n# --- Image Versions (from %s) ---\n' "$VERSIONS_FILE" >> .env
+        cat "$PROJECT_DIR/$VERSIONS_FILE" >> .env
+        chmod 600 .env  # Protect .env file containing sensitive credentials
+        log "Created .env from template (with image versions)"
+    fi
+
+    validate_no_unresolved_placeholders .env
+    refresh_image_versions_from_env .env
+    validate_required_image_versions
+
+    # Auto-populate trusted proxies when a wrapper or .env provides an RPC LB.
+    local effective_rpc_lb_hostname env_rpc_lb_hostname
+    effective_rpc_lb_hostname="${RPC_LB_HOSTNAME:-}"
+    env_rpc_lb_hostname="$(read_env_value .env RPC_LB_HOSTNAME)"
+    if [[ -z "$effective_rpc_lb_hostname" && -n "$env_rpc_lb_hostname" ]]; then
+        effective_rpc_lb_hostname="$env_rpc_lb_hostname"
+    fi
+    if [[ -n "$effective_rpc_lb_hostname" ]]; then
+        update_env_var .env "RPC_LB_HOSTNAME" "$effective_rpc_lb_hostname"
         local lb_ips
-        lb_ips=$(resolve_lb_ips "$RPC_LB_HOSTNAME")
+        lb_ips=$(resolve_lb_ips "$effective_rpc_lb_hostname")
         if [[ -n "$lb_ips" ]]; then
             update_env_var .env "ORCHESTRA_TRUSTED_PROXIES" "$lb_ips"
-            log "Resolved $RPC_LB_HOSTNAME -> $lb_ips (ORCHESTRA_TRUSTED_PROXIES)"
+            log "Resolved $effective_rpc_lb_hostname -> $lb_ips (ORCHESTRA_TRUSTED_PROXIES)"
         else
             echo >&2
-            echo "WARN: could not resolve $RPC_LB_HOSTNAME; ORCHESTRA_TRUSTED_PROXIES left empty." >&2
+            echo "WARN: could not resolve $effective_rpc_lb_hostname; ORCHESTRA_TRUSTED_PROXIES left empty." >&2
             echo "      Rate limiting will key on proxy IP, not real client IP if behind an LB." >&2
             echo "      Edit .env manually once DNS is reachable, or re-run this script." >&2
             echo >&2

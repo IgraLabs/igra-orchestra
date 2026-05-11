@@ -17,6 +17,9 @@ x-default-healthcheck: &default-healthcheck
   retries: 3
   start_period: 5s
 
+# Shared NETWORK slug parser for the kaspad-atan entrypoint.
+x-parse-network-slug-volume: &parse-network-slug-volume ./scripts/lib/parse-network-slug.sh:/app/parse-network-slug.sh:ro
+
 services:
   kaspad:
     image: igranetwork/kaspad:${KASPAD_VERSION}
@@ -30,6 +33,7 @@ services:
       - "127.0.0.1:${KASPAD_JSON_PORT}:${KASPAD_JSON_PORT}"
     environment:
       - KASPAD_ADD_PEER
+      - KASPAD_NONINTERACTIVE
       - ATAN_IMPORT_URL
       - CDN_BASE_URL
       - NETWORK
@@ -39,6 +43,9 @@ services:
       - sh
       - -ec
       - |
+        # Sets KASPA_FAMILY and KASPA_NETSUFFIX from NETWORK.
+        . /app/parse-network-slug.sh
+
         ARGS="--disable-upnp \
           --rpclisten-borsh=0.0.0.0 \
           --rpclisten=0.0.0.0 \
@@ -48,9 +55,12 @@ services:
           --logdir=/app/logs \
           --appdir=/app/data"
 
-        if [ "$$NETWORK" != "mainnet" ]; then
-          ARGS="--$$NETWORK --nodnsseed $$ARGS"
+        # DNS seeds stay enabled; KASPAD_ADD_PEER only pins an extra peer.
+        if [ "$$KASPA_FAMILY" != "mainnet" ]; then
+          ARGS="--$$KASPA_FAMILY $$ARGS"
         fi
+        if [ -n "$$KASPA_NETSUFFIX" ]; then ARGS="$$ARGS --netsuffix=$$KASPA_NETSUFFIX"; fi
+        ARGS="$$ARGS --ua-rule=reject;ver:kaspad<1.1.1"
 
         # ATAN-only flags (no IGRA)
         ARGS="$$ARGS \
@@ -74,6 +84,7 @@ services:
     volumes:
       - kaspad_data:/app/data/
       - ./logs/kaspad/:/app/logs/
+      - *parse-network-slug-volume
     healthcheck:
       <<: *default-healthcheck
       test: ["CMD-SHELL", "bash -lc ': > /dev/tcp/127.0.0.1/${KASPAD_GRPC_PORT}'"]

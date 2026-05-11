@@ -57,6 +57,9 @@ The fastest way to get started is using the interactive setup scripts:
 
 # Galleon Testnet
 ./scripts/setup-galleon-testnet.sh
+
+# Frigate Testnet
+./scripts/setup-frigate-testnet.sh
 ```
 
 These scripts handle environment configuration, image pulling, and service startup.
@@ -64,14 +67,17 @@ These scripts handle environment configuration, image pulling, and service start
 For detailed guides, see:
 - [Mainnet Deployment Guide](doc/quick-setup-mainnet.md)
 - [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md)
+- [Frigate Testnet Deployment Guide](doc/quick-setup-frigate-testnet.md)
 
 **Manual setup (alternative):**
 
 ```bash
 # 1. Copy and configure environment (choose your network)
-cp .env.mainnet.example .env           # For IGRA mainnet
+cp .env.mainnet.example .env && cat versions.mainnet.env >> .env                    # For IGRA mainnet
 # OR
-cp .env.galleon-testnet.example .env   # For Galleon testnet
+cp .env.galleon-testnet.example .env && cat versions.galleon-testnet.env >> .env    # For Galleon testnet (testnet-10)
+# OR
+cp .env.frigate-testnet.example .env && cat versions.frigate-testnet.env >> .env    # For Frigate testnet (testnet-12)
 # Edit .env and set USE_PREBUILT_IMAGES=true
 
 # 2. Setup repositories and pull images
@@ -128,9 +134,11 @@ Follow these steps before the first run:
     ```bash
     cp .env.dev.example .env                    # For development (build from source)
     # OR
-    cp .env.mainnet.example .env               # For IGRA mainnet (pre-built images)
+    cp .env.mainnet.example .env && cat versions.mainnet.env >> .env
     # OR
-    cp .env.galleon-testnet.example .env        # For Galleon testnet (pre-built images)
+    cp .env.galleon-testnet.example .env && cat versions.galleon-testnet.env >> .env
+    # OR
+    cp .env.frigate-testnet.example .env && cat versions.frigate-testnet.env >> .env
     # Edit .env and add/modify lines like these:
     # RETH_BRANCH=production
     # KASWALLET_BRANCH=feature/new-api
@@ -265,7 +273,7 @@ Docker Compose will automatically pick up this variable when you run `docker com
 
 ### Image Versions
 
-Docker image versions are centrally pinned in per-network version files: `versions.mainnet.env` and `versions.testnet.env`. These files are used by `docker-compose.yml`, setup scripts, and deployment tools. Update versions there when upgrading services.
+Docker image versions are centrally pinned in per-network version files: `versions.mainnet.env`, `versions.galleon-testnet.env`, and `versions.frigate-testnet.env`. These files are used by `docker-compose.yml`, setup scripts, and deployment tools. Update versions there when upgrading services.
 
 ## Running the Stack
 
@@ -405,10 +413,14 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork
 ## Documentation
 
 - [Mainnet Deployment Guide](doc/quick-setup-mainnet.md) - Public mainnet deployment with pre-built images
-- [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md) - Public Galleon testnet deployment with pre-built images
+- [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md) - Public Galleon testnet (testnet-10) deployment with pre-built images
+- [Frigate Testnet Deployment Guide](doc/quick-setup-frigate-testnet.md) - Public Frigate testnet (testnet-12) deployment with pre-built images
+- [Frigate Testnet Pending Values](doc/frigate-testnet-values.md) - Checklist of Frigate values required before launch
+- [Galleon → testnet-10 Migration Guide](doc/node-operations/migrate-galleon-to-testnet-10.md) - One-shot upgrade for existing Galleon operators on `NETWORK=testnet`
 - [Kaspa Wallet Guide](doc/kaspa-wallet.md) - Wallet setup for all networks
 - [Log Management](doc/log-management.md) - Automated log cleanup for servers
 - [Docker Volume Permissions](doc/troubleshooting/docker-volume-permissions.md) - Fix permission denied errors
+- [Kaspad DB Upgrade Prompt](doc/troubleshooting/kaspad-db-upgrade.md) - Run the one-time noninteractive kaspad DB metadata upgrade
 - [Service Restart Debugging](doc/troubleshooting/service-restart-debugging.md) - Diagnose fail-fast exits, restart loops, and Docker log persistence
 - [SSL Certificate Issues](doc/troubleshooting/ssl-certificate.md) - Fix Traefik certificate resolver errors
 
@@ -446,6 +458,6 @@ Tunable env vars (all optional, defaults shown):
 
 **Trusted-proxy caveat:** when orchestra sits behind another proxy (e.g. an RPC load balancer), set `ORCHESTRA_TRUSTED_PROXIES` to the proxy's egress IP(s) so rate-limit buckets key on the real client IP, not the proxy. Leaving it empty is correct for direct-internet deployments.
 
-**Auto-populated by setup scripts:** `scripts/setup-mainnet.sh` and `scripts/setup-galleon-testnet.sh` resolve the known LB hostname (`rpc.igralabs.com` / `galleon-testnet.igralabs.com`) and write `RPC_LB_HOSTNAME` + `ORCHESTRA_TRUSTED_PROXIES` into `.env` automatically. Re-run the setup script or edit `.env` manually if the LB IP ever changes.
+**Auto-populated by setup scripts:** `scripts/setup-mainnet.sh` and `scripts/setup-galleon-testnet.sh` resolve their known LB hostnames (`rpc.igralabs.com` / `galleon-testnet.igralabs.com`) and write `RPC_LB_HOSTNAME` + `ORCHESTRA_TRUSTED_PROXIES` into `.env` automatically. `scripts/setup-frigate-testnet.sh` leaves both empty until ops publishes a Frigate LB hostname — set `RPC_LB_HOSTNAME` in `.env` by hand once known and re-run the setup script to populate the trusted proxies. Re-run the setup script or edit `.env` manually if any LB IP ever changes.
 
 Responses: oversized bodies return **HTTP 413**; rate-limited or over-the-concurrency-cap requests return **HTTP 429**. Both are recorded in the Traefik access log for observability.
