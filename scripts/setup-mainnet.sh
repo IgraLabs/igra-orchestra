@@ -22,9 +22,10 @@ KASWALLET_FLAG="--enable-mainnet-pre-launch"
 # resolves this and writes ORCHESTRA_TRUSTED_PROXIES into .env so orchestra's
 # Traefik trusts the LB's X-Forwarded-For header (ENG-1020).
 # shellcheck disable=SC2034
-RPC_LB_HOSTNAME="rpc.igralabs.com"
+RPC_LB_HOSTNAME="${RPC_LB_HOSTNAME:-rpc.igralabs.com}"
 
 # Version file for this network
+# shellcheck disable=SC2034
 VERSIONS_FILE="versions.mainnet.env"
 
 # Source common library and run setup
