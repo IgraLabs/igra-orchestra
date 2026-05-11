@@ -45,6 +45,54 @@ function panic() {
     exit 1
 }
 
+function load_env_file() {
+    local file=$1
+    local mode=${2:-override}
+    local line key value
+
+    [[ -f "$file" ]] || return 0
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%$'\r'}"
+        [[ "$line" =~ ^[[:space:]]*($|#) ]] && continue
+        [[ "$line" == *"="* ]] || continue
+
+        key="${line%%=*}"
+        key="${key#"${key%%[![:space:]]*}"}"
+        key="${key%"${key##*[![:space:]]}"}"
+        [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+
+        if [[ "$mode" == "preserve" && -n "${!key+x}" ]]; then
+            continue
+        fi
+
+        value="${line#*=}"
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        if [[ ${#value} -ge 2 ]]; then
+            case "$value" in
+                \"*\"|\'*\') value="${value:1:${#value}-2}" ;;
+            esac
+        fi
+
+        export "$key=$value"
+    done < "$file"
+}
+
+function find_unresolved_placeholders() {
+    local file
+
+    for file in "$@"; do
+        [[ -f "$file" ]] || continue
+        awk '
+            /^[[:space:]]*(#|$)/ { next }
+            /TODO_[A-Z0-9_]*(_REPLACE_ME)?/ {
+                printf "%s:%d:%s\n", FILENAME, FNR, $0
+            }
+        ' "$file"
+    done
+}
+
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Project root is two levels up from scripts/dev/
@@ -53,10 +101,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Load environment variables from .env file if it exists
 if [[ -f "$PROJECT_DIR/.env" ]]; then
     log "Loading environment variables from .env file"
-    set -a # Automatically export all variables
-    # shellcheck source=/dev/null
-    source "$PROJECT_DIR/.env"
-    set +a
+    load_env_file "$PROJECT_DIR/.env"
 else
     log ".env file not found, using default branch settings or environment variables."
 fi
@@ -201,12 +246,7 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
     log ""
     log "Pulling pre-built images from Docker Hub..."
 
-    # Pick the same version file docker-compose and the deployment guides use per network.
-    # Fail loudly on unknown/missing NETWORK rather than silently pulling mainnet tags onto a
-    # testnet datadir (or vice versa) — mixing image versions across networks is a deploy footgun.
-    # Reject mixed-case (e.g. "Mainnet") at the source: docker-compose interpolates ${NETWORK}
-    # verbatim into kaspad CLI flags (--$NETWORK) and the compose project name, so a value that
-    # passes here but isn't lowercase would break compose-up downstream.
+    # Select the per-network version file and reject unsafe/mixed-case NETWORK values.
     if [[ -z "${NETWORK:-}" ]]; then
         panic "NETWORK is not set. Configure it in .env or export it before running with USE_PREBUILT_IMAGES=true."
     fi
@@ -214,23 +254,46 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
         mainnet)
             versions_file="$PROJECT_DIR/versions.mainnet.env"
             ;;
-        testnet)
-            versions_file="$PROJECT_DIR/versions.testnet.env"
+        testnet-10|testnet)
+            # Transitional alias for Galleon.
+            versions_file="$PROJECT_DIR/versions.galleon-testnet.env"
+            ;;
+        testnet-12)
+            versions_file="$PROJECT_DIR/versions.frigate-testnet.env"
             ;;
         *)
-            panic "Unsupported NETWORK='$NETWORK'. Set NETWORK to lowercase 'mainnet' or 'testnet'."
+            panic "Unsupported NETWORK='$NETWORK'. Set NETWORK to lowercase 'mainnet', 'testnet-10', or 'testnet-12' (legacy 'testnet' is also accepted as an alias for 'testnet-10')."
             ;;
     esac
 
     if [[ -f "$versions_file" ]]; then
-        log "Sourcing image versions from $(basename "$versions_file") (NETWORK=$NETWORK)"
-        # shellcheck source=/dev/null
-        source "$versions_file"
+        log "Loading default image versions from $(basename "$versions_file") (NETWORK=$NETWORK)"
+        # Preserve values already rendered into .env.
+        load_env_file "$versions_file" preserve
     else
         panic "Version file not found: $versions_file (NETWORK=$NETWORK)"
     fi
 
-    # Pull and tag images (versions from the selected versions.*.env)
+    placeholder_matches="$(find_unresolved_placeholders "$PROJECT_DIR/.env")"
+    if [[ -n "$placeholder_matches" ]]; then
+        echo "$placeholder_matches" >&2
+        panic "Replace all TODO_* placeholders in .env before pulling images. See doc/frigate-testnet-values.md for the pending Frigate values."
+    fi
+
+    # Fail before docker pull if required tags or health-check values are unresolved.
+    for required_var in \
+        KASPAD_VERSION RETH_VERSION RPC_PROVIDER_VERSION KASWALLET_VERSION \
+        NODE_HEALTH_CHECK_VERSION ATAN_UPLOADER_VERSION \
+        HEALTH_CHECK_API_KEY NODE_HEALTH_CHECK_URL; do
+        value="${!required_var:-}"
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        if [[ -z "$value" || "$value" == TODO_* ]]; then
+            panic "$required_var is unset or still a TODO_* placeholder. Replace it in .env before re-running (Frigate values are tracked in doc/frigate-testnet-values.md)."
+        fi
+    done
+
+    # Pull and tag images (versions from .env, falling back to the selected versions.*.env)
     # Format: "image_name:version:local_tag"
     images=(
         "kaspad:${KASPAD_VERSION}:kaspad"

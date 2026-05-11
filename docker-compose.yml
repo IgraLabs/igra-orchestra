@@ -1,4 +1,4 @@
-name: igra-orchestra-${NETWORK}
+name: igra-orchestra-${NETWORK:?NETWORK must be set to mainnet, testnet-10, or testnet-12}
 
 volumes:
   kaspad_data:
@@ -35,6 +35,8 @@ x-default-service: &default-service
 
 x-service-restart-policy: &service-restart-policy "${SERVICE_RESTART_POLICY:-no}"
 x-dependency-watch-volume: &dependency-watch-volume ./scripts/lib/watch-dependencies.sh:/app/watch-dependencies.sh:ro
+# Shared NETWORK slug parser for kaspad/kaswallet entrypoints.
+x-parse-network-slug-volume: &parse-network-slug-volume ./scripts/lib/parse-network-slug.sh:/app/parse-network-slug.sh:ro
 
 x-rpc-provider-environment: &rpc-provider-environment
   RUST_LOG: ${RUST_LOG}
@@ -134,15 +136,23 @@ x-kaswallet-runtime: &kaswallet-runtime
     - sh
     - -ec
     - |
+      # Sets KASPA_FAMILY and KASPA_NETSUFFIX from NETWORK.
+      . /app/parse-network-slug.sh
+
       ARGS="--logs-level=$$RUST_LOG --keys /app/keys.json --server grpc://$$KASPAD_HOST:$$KASPAD_GRPC_PORT --listen 0.0.0.0:8082"
-      if [ "$$NETWORK" = "mainnet" ]; then
+      if [ "$$KASPA_FAMILY" = "mainnet" ]; then
         ARGS="--enable-mainnet-pre-launch $$ARGS"
       else
-        ARGS="--$$NETWORK $$ARGS"
+        ARGS="--$$KASPA_FAMILY $$ARGS"
+        if [ "$$KASPA_FAMILY" = "testnet" ] && [ -n "$$KASPA_NETSUFFIX" ]; then
+          ARGS="$$ARGS --testnet-suffix=$$KASPA_NETSUFFIX"
+        fi
       fi
       exec sh /app/watch-dependencies.sh \
         --tcp kaspad "$$KASPAD_HOST" "$$KASPAD_GRPC_PORT" \
         -- /app/kaswallet-daemon $$ARGS
+  volumes:
+    - *parse-network-slug-volume
   healthcheck:
     <<: *default-healthcheck
     test:
@@ -177,12 +187,13 @@ services:
       execution-layer:
         condition: service_healthy
     ports:
-      - "${KASPAD_GRPC_PORT}:${KASPAD_GRPC_PORT}"
+      - "127.0.0.1:${KASPAD_GRPC_PORT}:${KASPAD_GRPC_PORT}"
       - "${KASPAD_P2P_PORT}:${KASPAD_P2P_PORT}"
-      - "${KASPAD_BORSH_PORT}:${KASPAD_BORSH_PORT}"
-      - "${KASPAD_JSON_PORT}:${KASPAD_JSON_PORT}"
+      - "127.0.0.1:${KASPAD_BORSH_PORT}:${KASPAD_BORSH_PORT}"
+      - "127.0.0.1:${KASPAD_JSON_PORT}:${KASPAD_JSON_PORT}"
     environment:
       - KASPAD_ADD_PEER
+      - KASPAD_NONINTERACTIVE
       - ENABLE_PERF_DIAGNOSTICS
       - ENABLE_EVENT_LOGGING
       - WARM_START_BLOCK
@@ -199,6 +210,9 @@ services:
       - sh
       - -ec
       - |
+        # Sets KASPA_FAMILY and KASPA_NETSUFFIX from NETWORK.
+        . /app/parse-network-slug.sh
+
         ARGS="--disable-upnp \
           --rpclisten-borsh=0.0.0.0 \
           --rpclisten=0.0.0.0 \
@@ -208,8 +222,16 @@ services:
           --logdir=/app/logs \
           --appdir=/app/data"
 
-        if [ "$$NETWORK" != "mainnet" ]; then
-          ARGS="--$$NETWORK --nodnsseed $$ARGS"
+        # DNS seeds stay enabled; KASPAD_ADD_PEER only pins an extra peer.
+        if [ "$$KASPA_FAMILY" != "mainnet" ]; then
+          ARGS="--$$KASPA_FAMILY $$ARGS"
+        fi
+        if [ -n "$$KASPA_NETSUFFIX" ]; then ARGS="$$ARGS --netsuffix=$$KASPA_NETSUFFIX"; fi
+        ARGS="$$ARGS --ua-rule=reject;ver:kaspad<1.1.1"
+
+        # Frigate DNS seeds may lag initial launch; warn if no bootstrap peer is pinned.
+        if [ "$$KASPA_NETSUFFIX" = "12" ] && [ -z "$$KASPAD_ADD_PEER" ]; then
+          echo "WARN: testnet-12 (Frigate) launched without KASPAD_ADD_PEER pinned. Until Frigate DNS seeds are operational, set KASPAD_ADD_PEER=<peer-ip> in .env to avoid 0-peer IBD stalls." >&2
         fi
 
         IGRA_ENABLED="$${IGRA_ENABLE:-true}"
@@ -264,6 +286,7 @@ services:
       - ./logs/kaspad/:/app/logs/  # Event logs when ENABLE_EVENT_LOGGING=true
       - ./keys/jwt.hex:/app/jwt.hex:ro
       - *dependency-watch-volume
+      - *parse-network-slug-volume
     networks:
       - igra-network
     healthcheck:
@@ -377,6 +400,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-0.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-1:
     <<: *rpc-provider-runtime
@@ -396,6 +420,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-1.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-2:
     <<: *rpc-provider-runtime
@@ -415,6 +440,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-2.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-3:
     <<: *rpc-provider-runtime
@@ -434,6 +460,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-3.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-4:
     <<: *rpc-provider-runtime
@@ -453,6 +480,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-4.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-5:
     <<: *rpc-provider-runtime
@@ -472,6 +500,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-5.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-6:
     <<: *rpc-provider-runtime
@@ -491,6 +520,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-6.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-7:
     <<: *rpc-provider-runtime
@@ -510,6 +540,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-7.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-8:
     <<: *rpc-provider-runtime
@@ -529,6 +560,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-8.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-9:
     <<: *rpc-provider-runtime
@@ -548,6 +580,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-9.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-10:
     <<: *rpc-provider-runtime
@@ -567,6 +600,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-10.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-11:
     <<: *rpc-provider-runtime
@@ -586,6 +620,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-11.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-12:
     <<: *rpc-provider-runtime
@@ -605,6 +640,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-12.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-13:
     <<: *rpc-provider-runtime
@@ -624,6 +660,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-13.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-14:
     <<: *rpc-provider-runtime
@@ -643,6 +680,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-14.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-15:
     <<: *rpc-provider-runtime
@@ -662,6 +700,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-15.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-16:
     <<: *rpc-provider-runtime
@@ -681,6 +720,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-16.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-17:
     <<: *rpc-provider-runtime
@@ -700,6 +740,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-17.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-18:
     <<: *rpc-provider-runtime
@@ -719,6 +760,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-18.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   rpc-provider-19:
     <<: *rpc-provider-runtime
@@ -738,6 +780,7 @@ services:
     volumes:
       - ./keys/keys.kaswallet-19.json:/app/keys.json
       - *dependency-watch-volume
+      - *parse-network-slug-volume
 
   # Traefik Service
   traefik:

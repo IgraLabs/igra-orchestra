@@ -11,6 +11,10 @@ Run kaspad saving finality periods without the full IGRA execution layer stack. 
     ```
 
 2. Review and adjust settings in `.env` as needed. The defaults target mainnet.
+   For Galleon testnet-10, set `NETWORK=testnet-10`, `TX_ID_PREFIX=97b4`,
+   `DATADIR=/app/data/kaspa-testnet-10/datadir`, and keep
+   `ATAN_IMPORT_URL=https://dyehoijgeqfp8.cloudfront.net/testnet/97b4/index.pb`
+   until the `/testnet-10/97b4/index.pb` CDN object is published.
 
 3. Start kaspad with ATAN:
 
@@ -36,13 +40,14 @@ Run kaspad saving finality periods without the full IGRA execution layer stack. 
 
 ## Configuration
 
-See [`.env.atan.example`](../../.env.atan.example) for all available variables. Key settings:
+See `.env.atan.example` at the repository root for all available variables. Key settings:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NETWORK` | `mainnet` | Network to connect to |
 | `TX_ID_PREFIX` | `97b1` | Transaction ID prefix for ATAN filtering |
 | `CDN_BASE_URL` | CloudFront URL | CDN for ATAN data import |
+| `ATAN_IMPORT_URL` | (empty) | Optional full import URL override; required for Galleon testnet-10 until the new CDN path is published |
 | `KASPAD_ADD_PEER` | (empty) | Optional peer to connect to |
 
 ## Monitoring

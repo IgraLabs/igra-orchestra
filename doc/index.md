@@ -8,6 +8,7 @@ Choose your deployment guide:
 
 - **[Mainnet](quick-setup-mainnet.md)** - Public mainnet deployment with pre-built images
 - **[Galleon Testnet](quick-setup-galleon-testnet.md)** - Public Galleon testnet deployment with pre-built images
+- **[Frigate Testnet](quick-setup-frigate-testnet.md)** - Public Frigate (testnet-12) deployment with pre-built images
 
 ## Operations
 
@@ -18,6 +19,7 @@ Choose your deployment guide:
 ## Troubleshooting
 
 - **[Docker Volume Permissions](troubleshooting/docker-volume-permissions.md)** - Fix permission denied errors
+- **[Kaspad DB Upgrade Prompt](troubleshooting/kaspad-db-upgrade.md)** - Run the one-time noninteractive kaspad DB metadata upgrade
 - **[Service Restart Debugging](troubleshooting/service-restart-debugging.md)** - Diagnose fail-fast exits, restart loops, and Docker log persistence
 - **[SSL Certificate Issues](troubleshooting/ssl-certificate.md)** - Fix Traefik certificate resolver errors
 
@@ -37,6 +39,9 @@ For the fastest setup, use the automated scripts:
 
 # Galleon Testnet
 ./scripts/setup-galleon-testnet.sh
+
+# Frigate Testnet
+./scripts/setup-frigate-testnet.sh
 ```
 
 For full details, see the [README on GitHub](https://github.com/IgraLabs/igra-orchestra).
