@@ -53,16 +53,17 @@ and copy the published values into `.env` rather than this table.
 | `NETWORK` | testnet-12 |
 | `IGRA_CHAIN_ID` | _(pending)_ |
 | `TX_ID_PREFIX` | _(pending)_ |
+| `IGRA_LANE_ID` | 97b1000000000000000000000000000000000000 |
 | `IGRA_LAUNCH_DAA_SCORE` | _(pending)_ |
 | `GENESIS_BLOCK_HASH` | _(pending)_ |
 | `L1_REFERENCE_DAA_SCORE` | _(pending)_ |
 | `L1_REFERENCE_TIMESTAMP` | _(pending)_ |
 | `IGRA_LOCK_SCRIPT_PUBKEY` | _(pending)_ |
 | Address prefix | kaspatest: |
-| P2P Port | 16311 |
-| gRPC Port | 16310 (localhost bind by default) |
-| Borsh Port | 17310 (localhost bind by default) |
-| JSON Port | 18310 (localhost bind by default) |
+| P2P Port | 16211 |
+| gRPC Port | 16210 (localhost bind by default) |
+| Borsh Port | 17210 (localhost bind by default) |
+| JSON Port | 18210 (localhost bind by default) |
 | Bootstrap Peer | (DNS seed; set `KASPAD_ADD_PEER` for faster initial sync) |
 
 ## Steps
@@ -209,7 +210,7 @@ docker compose logs -f node-health-check-client
 
 **Kaspad not syncing:**
 - Check network connectivity
-- Verify no firewall blocking P2P port (16311)
+- Verify no firewall blocking P2P port (16211)
 - DNS seeds should provide peers automatically; set `KASPAD_ADD_PEER` to a
   known Frigate peer if discovery is slow.
 - Check logs: `docker compose logs kaspad`

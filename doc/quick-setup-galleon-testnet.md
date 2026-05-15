@@ -28,6 +28,7 @@ If the automated script above doesn't work for your environment, follow these ma
 | `NETWORK` | testnet-10 |
 | `IGRA_CHAIN_ID` | 38836 |
 | `TX_ID_PREFIX` | 97b4 |
+| `IGRA_LANE_ID` | 97b1000000000000000000000000000000000000 |
 | `IGRA_LAUNCH_DAA_SCORE` | 368045400 |
 | `GENESIS_BLOCK_HASH` | 0xfa870bcc16b6fbb3225bcc89a92f38e02c95fdc3e3b51a58d066ac7e1e4162a2 |
 | `L1_REFERENCE_DAA_SCORE` | 361004030 |

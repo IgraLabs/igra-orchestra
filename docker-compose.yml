@@ -48,6 +48,7 @@ x-rpc-provider-environment: &rpc-provider-environment
   READ_ONLY: ${RPC_READ_ONLY}
   MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
   TX_ID_PREFIX: ${TX_ID_PREFIX}
+  IGRA_LANE_ID: ${IGRA_LANE_ID:-}
 
 # Runtime config (no build) - for replica services
 x-rpc-provider-runtime: &rpc-provider-runtime
@@ -126,6 +127,7 @@ x-kaswallet-runtime: &kaswallet-runtime
     - NETWORK
     - KASPAD_HOST
     - KASPAD_GRPC_PORT
+    - IGRA_LANE_ID
   extra_hosts:
     - "host.docker.internal:host-gateway"
   depends_on:
@@ -202,6 +204,7 @@ services:
       - CDN_BASE_URL
       - NETWORK
       - TX_ID_PREFIX
+      - IGRA_LANE_ID
       - IGRA_ENABLE
       - POST_FORK_LOCK_SCRIPT_PUBKEY
       - LOCK_SCRIPT_FORK_DAA_SCORE
@@ -250,6 +253,7 @@ services:
             --igra-entry-min-amount=${IGRA_ENTRY_MIN_AMOUNT} \
             --igra-el-host=http://execution-layer"
 
+          [ -n "$$IGRA_LANE_ID" ] && ARGS="$$ARGS --igra-lane-id=$$IGRA_LANE_ID"
           [ "$$ENABLE_PERF_DIAGNOSTICS" = "true" ] && ARGS="$$ARGS --igra-enable-perf-diagnostics"
           [ "$$ENABLE_EVENT_LOGGING" = "true" ] && ARGS="$$ARGS --igra-enable-event-logging"
           [ -n "$$WARM_START_BLOCK" ] && ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
@@ -263,12 +267,13 @@ services:
           [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && ARGS="$$ARGS --igra-post-fork-lock-script-pubkey=$$POST_FORK_LOCK_SCRIPT_PUBKEY"
           [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ] && ARGS="$$ARGS --igra-lock-script-fork-daa-score=$$LOCK_SCRIPT_FORK_DAA_SCORE"
 
+          ATAN_IMPORT_KEY="$${IGRA_LANE_ID:-$$TX_ID_PREFIX}"
           if [ -n "$$ATAN_IMPORT_URL" ]; then
             ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
-          elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ] && [ -n "$$TX_ID_PREFIX" ]; then
-            ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$TX_ID_PREFIX/index.pb"
+          elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ] && [ -n "$$ATAN_IMPORT_KEY" ]; then
+            ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$ATAN_IMPORT_KEY/index.pb"
           else
-            echo "Error: CDN_BASE_URL, NETWORK and TX_ID_PREFIX must be set for ATAN import" >&2
+            echo "Error: CDN_BASE_URL, NETWORK and IGRA_LANE_ID or TX_ID_PREFIX must be set for ATAN import" >&2
             exit 1
           fi
         fi
@@ -326,6 +331,7 @@ services:
       ONE_TIME_ADDRESS: ${EL_ONE_TIME_ADDRESS}
       IGRA_LAUNCH_DAA_SCORE: ${IGRA_LAUNCH_DAA_SCORE}
       TX_ID_PREFIX: ${TX_ID_PREFIX}
+      IGRA_LANE_ID: ${IGRA_LANE_ID:-}
       MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
       IGRA_LOCK_SCRIPT_PUBKEY: ${IGRA_LOCK_SCRIPT_PUBKEY:-}
       IGRA_ENTRY_MIN_AMOUNT: ${IGRA_ENTRY_MIN_AMOUNT}
@@ -1011,6 +1017,7 @@ services:
       # Network and transaction configuration (required)
       NETWORK: ${NETWORK}
       TX_ID_PREFIX: ${TX_ID_PREFIX}
+      IGRA_LANE_ID: ${IGRA_LANE_ID:-}
       # Data directory path (required, must match NETWORK)
       DATADIR: ${DATADIR:-}
       # Upload jitter for multi-node stagger (seconds, 0 = disabled)
