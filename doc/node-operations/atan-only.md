@@ -15,6 +15,9 @@ Run kaspad saving finality periods without the full IGRA execution layer stack. 
    `DATADIR=/app/data/kaspa-testnet-10/datadir`, and keep
    `ATAN_IMPORT_URL=https://dyehoijgeqfp8.cloudfront.net/testnet/97b4/index.pb`
    until the `/testnet-10/97b4/index.pb` CDN object is published.
+   For post-KIP21 lane-based networks, keep `IGRA_LANE_ID` set to the
+   canonical 20-byte IGRA lane id. The auto-import path will use
+   `IGRA_LANE_ID` instead of `TX_ID_PREFIX`.
 
 3. Start kaspad with ATAN:
 
@@ -34,6 +37,7 @@ Run kaspad saving finality periods without the full IGRA execution layer stack. 
 ## What It Does
 
 - Starts kaspad with `--atan-listen` and `--atan-transaction-id-prefix` flags
+- Passes `--igra-lane-id` when `IGRA_LANE_ID` is set
 - Automatically imports existing ATAN data from CDN on first start
 - Continuously saves new finality periods as the blockchain progresses
 - Does NOT run: execution layer (reth), IGRA adapter, viaduct, RPC providers, or wallets
@@ -45,7 +49,8 @@ See `.env.atan.example` at the repository root for all available variables. Key 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NETWORK` | `mainnet` | Network to connect to |
-| `TX_ID_PREFIX` | `97b1` | Transaction ID prefix for ATAN filtering |
+| `TX_ID_PREFIX` | `97b1` | Legacy transaction ID prefix for ATAN filtering and fallback import namespace |
+| `IGRA_LANE_ID` | `97b1000000000000000000000000000000000000` | Post-KIP21 dedicated IGRA lane id; used for `--igra-lane-id` and ATAN import/upload namespace |
 | `CDN_BASE_URL` | CloudFront URL | CDN for ATAN data import |
 | `ATAN_IMPORT_URL` | (empty) | Optional full import URL override; required for Galleon testnet-10 until the new CDN path is published |
 | `KASPAD_ADD_PEER` | (empty) | Optional peer to connect to |

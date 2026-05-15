@@ -38,6 +38,7 @@ services:
       - CDN_BASE_URL
       - NETWORK
       - TX_ID_PREFIX
+      - IGRA_LANE_ID
       - RUST_LOG=${RUST_LOG:-info,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace}
     entrypoint:
       - sh
@@ -67,12 +68,15 @@ services:
           --atan-listen \
           --atan-transaction-id-prefix=${TX_ID_PREFIX}"
 
+        [ -n "$$IGRA_LANE_ID" ] && ARGS="$$ARGS --igra-lane-id=$$IGRA_LANE_ID"
+
+        ATAN_IMPORT_KEY="$${IGRA_LANE_ID:-$$TX_ID_PREFIX}"
         if [ -n "$$ATAN_IMPORT_URL" ]; then
           ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
-        elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ] && [ -n "$$TX_ID_PREFIX" ]; then
-          ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$TX_ID_PREFIX/index.pb"
+        elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ] && [ -n "$$ATAN_IMPORT_KEY" ]; then
+          ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$ATAN_IMPORT_KEY/index.pb"
         else
-          echo "Warning: No ATAN import URL configured. Set ATAN_IMPORT_URL or CDN_BASE_URL+NETWORK+TX_ID_PREFIX to import historical data." >&2
+          echo "Warning: No ATAN import URL configured. Set ATAN_IMPORT_URL or CDN_BASE_URL+NETWORK+IGRA_LANE_ID/TX_ID_PREFIX to import historical data." >&2
         fi
 
         # Peer configuration
@@ -106,6 +110,7 @@ services:
       CDN_BASE_URL: ${CDN_BASE_URL}
       NETWORK: ${NETWORK}
       TX_ID_PREFIX: ${TX_ID_PREFIX}
+      IGRA_LANE_ID: ${IGRA_LANE_ID:-}
       DATADIR: ${DATADIR:-}
       UPLOAD_JITTER_MAX_SECONDS: ${UPLOAD_JITTER_MAX_SECONDS:-60}
     volumes:
