@@ -517,9 +517,10 @@ validate_required_variables() {
 
     # Validate KASWALLET_FLAG is a known-safe value
     if [[ "${KASWALLET_FLAG:-}" != "--testnet" \
+        && "${KASWALLET_FLAG:-}" != "--devnet" \
         && "${KASWALLET_FLAG:-}" != "--enable-mainnet-pre-launch" \
         && ! "${KASWALLET_FLAG:-}" =~ ^--testnet[[:space:]]+--testnet-suffix=[0-9]+$ ]]; then
-        die "Invalid KASWALLET_FLAG: ${KASWALLET_FLAG:-<unset>}. Must be --testnet, --testnet --testnet-suffix=<digits>, or --enable-mainnet-pre-launch"
+        die "Invalid KASWALLET_FLAG: ${KASWALLET_FLAG:-<unset>}. Must be --testnet, --testnet --testnet-suffix=<digits>, --devnet, or --enable-mainnet-pre-launch"
     fi
 
     for var in ENV_NAME ENV_FILE NODE_ID_PREFIX KASWALLET_FLAG VERSIONS_FILE; do

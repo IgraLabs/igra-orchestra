@@ -69,6 +69,22 @@ For detailed guides, see:
 - [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md)
 - [Frigate Testnet Deployment Guide](doc/quick-setup-frigate-testnet.md)
 
+### For Local Development (Devnet)
+
+A self-contained single-node devnet stack with a configurable finality period — useful for local testing of finality-related behavior without waiting 12 hours for the kaspad devnet default to advance.
+
+```bash
+# Default: 600s finality (= finality_depth 6000 at BPS=10)
+./scripts/setup-devnet.sh
+
+# Custom finality period (seconds, range [60, 108000])
+FINALITY_PERIOD_SECONDS=120 ./scripts/setup-devnet.sh
+```
+
+The script generates `overrides/devnet.json` from `FINALITY_PERIOD_SECONDS` and starts a self-contained stack (`docker-compose.devnet.yml`: kaspad, execution-layer, kaswallet-0, rpc-provider-0). Start the in-stack miner separately: `docker compose --profile mining up -d --build kaspa-miner`.
+
+Prerequisite: run `./scripts/dev/setup-repos.sh` first (kaspa-miner is built from source).
+
 **Manual setup (alternative):**
 
 ```bash

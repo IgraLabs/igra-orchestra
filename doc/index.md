@@ -42,6 +42,9 @@ For the fastest setup, use the automated scripts:
 
 # Frigate Testnet
 ./scripts/setup-frigate-testnet.sh
+
+# Local Devnet (configurable finality period for local testing)
+FINALITY_PERIOD_SECONDS=600 ./scripts/setup-devnet.sh
 ```
 
 For full details, see the [README on GitHub](https://github.com/IgraLabs/igra-orchestra).
