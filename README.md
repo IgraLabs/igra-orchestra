@@ -382,14 +382,20 @@ WARM_START_BLOCK=200184247
 IGRA_SKIP_LOCK_SCRIPT_CHECK=false
 
 # Transaction ID prefix for ATAN (hex-encoded, e.g., 97b1)
-# Used by kaspad (--atan-transaction-id-prefix) and RPC provider
+# Used by kaspad (--atan-transaction-id-prefix) and RPC provider.
+# Pre-KIP21 this is the ATAN filtering key.
 TX_ID_PREFIX=97b1
+
+# Optional post-KIP21 dedicated IGRA lane id (20-byte hex, no 0x).
+# When set, kaspad receives --igra-lane-id and ATAN import/upload paths use
+# this value instead of TX_ID_PREFIX.
+IGRA_LANE_ID=97b1000000000000000000000000000000000000
 
 # CDN base URL for ATAN data (required)
 CDN_BASE_URL=https://dyehoijgeqfp8.cloudfront.net
 
 # ATAN auto-import URL (passes --atan-import-url flag, remote URLs only)
-# Auto-constructed from CDN_BASE_URL, NETWORK and TX_ID_PREFIX by default
+# Auto-constructed from CDN_BASE_URL, NETWORK and IGRA_LANE_ID/TX_ID_PREFIX by default
 # Override only if you need a custom remote URL:
 # ATAN_IMPORT_URL=https://custom-cdn.example.com/index.pb
 ```
