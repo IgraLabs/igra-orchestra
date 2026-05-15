@@ -387,9 +387,12 @@ IGRA_SKIP_LOCK_SCRIPT_CHECK=false
 TX_ID_PREFIX=97b1
 
 # Optional post-KIP21 dedicated IGRA lane id (20-byte hex, no 0x).
-# When set, kaspad receives --igra-lane-id and ATAN import/upload paths use
-# this value instead of TX_ID_PREFIX.
-IGRA_LANE_ID=97b1000000000000000000000000000000000000
+# Empty by default. Set only after KIP-21 fork — see
+# doc/node-operations/enable-kip21-lane-mode.md. When set, kaspad/kaswallet
+# receive --igra-lane-id and ATAN import/upload paths use this value instead
+# of TX_ID_PREFIX.
+# IGRA_LANE_ID=97b1000000000000000000000000000000000000
+IGRA_LANE_ID=
 
 # CDN base URL for ATAN data (required)
 CDN_BASE_URL=https://dyehoijgeqfp8.cloudfront.net

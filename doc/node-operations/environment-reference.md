@@ -26,7 +26,7 @@ All operational variables across the stack.
 |----------|-------|-------------|
 | `NETWORK` | `.env` | Network to connect to (mainnet, testnet) |
 | `TX_ID_PREFIX` | `.env` | Legacy transaction ID prefix for ATAN filtering and fallback ATAN import namespace |
-| `IGRA_LANE_ID` | `.env` | Canonical post-KIP21 dedicated IGRA lane id, currently `97b1000000000000000000000000000000000000`; passed to kaspad as `--igra-lane-id` and used as the ATAN import/upload namespace |
+| `IGRA_LANE_ID` | `.env` | Optional post-KIP21 dedicated IGRA lane id, canonical value `97b1000000000000000000000000000000000000`. Empty by default; set explicitly post-fork — see [Enable KIP-21 Lane Mode](enable-kip21-lane-mode.md). When set, passed to kaspad/kaswallet as `--igra-lane-id` and used as the ATAN import/upload namespace |
 | `CDN_BASE_URL` | `.env` | CDN base URL for ATAN data import |
 | `ATAN_IMPORT_URL` | `.env` | Optional override for auto-constructed import URL |
 | `KASPAD_ADD_PEER` | `.env` | Optional peer address |
