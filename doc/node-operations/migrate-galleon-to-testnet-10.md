@@ -13,17 +13,26 @@ use `./scripts/setup-galleon-testnet.sh` directly — the template already ships
 ## What the migration does
 
 - **Renames the compose project** from `igra-orchestra-testnet` to
-  `igra-orchestra-testnet-10` by copying the Docker volumes
-  (`kaspad_data`, `reth_data`, `traefik_certs`) into the new namespace.
-  The old volumes are left in place as a backup until you remove them
-  manually.
+  `igra-orchestra-testnet-10` by atomically moving each volume's `_data`
+  directory under `/var/lib/docker/volumes/` on the docker host (a `rename(2)`
+  syscall — metadata-only, instant, regardless of how large the volume is).
+  After the rename, the old `igra-orchestra-testnet_*` volumes are removed;
+  the migration is one-way.
 - **Rewrites `.env`** atomically: `NETWORK=testnet` → `NETWORK=testnet-10`,
-  and pins `ATAN_IMPORT_URL` to the legacy published
+  pins `ATAN_IMPORT_URL` to the legacy published
   `https://dyehoijgeqfp8.cloudfront.net/testnet/97b4/index.pb` so ATAN keeps
   importing from the existing CDN path until the `/testnet-10/97b4/index.pb`
-  object is published.
-- **Writes a timestamped backup**: `.env.backup.pre-testnet-10.YYYYMMDD_HHMMSS`
-  (mode 600) is created before the rewrite so the operation is reversible.
+  object is published, sets `IGRA_LANE_ID=97b10000` (post-KIP21 dedicated
+  IGRA lane id; kaspad's parser zero-pads the 8-char namespace shorthand to
+  20 bytes), and **syncs every image-version pin** from
+  `versions.galleon-testnet.env` into `.env` (`KASPAD_VERSION`,
+  `RETH_VERSION`, `RPC_PROVIDER_VERSION`, `KASWALLET_VERSION`,
+  `NODE_HEALTH_CHECK_VERSION`, `ATAN_UPLOADER_VERSION`) so the next
+  `docker compose up` pulls the right tags without a separate version-sync
+  step.
+- **Writes a timestamped backup of `.env`**:
+  `.env.backup.pre-testnet-10.YYYYMMDD_HHMMSS` (mode 600) is created before
+  the rewrite so the `.env` change is reversible (the volume rename is not).
 
 The underlying reason for the rename: kaspad now uses a uniform slug schema
 `<family>[-<suffix>]` so that Galleon (`testnet-10`) and Frigate (`testnet-12`)
@@ -71,8 +80,8 @@ Without it, the script aborts at the first lock step with
   ```bash
   docker volume ls --filter 'name=igra-orchestra-testnet_'
   ```
-- Roughly **1.2× free disk space** on the Docker volume root — the script
-  copies ~50 GB of kaspad data and keeps both copies for the rollback window.
+- The migration is **one-way and renames in place**, so it needs no extra
+  disk space and finishes in seconds. There is no copy phase to wait on.
 
 ## Run the migration
 
@@ -82,66 +91,44 @@ git pull            # ensure you have the PR-branch tree
 ./scripts/dev/migrate-galleon-to-testnet-10.sh
 ```
 
-Before the confirmation prompt the script prints a pre-flight summary of the
-source volumes and the total bytes it's about to copy, so you can verify free
-disk space:
+Before the confirmation prompt the script prints a pre-flight summary so you
+can confirm which volumes are about to be moved:
 
 ```
-Source volumes to copy:
+Source volumes to rename:
   igra-orchestra-testnet_kaspad_data              48.2G
   igra-orchestra-testnet_reth_data                12.7G
   igra-orchestra-testnet_traefik_certs            120K
-Total to copy: ~62300 MB (host needs >=1.2x free on the docker volume root)
 About to:
   1. Stop projects igra-orchestra-testnet and igra-orchestra-testnet-10 (across all profiles)
-  2. Copy volumes ...
-  ...
+  2. Rename volumes ... (old volumes are removed)
+  3. Rewrite .env: NETWORK=testnet -> NETWORK=testnet-10
+  4. Pin ATAN_IMPORT_URL to the legacy published Galleon CDN path
+  5. Set IGRA_LANE_ID=97b10000 (post-KIP21 dedicated lane)
+This is one-way: once the rename completes, the old volumes no longer exist.
 Proceed? [y/N]:
 ```
 
-After you confirm with `y`, expected output during the copy (paraphrased):
+After you confirm with `y`, expected output (paraphrased):
 
 ```
 [+] Running N/N (compose down for igra-orchestra-testnet)
 WARN[0000] Warning: No resource found to remove for project "igra-orchestra-testnet-10".
-[14:02:11] copying igra-orchestra-testnet_kaspad_data (48.2G) -> igra-orchestra-testnet-10_kaspad_data ...
-    ... 5.4G copied so far
-    ... 11.1G copied so far
-    ... 18.0G copied so far
-    ... (heartbeat every 30s)
-[14:17:54] copied  igra-orchestra-testnet_kaspad_data -> igra-orchestra-testnet-10_kaspad_data in 15m43s
-[14:17:54] copying igra-orchestra-testnet_reth_data (12.7G) -> igra-orchestra-testnet-10_reth_data ...
-    ... 4.8G copied so far
-    ...
-[14:22:18] copied  igra-orchestra-testnet_reth_data -> igra-orchestra-testnet-10_reth_data in 4m24s
-[14:22:18] copying igra-orchestra-testnet_traefik_certs (120K) -> igra-orchestra-testnet-10_traefik_certs ...
-[14:22:18] copied  igra-orchestra-testnet_traefik_certs -> igra-orchestra-testnet-10_traefik_certs in 0m00s
-[14:22:18] all volumes copied in 20m07s; rewriting .env ...
-[14:22:18] .env migrated and backup written to .env.backup.pre-testnet-10.20260512_142218
+[14:02:11] renaming igra-orchestra-testnet_kaspad_data (48.2G) -> igra-orchestra-testnet-10_kaspad_data ...
+[14:02:11] renamed igra-orchestra-testnet_kaspad_data -> igra-orchestra-testnet-10_kaspad_data in 0m00s
+[14:02:11] renaming igra-orchestra-testnet_reth_data (12.7G) -> igra-orchestra-testnet-10_reth_data ...
+[14:02:11] renamed igra-orchestra-testnet_reth_data -> igra-orchestra-testnet-10_reth_data in 0m00s
+[14:02:11] renaming igra-orchestra-testnet_traefik_certs (120K) -> igra-orchestra-testnet-10_traefik_certs ...
+[14:02:11] renamed igra-orchestra-testnet_traefik_certs -> igra-orchestra-testnet-10_traefik_certs in 0m00s
+[14:02:11] all volumes renamed in 0m00s; rewriting .env ...
+[14:02:11] .env migrated and backup written to .env.backup.pre-testnet-10.20260512_140211
 Done. Bring the new project up: docker compose --profile backend up -d --no-build
-After verifying sync, remove old volumes with: docker volume rm ...
+Old igra-orchestra-testnet volumes have already been removed (rename is one-way).
 ```
 
 The `WARN` about `igra-orchestra-testnet-10` is benign — the destination
-project doesn't exist yet. The `... X copied so far` lines appear every 30
-seconds while a volume copy is in flight; they confirm the migration is
-actively making progress.
-
-Allow roughly **1 minute per 5–10 GB** of kaspad data on local SSD. A fully
-synced Galleon node (~60 GB of chain data) typically completes in 15–30
-minutes end-to-end.
-
-### Silencing the heartbeat (`MIGRATE_QUIET=1`)
-
-If your shell or log collector doesn't tolerate the `... X copied so far`
-output, run the script with `MIGRATE_QUIET=1`:
-
-```bash
-MIGRATE_QUIET=1 ./scripts/dev/migrate-galleon-to-testnet-10.sh
-```
-
-The per-volume start/end markers and the timing totals still print; only the
-30-second heartbeat is suppressed.
+project doesn't exist yet. The whole rename phase completes in seconds
+because no data is moved; only the volume directory metadata changes.
 
 ## Verify
 
@@ -150,7 +137,12 @@ After the script completes:
 ```bash
 grep '^NETWORK=' .env                                       # NETWORK=testnet-10
 grep '^ATAN_IMPORT_URL=' .env                               # legacy CloudFront URL
-docker volume ls --filter 'name=igra-orchestra-testnet'     # old + new namespaces present
+grep '^IGRA_LANE_ID=' .env                                  # IGRA_LANE_ID=97b10000
+grep -E '^(KASPAD|RETH|RPC_PROVIDER|KASWALLET|NODE_HEALTH_CHECK|ATAN_UPLOADER)_VERSION=' .env \
+    | sort                                                  # matches versions.galleon-testnet.env
+diff <(grep -E '^[A-Z_]+_VERSION=' versions.galleon-testnet.env | sort) \
+     <(grep -E '^[A-Z_]+_VERSION=' .env | sort)             # should print nothing
+docker volume ls --filter 'name=igra-orchestra-testnet'     # only -10 namespace present
 ```
 
 Bring the new stack up:
@@ -194,31 +186,22 @@ not kaspad prompts.
 
 ## Rollback
 
-If the new stack doesn't come up cleanly:
+The volume rename is one-way: by the time the script reaches the `.env`
+rewrite, the old `igra-orchestra-testnet_*` volumes are already gone. There
+is no byte-for-byte rollback. What's still recoverable:
 
-```bash
-docker compose -p igra-orchestra-testnet-10 --profile '*' down
-cp "$(ls -t .env.backup.pre-testnet-10.* | head -1)" .env
-git checkout <your-previous-branch>      # restore old compose files
-docker compose --profile backend up -d --no-build
-```
+- **`.env`**: restore from the `.env.backup.pre-testnet-10.*` file the script
+  wrote before the rewrite. Keep this file indefinitely; it's the only
+  recovery path for `NETWORK`, `ATAN_IMPORT_URL`, and `IGRA_LANE_ID`.
+- **Compose files**: `git checkout <your-previous-branch>` to put back the
+  old `docker-compose.yml`. The new volumes are named
+  `igra-orchestra-testnet-10_*` and won't be picked up by the old compose
+  project, so a pre-migration compose would start from a fresh sync rather
+  than from the renamed data.
 
-The original `igra-orchestra-testnet_*` volumes were untouched by the
-migration, so the Galleon stack returns byte-for-byte to its pre-migration
-state.
-
-## Reclaim disk
-
-After ~1 week of stable `testnet-10` operation, remove the old volumes:
-
-```bash
-docker volume rm igra-orchestra-testnet_kaspad_data \
-                 igra-orchestra-testnet_reth_data \
-                 igra-orchestra-testnet_traefik_certs
-```
-
-Keep the `.env.backup.pre-testnet-10.*` file indefinitely — it's small and
-the only rollback path for `.env`.
+If the migration aborted partway (for example before the rename step ran on
+all volumes) the original volume namespace is intact and you can re-run the
+script after fixing whatever caused the abort.
 
 ## Troubleshooting
 
@@ -230,5 +213,6 @@ the only rollback path for `.env`.
 | `.env IGRA_CHAIN_ID is not the expected Galleon value '38836'` | Custom or stale chain identity | Restore Galleon defaults in `.env` (keep your node-specific overrides) |
 | `igra-orchestra-testnet_kaspad_data does not exist` | No chain volume to migrate (never ran Galleon backend, or volume already removed) | Use `./scripts/setup-galleon-testnet.sh` for a fresh start instead |
 | `<dst> already exists and contains data` | A previous partial run left data in the destination | Inspect with `docker volume inspect …`; if not needed, `docker volume rm <dst>` and re-run |
+| `post-rename: <dst> is empty; aborting before .env rewrite` | The rename `mv` reported success but the destination is empty (filesystem bug or non-local volume driver) | Restore the volume manually from any backup you have; do not bring the new stack up until `<dst>/_data` actually contains the chain data. Open an issue with your docker driver/storage details |
 | `sh: /app/parse-network-slug.sh: not found` at kaspad startup | The Galleon checkout doesn't have the new `docker-compose.yml` / `parse-network-slug.sh` | `git pull` (or copy the files) in the deployment directory and re-run `docker compose up` |
 | `Node database is from an older version` then `Operation was rejected (), exiting..` | Kaspad needs a one-time DB metadata upgrade but cannot prompt interactively inside Docker | Pull a compose version that passes `KASPAD_NONINTERACTIVE`, then run the one-time kaspad DB upgrade commands above |

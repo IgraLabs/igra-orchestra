@@ -230,7 +230,6 @@ services:
           ARGS="--$$KASPA_FAMILY $$ARGS"
         fi
         if [ -n "$$KASPA_NETSUFFIX" ]; then ARGS="$$ARGS --netsuffix=$$KASPA_NETSUFFIX"; fi
-        ARGS="$$ARGS --ua-rule=reject;ver:kaspad<1.1.1"
 
         # Frigate DNS seeds may lag initial launch; warn if no bootstrap peer is pinned.
         if [ "$$KASPA_NETSUFFIX" = "12" ] && [ -z "$$KASPAD_ADD_PEER" ]; then
