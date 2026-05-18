@@ -61,7 +61,6 @@ services:
           ARGS="--$$KASPA_FAMILY $$ARGS"
         fi
         if [ -n "$$KASPA_NETSUFFIX" ]; then ARGS="$$ARGS --netsuffix=$$KASPA_NETSUFFIX"; fi
-        ARGS="$$ARGS --ua-rule=reject;ver:kaspad<1.1.1"
 
         # ATAN-only flags (no IGRA)
         ARGS="$$ARGS \

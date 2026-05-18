@@ -50,7 +50,7 @@ See `.env.atan.example` at the repository root for all available variables. Key 
 |----------|---------|-------------|
 | `NETWORK` | `mainnet` | Network to connect to |
 | `TX_ID_PREFIX` | `97b1` | Legacy transaction ID prefix for ATAN filtering and fallback import namespace |
-| `IGRA_LANE_ID` | `97b1000000000000000000000000000000000000` | Post-KIP21 dedicated IGRA lane id; used for `--igra-lane-id` and ATAN import/upload namespace |
+| `IGRA_LANE_ID` | `97b10000` | Post-KIP21 dedicated IGRA lane id (8-char namespace shorthand; kaspad zero-pads to 20 bytes); used for `--igra-lane-id` and ATAN import/upload namespace |
 | `CDN_BASE_URL` | CloudFront URL | CDN for ATAN data import |
 | `ATAN_IMPORT_URL` | (empty) | Optional full import URL override; required for Galleon testnet-10 until the new CDN path is published |
 | `KASPAD_ADD_PEER` | (empty) | Optional peer to connect to |

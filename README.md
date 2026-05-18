@@ -386,10 +386,11 @@ IGRA_SKIP_LOCK_SCRIPT_CHECK=false
 # Pre-KIP21 this is the ATAN filtering key.
 TX_ID_PREFIX=97b1
 
-# Optional post-KIP21 dedicated IGRA lane id (20-byte hex, no 0x).
+# Optional post-KIP21 dedicated IGRA lane id. 8-char namespace shorthand
+# (kaspad zero-pads to 20 bytes) or full 40-char hex; both accepted.
 # When set, kaspad receives --igra-lane-id and ATAN import/upload paths use
 # this value instead of TX_ID_PREFIX.
-IGRA_LANE_ID=97b1000000000000000000000000000000000000
+IGRA_LANE_ID=97b10000
 
 # CDN base URL for ATAN data (required)
 CDN_BASE_URL=https://dyehoijgeqfp8.cloudfront.net

@@ -53,7 +53,7 @@ and copy the published values into `.env` rather than this table.
 | `NETWORK` | testnet-12 |
 | `IGRA_CHAIN_ID` | _(pending)_ |
 | `TX_ID_PREFIX` | _(pending)_ |
-| `IGRA_LANE_ID` | 97b1000000000000000000000000000000000000 |
+| `IGRA_LANE_ID` | 97b10000 |
 | `IGRA_LAUNCH_DAA_SCORE` | _(pending)_ |
 | `GENESIS_BLOCK_HASH` | _(pending)_ |
 | `L1_REFERENCE_DAA_SCORE` | _(pending)_ |
