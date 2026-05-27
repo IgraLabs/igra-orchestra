@@ -381,15 +381,18 @@ WARM_START_BLOCK=200184247
 # Skip lock script public key verification (TESTING ONLY, default: false)
 IGRA_SKIP_LOCK_SCRIPT_CHECK=false
 
-# Transaction ID prefix for ATAN (hex-encoded, e.g., 97b1)
-# Used by kaspad (--atan-transaction-id-prefix) and RPC provider.
-# Pre-KIP21 this is the ATAN filtering key.
+# Legacy/pre-KIP21 transaction ID prefix for ATAN (hex-encoded, e.g., 97b1).
+# Used by kaspad (--atan-transaction-id-prefix) for ATAN filtering and as
+# the fallback ATAN import namespace when IGRA_LANE_ID is unset. Not used
+# for post-KIP21 transaction construction.
 TX_ID_PREFIX=97b1
 
-# Optional post-KIP21 dedicated IGRA lane id. 8-char namespace shorthand
-# (kaspad zero-pads to 20 bytes) or full 40-char hex; both accepted.
-# When set, kaspad receives --igra-lane-id and ATAN import/upload paths use
-# this value instead of TX_ID_PREFIX.
+# Post-KIP21 dedicated IGRA lane namespace (4 bytes / 8 lowercase hex chars,
+# no 0x prefix). RPC, kaspad, and kaswallet must all see the same value:
+# kaspad receives --igra-lane-id=$IGRA_LANE_ID; kaswallet receives
+# --subnetwork-id=$IGRA_LANE_ID (appended by the docker-compose.yml
+# entrypoint); RPC reads IGRA_LANE_ID directly. ATAN import/upload paths
+# use this value instead of TX_ID_PREFIX.
 IGRA_LANE_ID=97b10000
 
 # CDN base URL for ATAN data (required)

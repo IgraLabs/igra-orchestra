@@ -23,8 +23,8 @@ use `./scripts/setup-galleon-testnet.sh` directly — the template already ships
   `https://dyehoijgeqfp8.cloudfront.net/testnet/97b4/index.pb` so ATAN keeps
   importing from the existing CDN path until the `/testnet-10/97b4/index.pb`
   object is published, sets `IGRA_LANE_ID=97b10000` (post-KIP21 dedicated
-  IGRA lane id; kaspad's parser zero-pads the 8-char namespace shorthand to
-  20 bytes), and **syncs every image-version pin** from
+  IGRA lane namespace; 4 bytes / 8 lowercase hex chars, no `0x`), and
+  **syncs every image-version pin** from
   `versions.galleon-testnet.env` into `.env` (`KASPAD_VERSION`,
   `RETH_VERSION`, `RPC_PROVIDER_VERSION`, `KASWALLET_VERSION`,
   `NODE_HEALTH_CHECK_VERSION`, `ATAN_UPLOADER_VERSION`) so the next
