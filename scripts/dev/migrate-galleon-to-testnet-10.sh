@@ -15,12 +15,12 @@ fi
 SRC_PROJECT="igra-orchestra-testnet"
 DST_PROJECT="igra-orchestra-testnet-10"
 VOLUMES=(kaspad_data reth_data traefik_certs)
-LEGACY_ATAN_IMPORT_URL="https://dyehoijgeqfp8.cloudfront.net/testnet/97b4/index.pb"
+LEGACY_ATAN_IMPORT_URL="https://dyehoijgeqfp8.cloudfront.net/testnet-10/97b4/index.pb"
 EXPECTED_IGRA_CHAIN_ID="38836"
 EXPECTED_TX_ID_PREFIX="97b4"
 EXPECTED_GENESIS_BLOCK_HASH="0x9816ede09a09a8e89c3c0158db66c3ea9ee16a81dfc7f2b80f7f38be5b1c28f2"
-# Post-KIP21 dedicated IGRA lane id (8-char namespace shorthand; kaspad
-# zero-pads to 20 bytes — see atan/core/src/kip21.rs in rusty-kaspa).
+# Post-KIP21 dedicated IGRA lane namespace (4 bytes / 8 lowercase hex
+# chars, no 0x prefix — see atan/core/src/kip21.rs in rusty-kaspa).
 EXPECTED_IGRA_LANE_ID="97b10000"
 # Repo-tracked source of truth for image tags; the operator's .env was merged
 # from this at first setup and can drift across version bumps, so the migration
@@ -256,7 +256,7 @@ if grep -q '^ATAN_IMPORT_URL=' "$tmp_env"; then
     mv -f "$tmp_env_with_atan" "$tmp_env"
 else
     {
-        printf '\n# Legacy Galleon ATAN import path; keep until /testnet-10/97b4/index.pb is published.\n'
+        printf '\n# Prefix-based Galleon ATAN path; keep until the lane-based /testnet-10/97b10000/index.pb is published.\n'
         printf 'ATAN_IMPORT_URL=%s\n' "$LEGACY_ATAN_IMPORT_URL"
     } >> "$tmp_env"
 fi
@@ -267,7 +267,7 @@ if grep -q '^IGRA_LANE_ID=' "$tmp_env"; then
     mv -f "$tmp_env_with_lane" "$tmp_env"
 else
     {
-        printf '\n# Post-KIP21 dedicated IGRA lane id (8-char namespace shorthand).\n'
+        printf '\n# Post-KIP21 dedicated IGRA lane namespace (4 bytes / 8 lowercase hex chars, no 0x).\n'
         printf 'IGRA_LANE_ID=%s\n' "$EXPECTED_IGRA_LANE_ID"
     } >> "$tmp_env"
 fi

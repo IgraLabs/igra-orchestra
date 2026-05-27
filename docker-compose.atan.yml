@@ -62,20 +62,39 @@ services:
         fi
         if [ -n "$$KASPA_NETSUFFIX" ]; then ARGS="$$ARGS --netsuffix=$$KASPA_NETSUFFIX"; fi
 
+        # Empty TX_ID_PREFIX would render as --atan-transaction-id-prefix=
+        # which kaspad accepts but treats as Box::new([]) — the empty prefix
+        # matches every transaction, silently degrading to lane-only ATAN
+        # filtering and defeating the post-Toccata "lane AND prefix" gate.
+        # Hard-fail rather than ship an unrestricted prefix.
+        if [ -z "$$TX_ID_PREFIX" ]; then
+          echo "Error: TX_ID_PREFIX must be set; an empty --atan-transaction-id-prefix matches every tx and degrades post-Toccata filtering to lane-only mode" >&2
+          exit 1
+        fi
+
         # ATAN-only flags (no IGRA)
         ARGS="$$ARGS \
           --atan-listen \
           --atan-transaction-id-prefix=${TX_ID_PREFIX}"
 
-        [ -n "$$IGRA_LANE_ID" ] && ARGS="$$ARGS --igra-lane-id=$$IGRA_LANE_ID"
+        # Post-Toccata kaspad hard-exits at kaspad/src/daemon.rs:828 if
+        # --igra-lane-id is missing when ATAN is enabled on a
+        # Toccata-scheduled network. Mirror that here so the failure
+        # message comes from the entrypoint, not buried in kaspad logs.
+        if [ -z "$$IGRA_LANE_ID" ]; then
+          echo "Error: IGRA_LANE_ID must be set; post-Toccata kaspad requires --igra-lane-id when --atan-listen is enabled (kaspad/src/daemon.rs:828)" >&2
+          exit 1
+        fi
+        ARGS="$$ARGS --igra-lane-id=$$IGRA_LANE_ID"
 
-        ATAN_IMPORT_KEY="$${IGRA_LANE_ID:-$$TX_ID_PREFIX}"
+        # IGRA_LANE_ID is guaranteed non-empty by the guard above, so it
+        # is the unconditional ATAN import namespace.
         if [ -n "$$ATAN_IMPORT_URL" ]; then
           ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
-        elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ] && [ -n "$$ATAN_IMPORT_KEY" ]; then
-          ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$ATAN_IMPORT_KEY/index.pb"
+        elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ]; then
+          ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$IGRA_LANE_ID/index.pb"
         else
-          echo "Warning: No ATAN import URL configured. Set ATAN_IMPORT_URL or CDN_BASE_URL+NETWORK+IGRA_LANE_ID/TX_ID_PREFIX to import historical data." >&2
+          echo "Warning: No ATAN import URL configured. Set ATAN_IMPORT_URL or CDN_BASE_URL+NETWORK to import historical data." >&2
         fi
 
         # Peer configuration
@@ -108,8 +127,8 @@ services:
       S3_BUCKET: ${S3_BUCKET:-atan-import}
       CDN_BASE_URL: ${CDN_BASE_URL}
       NETWORK: ${NETWORK}
-      TX_ID_PREFIX: ${TX_ID_PREFIX}
-      IGRA_LANE_ID: ${IGRA_LANE_ID:-}
+      TX_ID_PREFIX: ${TX_ID_PREFIX:?TX_ID_PREFIX must be set (empty prefix degrades post-Toccata ATAN filtering to lane-only; see doc/node-operations/environment-reference.md)}
+      IGRA_LANE_ID: ${IGRA_LANE_ID:?IGRA_LANE_ID must be set (4-byte post-Toccata lane namespace; see doc/node-operations/environment-reference.md)}
       DATADIR: ${DATADIR:-}
       UPLOAD_JITTER_MAX_SECONDS: ${UPLOAD_JITTER_MAX_SECONDS:-60}
     volumes:

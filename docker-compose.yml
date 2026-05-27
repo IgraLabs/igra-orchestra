@@ -47,8 +47,8 @@ x-rpc-provider-environment: &rpc-provider-environment
   SECURITY_ENABLE_WHITELIST: "true"
   READ_ONLY: ${RPC_READ_ONLY}
   MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
-  TX_ID_PREFIX: ${TX_ID_PREFIX}
-  IGRA_LANE_ID: ${IGRA_LANE_ID:-}
+  TX_ID_PREFIX: ${TX_ID_PREFIX:?TX_ID_PREFIX must be set (empty prefix degrades post-Toccata ATAN filtering to lane-only; see doc/node-operations/environment-reference.md)}
+  IGRA_LANE_ID: ${IGRA_LANE_ID:?IGRA_LANE_ID must be set (4-byte post-Toccata lane namespace; see doc/node-operations/environment-reference.md)}
 
 # Runtime config (no build) - for replica services
 x-rpc-provider-runtime: &rpc-provider-runtime
@@ -80,7 +80,12 @@ x-rpc-provider-runtime: &rpc-provider-runtime
     test:
       - CMD-SHELL
       - >
-        bash -lc ': > /dev/tcp/127.0.0.1/8535' &&
+        bash -lc '
+          exec 3<>/dev/tcp/127.0.0.1/8535;
+          printf "GET /health HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3;
+          IFS= read -r line <&3;
+          [[ "$$line" == *" 200 "* ]]
+        ' &&
         bash -lc ': > /dev/tcp/execution-layer/8545' &&
         if [ "$$READ_ONLY" = "false" ]; then
           bash -lc ": > /dev/tcp/$$KASWALLET_HOST/8082";
@@ -91,19 +96,19 @@ x-rpc-provider-runtime: &rpc-provider-runtime
     - "traefik.http.routers.rpc0.entrypoints=rpc"
     - "traefik.http.routers.rpc0.tls=true"
     - "traefik.http.routers.rpc0.tls.certresolver=myresolver"
-    - "traefik.http.routers.rpc0.middlewares=cors,rpc-rate-limit,rpc-in-flight,rpc-buffering"
+    - "traefik.http.routers.rpc0.middlewares=cors,rpc-rate-limit,rpc-in-flight,rpc-buffering@file"
     - "traefik.http.services.rpc0.loadbalancer.server.port=8535"
     # Health check router - HTTPS (port 443) for load balancer health checks
     - "traefik.http.routers.health.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`) && PathPrefix(`/health`) && Method(`GET`)"
     - "traefik.http.routers.health.entrypoints=websecure"
     - "traefik.http.routers.health.tls=true"
     - "traefik.http.routers.health.tls.certresolver=myresolver"
-    - "traefik.http.routers.health.middlewares=health-rate-limit"
+    - "traefik.http.routers.health.middlewares=health-rate-limit@file"
     - "traefik.http.routers.health.service=rpc0"
     # Health check router - HTTP (port 80) - bypasses HTTP-to-HTTPS redirect for load balancers
     - "traefik.http.routers.health-http.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`) && PathPrefix(`/health`) && Method(`GET`)"
     - "traefik.http.routers.health-http.entrypoints=web"
-    - "traefik.http.routers.health-http.middlewares=health-rate-limit"
+    - "traefik.http.routers.health-http.middlewares=health-rate-limit@file"
     - "traefik.http.routers.health-http.service=rpc0"
 
 # Build config (extends runtime) - for primary service only
@@ -127,6 +132,14 @@ x-kaswallet-runtime: &kaswallet-runtime
     - NETWORK
     - KASPAD_HOST
     - KASPAD_GRPC_PORT
+    # Operator-facing 4-byte lane namespace (e.g. 97b10000). REQUIRED:
+    # without it kaswallet-daemon defaults to SUBNETWORK_ID_NATIVE and emits
+    # pre-Toccata (v0) transactions that post-Toccata kaspad rejects. The
+    # entrypoint forwards it to kaswallet-daemon as --subnetwork-id,
+    # mirroring the kaspad --igra-lane-id pattern below so all lane-id
+    # wiring lives at the entrypoint layer. (The daemon also accepts
+    # KASWALLET_SUBNETWORK_ID via clap env=; we deliberately do not use
+    # that path.)
     - IGRA_LANE_ID
   extra_hosts:
     - "host.docker.internal:host-gateway"
@@ -150,6 +163,11 @@ x-kaswallet-runtime: &kaswallet-runtime
           ARGS="$$ARGS --testnet-suffix=$$KASPA_NETSUFFIX"
         fi
       fi
+      if [ -z "$$IGRA_LANE_ID" ]; then
+        echo "Error: IGRA_LANE_ID must be set for kaswallet; without it the daemon defaults to SUBNETWORK_ID_NATIVE and emits pre-Toccata (v0) transactions that post-Toccata kaspad rejects" >&2
+        exit 1
+      fi
+      ARGS="$$ARGS --subnetwork-id=$$IGRA_LANE_ID"
       exec sh /app/watch-dependencies.sh \
         --tcp kaspad "$$KASPAD_HOST" "$$KASPAD_GRPC_PORT" \
         -- /app/kaswallet-daemon $$ARGS
@@ -238,6 +256,15 @@ services:
 
         IGRA_ENABLED="$${IGRA_ENABLE:-true}"
         if [ "$$IGRA_ENABLED" = "true" ]; then
+          # Empty TX_ID_PREFIX would render as --atan-transaction-id-prefix=
+          # which kaspad accepts but treats as Box::new([]) — the empty prefix
+          # matches every transaction, silently degrading to lane-only ATAN
+          # filtering and defeating the post-Toccata "lane AND prefix" gate.
+          # Hard-fail rather than ship an unrestricted prefix.
+          if [ -z "$$TX_ID_PREFIX" ]; then
+            echo "Error: TX_ID_PREFIX must be set when IGRA_ENABLE=true; an empty --atan-transaction-id-prefix matches every tx and degrades post-Toccata filtering to lane-only mode" >&2
+            exit 1
+          fi
           ARGS="$$ARGS \
             --igra-enable \
             --atan-listen \
@@ -252,7 +279,15 @@ services:
             --igra-entry-min-amount=${IGRA_ENTRY_MIN_AMOUNT} \
             --igra-el-host=http://execution-layer"
 
-          [ -n "$$IGRA_LANE_ID" ] && ARGS="$$ARGS --igra-lane-id=$$IGRA_LANE_ID"
+          # Post-Toccata kaspad hard-exits at kaspad/src/daemon.rs:828 if
+          # --igra-lane-id is missing when ATAN is enabled on a
+          # Toccata-scheduled network. Mirror that here so the failure
+          # message comes from the entrypoint, not buried in kaspad logs.
+          if [ -z "$$IGRA_LANE_ID" ]; then
+            echo "Error: IGRA_LANE_ID must be set when IGRA_ENABLE=true; post-Toccata kaspad requires --igra-lane-id when ATAN is enabled (kaspad/src/daemon.rs:828)" >&2
+            exit 1
+          fi
+          ARGS="$$ARGS --igra-lane-id=$$IGRA_LANE_ID"
           [ "$$ENABLE_PERF_DIAGNOSTICS" = "true" ] && ARGS="$$ARGS --igra-enable-perf-diagnostics"
           [ "$$ENABLE_EVENT_LOGGING" = "true" ] && ARGS="$$ARGS --igra-enable-event-logging"
           [ -n "$$WARM_START_BLOCK" ] && ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
@@ -266,13 +301,14 @@ services:
           [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && ARGS="$$ARGS --igra-post-fork-lock-script-pubkey=$$POST_FORK_LOCK_SCRIPT_PUBKEY"
           [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ] && ARGS="$$ARGS --igra-lock-script-fork-daa-score=$$LOCK_SCRIPT_FORK_DAA_SCORE"
 
-          ATAN_IMPORT_KEY="$${IGRA_LANE_ID:-$$TX_ID_PREFIX}"
+          # IGRA_LANE_ID is guaranteed non-empty by the guard above, so it
+          # is the unconditional ATAN import namespace.
           if [ -n "$$ATAN_IMPORT_URL" ]; then
             ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
-          elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ] && [ -n "$$ATAN_IMPORT_KEY" ]; then
-            ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$ATAN_IMPORT_KEY/index.pb"
+          elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ]; then
+            ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$IGRA_LANE_ID/index.pb"
           else
-            echo "Error: CDN_BASE_URL, NETWORK and IGRA_LANE_ID or TX_ID_PREFIX must be set for ATAN import" >&2
+            echo "Error: CDN_BASE_URL and NETWORK must be set for ATAN import (or set ATAN_IMPORT_URL explicitly)" >&2
             exit 1
           fi
         fi
@@ -329,8 +365,8 @@ services:
       CHAIN_ID: ${IGRA_CHAIN_ID}
       ONE_TIME_ADDRESS: ${EL_ONE_TIME_ADDRESS}
       IGRA_LAUNCH_DAA_SCORE: ${IGRA_LAUNCH_DAA_SCORE}
-      TX_ID_PREFIX: ${TX_ID_PREFIX}
-      IGRA_LANE_ID: ${IGRA_LANE_ID:-}
+      TX_ID_PREFIX: ${TX_ID_PREFIX:?TX_ID_PREFIX must be set (empty prefix degrades post-Toccata ATAN filtering to lane-only; see doc/node-operations/environment-reference.md)}
+      IGRA_LANE_ID: ${IGRA_LANE_ID:?IGRA_LANE_ID must be set (4-byte post-Toccata lane namespace; see doc/node-operations/environment-reference.md)}
       MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
       IGRA_LOCK_SCRIPT_PUBKEY: ${IGRA_LOCK_SCRIPT_PUBKEY:-}
       IGRA_ENTRY_MIN_AMOUNT: ${IGRA_ENTRY_MIN_AMOUNT}
@@ -352,7 +388,7 @@ services:
       - "traefik.http.routers.el_stats.service=el_stats_svc"
       - "traefik.http.routers.el_stats.tls=true"
       - "traefik.http.routers.el_stats.tls.certresolver=myresolver"
-      - "traefik.http.routers.el_stats.middlewares=cors,rpc-rate-limit,rpc-in-flight,rpc-buffering"
+      - "traefik.http.routers.el_stats.middlewares=cors,rpc-rate-limit,rpc-in-flight,rpc-buffering@file"
       - "traefik.http.services.el_stats_svc.loadbalancer.server.port=9001"
     healthcheck:
       <<: *default-healthcheck
@@ -794,6 +830,13 @@ services:
     restart: *service-restart-policy
     profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: traefik
+    # Block startup until at least one rpc-provider replica is HTTP-ready
+    # (its healthcheck now probes /health, not just TCP). This eliminates the
+    # boot race where watch-dependencies.sh would give up before rpc-provider
+    # finished initializing and exit traefik with `restart: no` on testnet.
+    depends_on:
+      rpc-provider-0:
+        condition: service_healthy
     entrypoint:
       - sh
       - /app/watch-dependencies.sh
@@ -807,6 +850,11 @@ services:
       - "--api.insecure=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      # File provider for middlewares the docker provider fails to resolve
+      # across containers (rpc-buffering, health-rate-limit). See
+      # config/traefik/dynamic.yml. Routers reference them as `<name>@file`.
+      - "--providers.file.directory=/etc/traefik"
+      - "--providers.file.watch=true"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--entrypoints.rpc.address=:8545"
@@ -877,22 +925,19 @@ services:
       # Add redirect middleware for HTTP to HTTPS
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
-      # Lightweight rate limit for health endpoints to prevent abuse while
-      # still allowing LB health probes through.
-      - "traefik.http.middlewares.health-rate-limit.ratelimit.average=10"
-      - "traefik.http.middlewares.health-rate-limit.ratelimit.burst=20"
-      - "traefik.http.middlewares.health-rate-limit.ratelimit.period=1s"
-      # DoS hygiene (ENG-1020): per-real-IP rate limit, in-flight cap, and body
-      # buffering. sourceCriterion.ipStrategy.excludedIPs strips trusted proxy
-      # hops from X-Forwarded-For so buckets key on the real client IP.
+      # health-rate-limit and rpc-buffering live in config/traefik/dynamic.yml
+      # (file provider) — the docker provider fails to expose them to routers
+      # declared on rpc-provider-* / execution-layer containers. Routers
+      # reference them as `health-rate-limit@file` and `rpc-buffering@file`.
+      # DoS hygiene (ENG-1020): per-real-IP rate limit and in-flight cap.
+      # sourceCriterion.ipStrategy.excludedIPs strips trusted proxy hops from
+      # X-Forwarded-For so buckets key on the real client IP.
       - "traefik.http.middlewares.rpc-rate-limit.ratelimit.average=${RPC_RATE_LIMIT_AVERAGE:-200}"
       - "traefik.http.middlewares.rpc-rate-limit.ratelimit.burst=${RPC_RATE_LIMIT_BURST:-400}"
       - "traefik.http.middlewares.rpc-rate-limit.ratelimit.period=${RPC_RATE_LIMIT_PERIOD:-1s}"
       - "traefik.http.middlewares.rpc-rate-limit.ratelimit.sourcecriterion.ipstrategy.excludedips=${ORCHESTRA_TRUSTED_PROXIES:-}"
       - "traefik.http.middlewares.rpc-in-flight.inflightreq.amount=${RPC_MAX_IN_FLIGHT:-128}"
       - "traefik.http.middlewares.rpc-in-flight.inflightreq.sourcecriterion.ipstrategy.excludedips=${ORCHESTRA_TRUSTED_PROXIES:-}"
-      - "traefik.http.middlewares.rpc-buffering.buffering.maxrequestbodybytes=${MAX_REQUEST_BODY_BYTES:-10485760}"
-      - "traefik.http.middlewares.rpc-buffering.buffering.memrequestbodybytes=${MEM_REQUEST_BODY_BYTES:-1048576}"
       # No retryexpression: JSON-RPC POSTs are not always idempotent
       # (e.g. eth_sendRawTransaction), so retrying on network error risks
       # duplicate transaction submission.
@@ -906,7 +951,7 @@ services:
       - "traefik.http.routers.websecure-router.priority=1"
       - "traefik.http.routers.websecure-router.tls=true"
       - "traefik.http.routers.websecure-router.tls.certresolver=myresolver"
-      - "traefik.http.routers.websecure-router.middlewares=rpc-rate-limit,rpc-in-flight,rpc-buffering"
+      - "traefik.http.routers.websecure-router.middlewares=rpc-rate-limit,rpc-in-flight,rpc-buffering@file"
     healthcheck:
       <<: *default-healthcheck
       test:
@@ -1015,8 +1060,8 @@ services:
       CDN_BASE_URL: ${CDN_BASE_URL}
       # Network and transaction configuration (required)
       NETWORK: ${NETWORK}
-      TX_ID_PREFIX: ${TX_ID_PREFIX}
-      IGRA_LANE_ID: ${IGRA_LANE_ID:-}
+      TX_ID_PREFIX: ${TX_ID_PREFIX:?TX_ID_PREFIX must be set (empty prefix degrades post-Toccata ATAN filtering to lane-only; see doc/node-operations/environment-reference.md)}
+      IGRA_LANE_ID: ${IGRA_LANE_ID:?IGRA_LANE_ID must be set (4-byte post-Toccata lane namespace; see doc/node-operations/environment-reference.md)}
       # Data directory path (required, must match NETWORK)
       DATADIR: ${DATADIR:-}
       # Upload jitter for multi-node stagger (seconds, 0 = disabled)

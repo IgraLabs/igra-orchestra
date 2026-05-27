@@ -15,7 +15,7 @@ There are two layers involved:
 Default behavior by environment:
 
 - Mainnet: `SERVICE_RESTART_POLICY=unless-stopped`
-- Galleon testnet: `SERVICE_RESTART_POLICY=no`
+- Galleon testnet: `SERVICE_RESTART_POLICY=unless-stopped`
 - Dev: `SERVICE_RESTART_POLICY=no`
 
 Two services currently pin `restart: unless-stopped` directly in Compose:
