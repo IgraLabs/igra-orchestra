@@ -64,6 +64,23 @@ jobs:
           fi
       - name: Render docker-compose config
         run: docker compose --profile backend --profile frontend-w5 config -q
+      - name: Assert compose-render rejects empty IGRA_LANE_ID and TX_ID_PREFIX
+        run: |
+          set -e
+          # Negative path: compose-render must fail with the targeted error
+          # message when either required variable is removed from .env, so
+          # operators see the failure at `docker compose up` instead of as
+          # a silent lane-only-mode degradation post-Toccata.
+          for var in IGRA_LANE_ID TX_ID_PREFIX; do
+            grep -v "^${var}=" .env > "/tmp/no-${var}.env"
+            err=$(docker compose --env-file "/tmp/no-${var}.env" --profile backend --profile frontend-w5 config -q 2>&1 || true)
+            if printf '%s' "$err" | grep -qF "${var} must be set"; then
+              echo "ok: full-stack render rejected empty ${var}"
+            else
+              printf 'FAIL: full-stack render did not reject empty %s; got:\n%s\n' "$var" "$err" >&2
+              exit 1
+            fi
+          done
       - name: Assert parser mounts and wallet suffix handling are present
         run: |
           docker compose --profile backend --profile frontend-w5 config --format json > compose.json
@@ -90,10 +107,38 @@ jobs:
           if "--testnet-suffix=$$KASPA_NETSUFFIX" not in kaswallet_entrypoint:
               print("kaswallet entrypoint does not propagate KASPA_NETSUFFIX", file=sys.stderr)
               sys.exit(1)
+          if "--subnetwork-id=$$IGRA_LANE_ID" not in kaswallet_entrypoint:
+              print("kaswallet entrypoint does not forward IGRA_LANE_ID as --subnetwork-id", file=sys.stderr)
+              sys.exit(1)
+          if "IGRA_LANE_ID must be set" not in kaswallet_entrypoint:
+              print("kaswallet entrypoint is missing the IGRA_LANE_ID fail-fast guard", file=sys.stderr)
+              sys.exit(1)
+
+          kaspad_entrypoint = "\n".join(services["kaspad"].get("entrypoint", []))
+          if "--igra-lane-id=$$IGRA_LANE_ID" not in kaspad_entrypoint:
+              print("kaspad entrypoint does not forward IGRA_LANE_ID as --igra-lane-id", file=sys.stderr)
+              sys.exit(1)
+          if "IGRA_LANE_ID must be set" not in kaspad_entrypoint:
+              print("kaspad entrypoint is missing the IGRA_LANE_ID fail-fast guard", file=sys.stderr)
+              sys.exit(1)
+          if "TX_ID_PREFIX must be set" not in kaspad_entrypoint:
+              print("kaspad entrypoint is missing the TX_ID_PREFIX fail-fast guard", file=sys.stderr)
+              sys.exit(1)
           PY
       - name: Render docker-compose.atan config
         run: |
           docker compose -f docker-compose.atan.yml --profile atan-uploader config -q
+          # Negative path: same lane/prefix enforcement as the full stack.
+          for var in IGRA_LANE_ID TX_ID_PREFIX; do
+            grep -v "^${var}=" .env > "/tmp/no-${var}-atan.env"
+            err=$(docker compose --env-file "/tmp/no-${var}-atan.env" -f docker-compose.atan.yml --profile atan-uploader config -q 2>&1 || true)
+            if printf '%s' "$err" | grep -qF "${var} must be set"; then
+              echo "ok: atan render rejected empty ${var}"
+            else
+              printf 'FAIL: atan render did not reject empty %s; got:\n%s\n' "$var" "$err" >&2
+              exit 1
+            fi
+          done
           docker compose -f docker-compose.atan.yml --profile atan-uploader config --format json > compose-atan.json
           python3 - <<'PY'
           import json
@@ -105,6 +150,17 @@ jobs:
           targets = {volume.get("target") for volume in services["kaspad"].get("volumes", [])}
           if "/app/parse-network-slug.sh" not in targets:
               print("docker-compose.atan.yml kaspad is missing parser mount", file=sys.stderr)
+              sys.exit(1)
+
+          kaspad_entrypoint = "\n".join(services["kaspad"].get("entrypoint", []))
+          if "--igra-lane-id=$$IGRA_LANE_ID" not in kaspad_entrypoint:
+              print("docker-compose.atan.yml kaspad does not forward IGRA_LANE_ID as --igra-lane-id", file=sys.stderr)
+              sys.exit(1)
+          if "IGRA_LANE_ID must be set" not in kaspad_entrypoint:
+              print("docker-compose.atan.yml kaspad is missing the IGRA_LANE_ID fail-fast guard", file=sys.stderr)
+              sys.exit(1)
+          if "TX_ID_PREFIX must be set" not in kaspad_entrypoint:
+              print("docker-compose.atan.yml kaspad is missing the TX_ID_PREFIX fail-fast guard", file=sys.stderr)
               sys.exit(1)
           PY
 
