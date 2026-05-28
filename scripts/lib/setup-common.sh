@@ -7,7 +7,7 @@ set -euo pipefail
 #   ENV_NAME        - Display name (e.g., "Galleon Testnet")
 #   ENV_FILE        - Template file (e.g., ".env.galleon-testnet.example")
 #   NODE_ID_PREFIX  - Node ID prefix (e.g., "GTN-", "GMN-")
-#   KASWALLET_FLAG  - Flags for key generation (e.g., "--testnet --testnet-suffix=12")
+#   KASWALLET_FLAG  - Flags for key generation (e.g., "--testnet --testnet-suffix=10")
 
 # --- Configuration ---
 SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"

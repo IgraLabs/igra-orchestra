@@ -1,4 +1,4 @@
-name: igra-orchestra-${NETWORK:?NETWORK must be set to mainnet, testnet-10, or testnet-12}
+name: igra-orchestra-${NETWORK:?NETWORK must be set to mainnet or testnet-10}
 
 volumes:
   kaspad_data:
@@ -214,6 +214,7 @@ services:
     environment:
       - KASPAD_ADD_PEER
       - KASPAD_NONINTERACTIVE
+      - KASPAD_UA_RULE
       - ENABLE_PERF_DIAGNOSTICS
       - ENABLE_EVENT_LOGGING
       - WARM_START_BLOCK
@@ -249,9 +250,10 @@ services:
         fi
         if [ -n "$$KASPA_NETSUFFIX" ]; then ARGS="$$ARGS --netsuffix=$$KASPA_NETSUFFIX"; fi
 
-        # Frigate DNS seeds may lag initial launch; warn if no bootstrap peer is pinned.
-        if [ "$$KASPA_NETSUFFIX" = "12" ] && [ -z "$$KASPAD_ADD_PEER" ]; then
-          echo "WARN: testnet-12 (Frigate) launched without KASPAD_ADD_PEER pinned. Until Frigate DNS seeds are operational, set KASPAD_ADD_PEER=<peer-ip> in .env to avoid 0-peer IBD stalls." >&2
+        # Optional peer user-agent rule (e.g. reject;ver:kaspad<1.2.1).
+        # Set KASPAD_UA_RULE in .env to apply; leave empty to skip.
+        if [ -n "$$KASPAD_UA_RULE" ]; then
+          ARGS="$$ARGS --ua-rule=$$KASPAD_UA_RULE"
         fi
 
         IGRA_ENABLED="$${IGRA_ENABLE:-true}"
