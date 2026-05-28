@@ -173,6 +173,19 @@ KASPA_MINER_BRANCH=${KASPA_MINER_BRANCH:-main}
 
 log "Starting repository setup"
 
+# Fail fast on unsupported NETWORK before any git clone work runs below.
+# Gated on non-empty NETWORK so source-mode default (NETWORK unset) is unchanged.
+if [[ -n "${NETWORK:-}" ]]; then
+    case "$NETWORK" in
+        mainnet|testnet-10|testnet)
+            : # supported (testnet is the legacy alias for testnet-10)
+            ;;
+        *)
+            panic "Unsupported NETWORK='$NETWORK'. Set NETWORK to lowercase 'mainnet' or 'testnet-10' (legacy 'testnet' is also accepted as an alias for 'testnet-10')."
+            ;;
+    esac
+fi
+
 # Check if using pre-built images for proprietary services
 if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
     log "USE_PREBUILT_IMAGES is set to true"
@@ -258,11 +271,8 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
             # Transitional alias for Galleon.
             versions_file="$PROJECT_DIR/versions.galleon-testnet.env"
             ;;
-        testnet-12)
-            versions_file="$PROJECT_DIR/versions.frigate-testnet.env"
-            ;;
         *)
-            panic "Unsupported NETWORK='$NETWORK'. Set NETWORK to lowercase 'mainnet', 'testnet-10', or 'testnet-12' (legacy 'testnet' is also accepted as an alias for 'testnet-10')."
+            panic "Unsupported NETWORK='$NETWORK'. Set NETWORK to lowercase 'mainnet' or 'testnet-10' (legacy 'testnet' is also accepted as an alias for 'testnet-10')."
             ;;
     esac
 
@@ -277,7 +287,7 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
     placeholder_matches="$(find_unresolved_placeholders "$PROJECT_DIR/.env")"
     if [[ -n "$placeholder_matches" ]]; then
         echo "$placeholder_matches" >&2
-        panic "Replace all TODO_* placeholders in .env before pulling images. See doc/frigate-testnet-values.md for the pending Frigate values."
+        panic "Replace all TODO_* placeholders in .env before pulling images."
     fi
 
     # Fail before docker pull if required tags or health-check values are unresolved.
@@ -289,7 +299,7 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
         value="${value#"${value%%[![:space:]]*}"}"
         value="${value%"${value##*[![:space:]]}"}"
         if [[ -z "$value" || "$value" == TODO_* ]]; then
-            panic "$required_var is unset or still a TODO_* placeholder. Replace it in .env before re-running (Frigate values are tracked in doc/frigate-testnet-values.md)."
+            panic "$required_var is unset or still a TODO_* placeholder. Replace it in .env before re-running."
         fi
     done
 
