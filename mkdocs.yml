@@ -44,7 +44,6 @@ nav:
   - Deployment Guides:
     - Mainnet: quick-setup-mainnet.md
     - Galleon Testnet: quick-setup-galleon-testnet.md
-    - Frigate Testnet: quick-setup-frigate-testnet.md
   - Operations:
     - Node Operations:
       - Overview: node-operations/index.md

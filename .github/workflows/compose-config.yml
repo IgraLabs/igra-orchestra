@@ -34,10 +34,6 @@ jobs:
             env_file: .env.galleon-testnet.example
             versions_file: versions.galleon-testnet.env
             allow_todo: false
-          - network: frigate-testnet
-            env_file: .env.frigate-testnet.example
-            versions_file: versions.frigate-testnet.env
-            allow_todo: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -184,10 +180,10 @@ jobs:
             "mainnet-10"
             "testnet-abc"
             "Mainnet"
-            "TESTNET-12"
+            "TESTNET-10"
             "alphanet"
             "testnet 12"
-            $'testnet-12\r'
+            $'testnet-10\r'
           )
           for slug in "${bad_slugs[@]}"; do
             if NETWORK="$slug" sh ./scripts/lib/parse-network-slug.sh >/dev/null 2>&1; then
@@ -207,7 +203,6 @@ jobs:
             "mainnet|mainnet|"
             "testnet|testnet|10"
             "testnet-10|testnet|10"
-            "testnet-12|testnet|12"
             "devnet|devnet|"
             "devnet-99|devnet|99"
           )
@@ -239,6 +234,5 @@ jobs:
             scripts/lib/watch-dependencies.sh \
             scripts/setup-mainnet.sh \
             scripts/setup-galleon-testnet.sh \
-            scripts/setup-frigate-testnet.sh \
             scripts/dev/setup-repos.sh \
             scripts/dev/migrate-galleon-to-testnet-10.sh

@@ -34,6 +34,7 @@ services:
     environment:
       - KASPAD_ADD_PEER
       - KASPAD_NONINTERACTIVE
+      - KASPAD_UA_RULE
       - ATAN_IMPORT_URL
       - CDN_BASE_URL
       - NETWORK
@@ -61,6 +62,12 @@ services:
           ARGS="--$$KASPA_FAMILY $$ARGS"
         fi
         if [ -n "$$KASPA_NETSUFFIX" ]; then ARGS="$$ARGS --netsuffix=$$KASPA_NETSUFFIX"; fi
+
+        # Optional peer user-agent rule (e.g. reject;ver:kaspad<1.2.1).
+        # Set KASPAD_UA_RULE in .env to apply; leave empty to skip.
+        if [ -n "$$KASPAD_UA_RULE" ]; then
+          ARGS="$$ARGS --ua-rule=$$KASPAD_UA_RULE"
+        fi
 
         # Empty TX_ID_PREFIX would render as --atan-transaction-id-prefix=
         # which kaspad accepts but treats as Box::new([]) — the empty prefix

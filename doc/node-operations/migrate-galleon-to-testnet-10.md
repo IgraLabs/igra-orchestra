@@ -35,9 +35,8 @@ use `./scripts/setup-galleon-testnet.sh` directly — the template already ships
   the rewrite so the `.env` change is reversible (the volume rename is not).
 
 The underlying reason for the rename: kaspad now uses a uniform slug schema
-`<family>[-<suffix>]` so that Galleon (`testnet-10`) and Frigate (`testnet-12`)
-can coexist on one host with isolated project names, volume namespaces, ATAN
-paths, and logging tags.
+`<family>[-<suffix>]` so that multiple Kaspa networks can coexist on one host
+with isolated project names, volume namespaces, ATAN paths, and logging tags.
 
 ### Peer-discovery change (heads-up)
 
