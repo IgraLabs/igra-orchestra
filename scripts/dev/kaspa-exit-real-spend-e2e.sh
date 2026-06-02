@@ -95,7 +95,7 @@ main() {
         "$PROJECT_DIR/build/kaspa-exit-devnet/results"
 
     log "Building Kaspa wallet tools and safe-service API images"
-    compose --profile kaspad --profile kaspa-exit-e2e build kaspa-wallet-tools kaspa-safe-api
+    compose --profile kaspad --profile kaspa-exit-e2e build --no-deps kaspa-wallet-tools kaspa-safe-api
 
     if [[ ! -f "$PROJECT_DIR/build/kaspa-exit-devnet/wallets/metadata.json" ]]; then
         log "Creating ${KASPA_E2E_THRESHOLD}-of-${KASPA_E2E_SIGNERS} signer wallet fixture"
@@ -112,7 +112,11 @@ main() {
     fi
 
     log "Starting kaspad, execution-layer, signer wallet tools, and safe-service"
-    compose --profile kaspad --profile kaspa-exit-e2e up -d --build \
+    up_args=(up -d)
+    if [[ "${KASPA_E2E_BUILD_CORE_SERVICES:-true}" == "true" ]]; then
+        up_args+=(--build)
+    fi
+    compose --profile kaspad --profile kaspa-exit-e2e "${up_args[@]}" \
         execution-layer kaspad kaspa-safe-db kaspa-safe-redis kaspa-safe-api kaspa-wallet-tools
 
     wait_wallet_daemons
