@@ -16,9 +16,11 @@ function print_help() {
     echo "    KASWALLET_BRANCH"
     echo "    IGRA_RPC_PROVIDER_BRANCH"
     echo "    KASPAD_BRANCH"
+    echo "    KASPA_GO_WALLET_BRANCH"
     echo "    KASPA_MINER_BRANCH"
     echo "  You can override repository URLs with RETH_REPO_URL, KASWALLET_REPO_URL,"
-    echo "  IGRA_RPC_PROVIDER_REPO_URL, KASPAD_REPO_URL, and KASPA_MINER_REPO_URL."
+    echo "  IGRA_RPC_PROVIDER_REPO_URL, KASPAD_REPO_URL, KASPA_GO_WALLET_REPO_URL,"
+    echo "  and KASPA_MINER_REPO_URL."
     echo ""
     echo "Examples:"
     echo "  ./scripts/dev/setup-repos.sh"
@@ -132,12 +134,14 @@ RETH_BRANCH=${RETH_BRANCH:-production}
 KASWALLET_BRANCH=${KASWALLET_BRANCH:-main}
 IGRA_RPC_PROVIDER_BRANCH=${IGRA_RPC_PROVIDER_BRANCH:-main}
 KASPAD_BRANCH=${KASPAD_BRANCH:-master}
+KASPA_GO_WALLET_BRANCH=${KASPA_GO_WALLET_BRANCH:-kaspa-exit-proposal-verifier}
 KASPA_MINER_BRANCH=${KASPA_MINER_BRANCH:-main}
 
 RETH_REPO_URL=${RETH_REPO_URL:-git@github.com:IgraLabs/reth-private.git}
 KASWALLET_REPO_URL=${KASWALLET_REPO_URL:-git@github.com:IgraLabs/kaswallet.git}
 IGRA_RPC_PROVIDER_REPO_URL=${IGRA_RPC_PROVIDER_REPO_URL:-git@github.com:IgraLabs/igra-rpc-provider.git}
 KASPAD_REPO_URL=${KASPAD_REPO_URL:-git@github.com:IgraLabs/rusty-kaspa-private.git}
+KASPA_GO_WALLET_REPO_URL=${KASPA_GO_WALLET_REPO_URL:-git@github.com:IgraLabs/kaspad.git}
 KASPA_MINER_REPO_URL=${KASPA_MINER_REPO_URL:-git@github.com:elichai/kaspa-miner.git}
 
 log "Starting repository setup"
@@ -167,6 +171,7 @@ else
         "kaswallet        "
         "igra-rpc-provider"
         "kaspad           "
+        "kaspa-go-wallet  "
         "kaspa-miner      "
     )
 
@@ -175,6 +180,7 @@ else
         "$KASWALLET_REPO_URL"
         "$IGRA_RPC_PROVIDER_REPO_URL"
         "$KASPAD_REPO_URL"
+        "$KASPA_GO_WALLET_REPO_URL"
         "$KASPA_MINER_REPO_URL"
     )
     BRANCHES=(
@@ -182,6 +188,7 @@ else
         "$KASWALLET_BRANCH"
         "$IGRA_RPC_PROVIDER_BRANCH"
         "$KASPAD_BRANCH"
+        "$KASPA_GO_WALLET_BRANCH"
         "$KASPA_MINER_BRANCH"
     )
 fi

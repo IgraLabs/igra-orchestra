@@ -13,6 +13,9 @@ The stack contains:
 Safe Transaction Service, Foundry, and signer wallets run beside this stack.
 The service-side Kaspa federation APIs and exit proposal-builder live on the
 `safe-transaction-service` branch `kaspa-native-wallet-integration`.
+The old Go `IgraLabs/kaspad` repository is cloned only for the signer
+`kaspawallet` CLI on branch `kaspa-exit-proposal-verifier`; it is not the
+devnet node.
 
 ## Quick Start
 
@@ -52,6 +55,18 @@ IGRA_CHAIN_ID=38833
 KASPAD_EXTRA_ARGS="--enable-unsynced-mining --devnet-finality-depth=5000 --devnet-pruning-depth=30125"
 ATAN_IMPORT_REQUIRED=false
 ```
+
+Repository roles:
+
+```text
+KASPAD_REPO_URL=git@github.com:IgraLabs/rusty-kaspa-private.git
+KASPAD_BRANCH=master
+
+KASPA_GO_WALLET_REPO_URL=git@github.com:IgraLabs/kaspad.git
+KASPA_GO_WALLET_BRANCH=kaspa-exit-proposal-verifier
+```
+
+`KASPAD_*` is the Rust node. `KASPA_GO_WALLET_*` is the Go signer wallet tool.
 
 Do not shrink this profile casually. Earlier staging attempts failed with DAA
 window retention errors:
@@ -206,6 +221,28 @@ The signer-side algorithm is:
 This is the same security model as offline transaction review: the service may
 coordinate signatures, but the signer only signs a transaction it can reproduce
 from independent public data.
+
+The Go signer wallet branch provides the local command pair:
+
+```bash
+cd build/repos/kaspad
+
+go run ./cmd/kaspawallet verify-exit-proposal \
+  --devnet \
+  --keys-file /path/to/signer/keys.json \
+  --safe-url http://127.0.0.1:8888 \
+  --proposal-hash <proposal_hash> \
+  --igra-rpc-url http://127.0.0.1:9545 \
+  --kaspa-rpc-url grpc://127.0.0.1:16610
+
+go run ./cmd/kaspawallet sign-exit-proposal \
+  --devnet \
+  --keys-file /path/to/signer/keys.json \
+  --safe-url http://127.0.0.1:8888 \
+  --proposal-hash <proposal_hash> \
+  --igra-rpc-url http://127.0.0.1:9545 \
+  --kaspa-rpc-url grpc://127.0.0.1:16610
+```
 
 ## Useful Commands
 
