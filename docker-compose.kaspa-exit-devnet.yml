@@ -50,7 +50,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
     volumes:
-      - kaspa_safe_postgres:/var/lib/postgresql/data
+      - kaspa_safe_postgres:/var/lib/postgresql
     networks:
       - igra-network
     healthcheck:
