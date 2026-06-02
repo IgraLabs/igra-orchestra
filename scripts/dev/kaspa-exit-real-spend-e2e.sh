@@ -95,7 +95,14 @@ main() {
         "$PROJECT_DIR/build/kaspa-exit-devnet/results"
 
     log "Building Kaspa wallet tools and safe-service API images"
-    compose --profile kaspad --profile kaspa-exit-e2e build --no-deps kaspa-wallet-tools kaspa-safe-api
+    docker build \
+        -f "$PROJECT_DIR/build/Dockerfile.kaspa-exit-wallet-tools" \
+        -t "${KASPA_EXIT_DEVNET_CONTAINER_PREFIX}-wallet-tools:local" \
+        "$PROJECT_DIR"
+    docker build \
+        -f "$PROJECT_DIR/build/Dockerfile.kaspa-exit-safe-api" \
+        -t "${KASPA_EXIT_DEVNET_CONTAINER_PREFIX}-safe-api:local" \
+        "$PROJECT_DIR"
 
     if [[ ! -f "$PROJECT_DIR/build/kaspa-exit-devnet/wallets/metadata.json" ]]; then
         log "Creating ${KASPA_E2E_THRESHOLD}-of-${KASPA_E2E_SIGNERS} signer wallet fixture"
