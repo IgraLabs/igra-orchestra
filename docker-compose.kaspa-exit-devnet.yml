@@ -1,0 +1,39 @@
+name: ${COMPOSE_PROJECT_NAME:-igra-kaspa-exit-devnet}
+
+volumes:
+  kaspad_data:
+    name: ${KASPA_EXIT_DEVNET_CONTAINER_PREFIX:-igra-kaspa-exit-devnet}-kaspad-data
+  reth_data:
+    name: ${KASPA_EXIT_DEVNET_CONTAINER_PREFIX:-igra-kaspa-exit-devnet}-reth-data
+  reth_ipc:
+    name: ${KASPA_EXIT_DEVNET_CONTAINER_PREFIX:-igra-kaspa-exit-devnet}-reth-ipc
+  traefik_certs:
+    name: ${KASPA_EXIT_DEVNET_CONTAINER_PREFIX:-igra-kaspa-exit-devnet}-traefik-certs
+
+networks:
+  igra-network:
+    name: ${KASPA_EXIT_DEVNET_CONTAINER_PREFIX:-igra-kaspa-exit-devnet}-igra
+    ipam:
+      config:
+        - subnet: ${KASPA_EXIT_DEVNET_SUBNET:-172.31.93.0/24}
+  traefik-network:
+    name: ${KASPA_EXIT_DEVNET_CONTAINER_PREFIX:-igra-kaspa-exit-devnet}-traefik
+
+services:
+  kaspad:
+    container_name: ${KASPA_EXIT_DEVNET_CONTAINER_PREFIX:-igra-kaspa-exit-devnet}-kaspad
+    ports: !override
+      - "127.0.0.1:${KASPAD_GRPC_PORT:-16610}:${KASPAD_GRPC_PORT:-16610}"
+      - "127.0.0.1:${KASPAD_P2P_PORT:-16611}:${KASPAD_P2P_PORT:-16611}"
+      - "127.0.0.1:${KASPAD_BORSH_PORT:-17610}:${KASPAD_BORSH_PORT:-17610}"
+      - "127.0.0.1:${KASPAD_JSON_PORT:-18610}:${KASPAD_JSON_PORT:-18610}"
+
+  execution-layer:
+    container_name: ${KASPA_EXIT_DEVNET_CONTAINER_PREFIX:-igra-kaspa-exit-devnet}-execution-layer
+    ports: !override
+      - "127.0.0.1:${EL_HTTP_HOST_PORT:-9545}:8545"
+      - "127.0.0.1:${EL_WS_HOST_PORT:-9546}:8546"
+
+  kaspa-miner:
+    container_name: ${KASPA_EXIT_DEVNET_CONTAINER_PREFIX:-igra-kaspa-exit-devnet}-kaspa-miner
+    cpus: "${KASPA_MINER_CPUS:-2.00}"

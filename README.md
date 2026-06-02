@@ -47,6 +47,22 @@ To configure the deployment mode, set `USE_PREBUILT_IMAGES` in your `.env` file:
 
 ## Quick Start
 
+### For Developers Testing Kaspa Exit Multisig Devnet
+
+Use the isolated laptop devnet profile:
+
+```bash
+./scripts/dev/kaspa-exit-devnet.sh setup
+./scripts/dev/kaspa-exit-devnet.sh up
+./scripts/dev/kaspa-exit-devnet.sh miner
+./scripts/dev/kaspa-exit-devnet.sh wait-igra 1
+```
+
+This boots rusty-kaspa devnet plus the Igra execution layer with the stable
+`finality=5000` / `pruning=30125` profile used in staging. See
+[Kaspa Exit Devnet](doc/kaspa-exit-devnet.md) for the full exit-contract and
+Safe Transaction Service flow.
+
 ### For Public Users (Using Pre-built Images)
 
 The fastest way to get started is using the interactive setup scripts:
@@ -406,6 +422,7 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork
 
 - [Mainnet Deployment Guide](doc/quick-setup-mainnet.md) - Public mainnet deployment with pre-built images
 - [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md) - Public Galleon testnet deployment with pre-built images
+- [Kaspa Exit Devnet](doc/kaspa-exit-devnet.md) - Local Kaspa-driven Igra exit and multisig proposal devnet
 - [Kaspa Wallet Guide](doc/kaspa-wallet.md) - Wallet setup for all networks
 - [Log Management](doc/log-management.md) - Automated log cleanup for servers
 - [Docker Volume Permissions](doc/troubleshooting/docker-volume-permissions.md) - Fix permission denied errors

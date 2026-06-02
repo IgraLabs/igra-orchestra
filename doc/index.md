@@ -8,6 +8,7 @@ Choose your deployment guide:
 
 - **[Mainnet](quick-setup-mainnet.md)** - Public mainnet deployment with pre-built images
 - **[Galleon Testnet](quick-setup-galleon-testnet.md)** - Public Galleon testnet deployment with pre-built images
+- **[Kaspa Exit Devnet](kaspa-exit-devnet.md)** - Local Kaspa-driven Igra exit and multisig proposal devnet
 
 ## Operations
 

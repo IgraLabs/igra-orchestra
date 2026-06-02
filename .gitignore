@@ -13,6 +13,7 @@ tasks/
 # .env.prod
 .env.backup
 .env
+.env.kaspa-exit-devnet
 
 network-params/
 

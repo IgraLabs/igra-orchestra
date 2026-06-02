@@ -10,12 +10,15 @@ function print_help() {
     echo "  It sets up each repository in the list with the appropriate branches."
     echo ""
     echo "Environment Variables:"
+    echo "  ORCHESTRA_ENV_FILE selects the env file to load (default: .env)."
     echo "  You can override the default branches for each repository by setting the following environment variables:"
     echo "    RETH_BRANCH"
     echo "    KASWALLET_BRANCH"
     echo "    IGRA_RPC_PROVIDER_BRANCH"
     echo "    KASPAD_BRANCH"
     echo "    KASPA_MINER_BRANCH"
+    echo "  You can override repository URLs with RETH_REPO_URL, KASWALLET_REPO_URL,"
+    echo "  IGRA_RPC_PROVIDER_REPO_URL, KASPAD_REPO_URL, and KASPA_MINER_REPO_URL."
     echo ""
     echo "Examples:"
     echo "  ./scripts/dev/setup-repos.sh"
@@ -50,15 +53,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Project root is two levels up from scripts/dev/
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Load environment variables from .env file if it exists
-if [[ -f "$PROJECT_DIR/.env" ]]; then
-    log "Loading environment variables from .env file"
+# Load environment variables from the selected env file if it exists
+ORCHESTRA_ENV_FILE=${ORCHESTRA_ENV_FILE:-.env}
+if [[ "$ORCHESTRA_ENV_FILE" != /* ]]; then
+    ORCHESTRA_ENV_FILE="$PROJECT_DIR/$ORCHESTRA_ENV_FILE"
+fi
+
+if [[ -f "$ORCHESTRA_ENV_FILE" ]]; then
+    log "Loading environment variables from $ORCHESTRA_ENV_FILE"
     set -a # Automatically export all variables
     # shellcheck source=/dev/null
-    source "$PROJECT_DIR/.env"
+    source "$ORCHESTRA_ENV_FILE"
     set +a
 else
-    log ".env file not found, using default branch settings or environment variables."
+    log "Env file not found at $ORCHESTRA_ENV_FILE, using default branch settings or environment variables."
 fi
 
 # Check if using pre-built images
@@ -126,6 +134,12 @@ IGRA_RPC_PROVIDER_BRANCH=${IGRA_RPC_PROVIDER_BRANCH:-main}
 KASPAD_BRANCH=${KASPAD_BRANCH:-master}
 KASPA_MINER_BRANCH=${KASPA_MINER_BRANCH:-main}
 
+RETH_REPO_URL=${RETH_REPO_URL:-git@github.com:IgraLabs/reth-private.git}
+KASWALLET_REPO_URL=${KASWALLET_REPO_URL:-git@github.com:IgraLabs/kaswallet.git}
+IGRA_RPC_PROVIDER_REPO_URL=${IGRA_RPC_PROVIDER_REPO_URL:-git@github.com:IgraLabs/igra-rpc-provider.git}
+KASPAD_REPO_URL=${KASPAD_REPO_URL:-git@github.com:IgraLabs/rusty-kaspa-private.git}
+KASPA_MINER_REPO_URL=${KASPA_MINER_REPO_URL:-git@github.com:elichai/kaspa-miner.git}
+
 log "Starting repository setup"
 
 # Check if using pre-built images for proprietary services
@@ -138,7 +152,7 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
         "kaspa-miner      "
     )
     URLS=(
-        "git@github.com:elichai/kaspa-miner.git"
+        "$KASPA_MINER_REPO_URL"
     )
     BRANCHES=(
         "$KASPA_MINER_BRANCH"
@@ -157,11 +171,11 @@ else
     )
 
     URLS=(
-        "git@github.com:IgraLabs/reth-private.git"
-        "git@github.com:IgraLabs/kaswallet.git"
-        "git@github.com:IgraLabs/igra-rpc-provider.git"
-        "git@github.com:IgraLabs/rusty-kaspa-private.git"
-        "git@github.com:elichai/kaspa-miner.git"
+        "$RETH_REPO_URL"
+        "$KASWALLET_REPO_URL"
+        "$IGRA_RPC_PROVIDER_REPO_URL"
+        "$KASPAD_REPO_URL"
+        "$KASPA_MINER_REPO_URL"
     )
     BRANCHES=(
         "$RETH_BRANCH"

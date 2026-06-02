@@ -188,9 +188,11 @@ services:
       - WARM_START_BLOCK
       - IGRA_SKIP_LOCK_SCRIPT_CHECK
       - ATAN_IMPORT_URL
+      - ATAN_IMPORT_REQUIRED
       - CDN_BASE_URL
       - NETWORK
       - TX_ID_PREFIX
+      - KASPAD_EXTRA_ARGS
       - IGRA_ENABLE
       - POST_FORK_LOCK_SCRIPT_PUBKEY
       - LOCK_SCRIPT_FORK_DAA_SCORE
@@ -243,6 +245,8 @@ services:
 
           if [ -n "$$ATAN_IMPORT_URL" ]; then
             ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
+          elif [ "$${ATAN_IMPORT_REQUIRED:-true}" = "false" ]; then
+            echo "ATAN import disabled by ATAN_IMPORT_REQUIRED=false"
           elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ] && [ -n "$$TX_ID_PREFIX" ]; then
             ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$TX_ID_PREFIX/index.pb"
           else
@@ -254,6 +258,9 @@ services:
         # Peer configuration
         if [ -n "$$KASPAD_ADD_PEER" ]; then
           ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
+        fi
+        if [ -n "$$KASPAD_EXTRA_ARGS" ]; then
+          ARGS="$$ARGS $$KASPAD_EXTRA_ARGS"
         fi
 
         exec sh /app/watch-dependencies.sh \
