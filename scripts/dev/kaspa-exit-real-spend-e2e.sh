@@ -38,6 +38,10 @@ load_env() {
 
 ensure_jwt_file() {
     mkdir -p "$PROJECT_DIR/keys"
+    if [[ -d "$PROJECT_DIR/keys/jwt.hex" ]]; then
+        rmdir "$PROJECT_DIR/keys/jwt.hex" 2>/dev/null \
+            || die "keys/jwt.hex is a directory and is not empty; remove it before running e2e"
+    fi
     if [[ ! -f "$PROJECT_DIR/keys/jwt.hex" ]]; then
         require_cmd openssl
         openssl rand -hex 32 > "$PROJECT_DIR/keys/jwt.hex"
