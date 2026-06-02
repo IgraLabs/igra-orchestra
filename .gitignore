@@ -6,6 +6,7 @@ keys/
 !keys/readme.txt
 
 data/
+build/kaspa-exit-devnet/
 
 tasks/
 # .env.local

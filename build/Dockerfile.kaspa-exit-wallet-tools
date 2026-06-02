@@ -1,0 +1,26 @@
+FROM golang:1.26-bookworm AS builder
+
+WORKDIR /src
+COPY build/repos/kaspad/go.mod build/repos/kaspad/go.sum ./
+RUN go mod download
+
+COPY build/repos/kaspad/ .
+RUN go build -o /out/kaspawallet ./cmd/kaspawallet \
+    && go build -o /out/kaspa-pst ./cmd/kaspa-pst \
+    && go build -o /out/kaspa-msig-fixture ./cmd/kaspa-msig-fixture
+
+FROM debian:trixie-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bash ca-certificates coreutils curl jq netcat-openbsd procps tini \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /out/kaspawallet /usr/local/bin/kaspawallet
+COPY --from=builder /out/kaspa-pst /usr/local/bin/kaspa-pst
+COPY --from=builder /out/kaspa-msig-fixture /usr/local/bin/kaspa-msig-fixture
+COPY scripts/dev/kaspa-exit-wallet-tools-entrypoint.sh /app/wallet-tools-entrypoint.sh
+COPY scripts/dev/kaspa-exit-real-spend-in-container.sh /app/kaspa-exit-real-spend-in-container.sh
+
+RUN chmod +x /usr/local/bin/kaspawallet /usr/local/bin/kaspa-pst /usr/local/bin/kaspa-msig-fixture /app/*.sh
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/app/wallet-tools-entrypoint.sh"]

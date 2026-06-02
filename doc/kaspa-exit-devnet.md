@@ -44,6 +44,51 @@ compose project.
 
 Use `ORCHESTRA_ENV_FILE=/path/to/env` if you want multiple local devnets.
 
+## Real Kaspa Multisig Spend E2E
+
+Use this command when you want to prove that the Kaspa wallet federation,
+Safe Transaction Service, PST helper, signature collection, and Kaspa broadcast
+path all work against live spendable devnet UTXOs:
+
+```bash
+./scripts/dev/kaspa-exit-devnet.sh real-spend-e2e
+```
+
+What the command does:
+
+```text
+1. Clones/checks out the configured source branches.
+2. Builds the Go signer wallet tools from IgraLabs/kaspad.
+3. Builds Safe Transaction Service with the real kaspa-pst helper inside it.
+4. Creates a fresh 2-of-3 multisig wallet fixture if one does not exist.
+5. Starts kaspad, Igra execution-layer, safe-service, Redis, Postgres, and
+   three signer wallet daemons.
+6. Asks the cosigner-index-0 wallet daemon for the canonical custody address.
+7. Starts kaspa-miner with MINING_ADDRESS set to that custody address.
+8. Polls custody UTXOs and Kaspa virtual DAA until mined rewards are mature.
+9. Creates an unsigned PST spend from custody to a generated recipient address.
+10. Posts the proposal to safe-service.
+11. Signs locally with two signer wallets and submits both signed bundles.
+12. Broadcasts through safe-service using kaspa-pst broadcast.
+13. Polls the recipient address until the live Kaspa balance changes.
+```
+
+The result is written to:
+
+```text
+build/kaspa-exit-devnet/results/e2e-result.json
+```
+
+That JSON includes the federation id, proposal hash, custody address, recipient
+address, broadcast tx ids, custody balance after broadcast, and recipient
+balance. The command must fail if broadcast fails or if the recipient balance
+does not change.
+
+This command is a real Kaspa spend test, but it is not the full Igra exit
+evidence test. It does not submit `requestExit` or build a KEB evidence bundle.
+It proves the live UTXO, multisig signing, safe-service coordination, PST merge,
+and Kaspa RPC broadcast layer that the exit proposal-builder will use.
+
 ## Devnet Parameters
 
 The preset uses the profile that survived the full staging exit e2e:
@@ -125,6 +170,10 @@ MINING_ADDRESS=kaspadev:...
 
 After 1000 DAA, those coinbase UTXOs are mature and can fund the unsigned Kaspa
 PST proposal.
+
+The `real-spend-e2e` command handles this automatically by starting the miner
+only after the custody address is generated. It does not use saved PST fixtures
+or stale outpoints.
 
 ## Exit Contracts and Safe Service
 

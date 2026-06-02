@@ -17,6 +17,7 @@ Commands:
   setup             Create env/JWT files and clone pinned repositories
   up                Build and start kaspad + Igra execution-layer
   miner             Build and start kaspa-miner
+  real-spend-e2e    Mine to multisig custody and prove safe-service broadcast
   bootstrap         Run setup, up, miner, then wait for Igra L2 blocks
   wait-daa [score]  Wait until Kaspa virtual DAA reaches score (default: 1000)
   wait-igra [hex]   Wait until eth_blockNumber is at least hex/decimal block (default: 1)
@@ -222,7 +223,11 @@ cmd_logs() {
 }
 
 cmd_config() {
-    compose --profile kaspad --profile kaspa-miner config "$@"
+    compose --profile kaspad --profile kaspa-miner --profile kaspa-exit-e2e config "$@"
+}
+
+cmd_real_spend_e2e() {
+    ORCHESTRA_ENV_FILE="$ENV_FILE" "$PROJECT_DIR/scripts/dev/kaspa-exit-real-spend-e2e.sh" "$@"
 }
 
 cmd_bootstrap() {
@@ -245,6 +250,7 @@ main() {
         setup) cmd_setup "$@" ;;
         up) cmd_up "$@" ;;
         miner) cmd_miner "$@" ;;
+        real-spend-e2e) cmd_real_spend_e2e "$@" ;;
         bootstrap) cmd_bootstrap "$@" ;;
         wait-daa) cmd_wait_daa "$@" ;;
         wait-igra) cmd_wait_igra "$@" ;;

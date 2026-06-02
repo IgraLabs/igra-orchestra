@@ -1,0 +1,43 @@
+FROM golang:1.26-bookworm AS pst-builder
+
+WORKDIR /src
+COPY build/repos/kaspad/go.mod build/repos/kaspad/go.sum ./
+RUN go mod download
+
+COPY build/repos/kaspad/ .
+RUN go build -o /out/kaspa-pst ./cmd/kaspa-pst
+
+FROM python:3.13-slim
+
+ARG APP_HOME=/app
+WORKDIR ${APP_HOME}
+ENV PYTHONUNBUFFERED=1
+ENV ETH_HASH_BACKEND=pysha3
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+ENV VIRTUAL_ENV=${APP_HOME}/.venv
+ENV PATH="${APP_HOME}/.venv/bin:${PATH}"
+
+COPY build/repos/safe-transaction-service/pyproject.toml build/repos/safe-transaction-service/uv.lock ./
+RUN set -ex \
+    && buildDeps="build-essential git libssl-dev libpq-dev" \
+    && apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends ${buildDeps} bash postgresql-client \
+    && uv sync --no-dev --frozen --no-install-project \
+    && apt-get purge -y --auto-remove ${buildDeps} \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -g 999 python \
+    && useradd -u 999 -r -g python python \
+    && mkdir -p /nginx /work \
+    && chown -R python:python /nginx /work ${APP_HOME}
+
+COPY --chown=python:python build/repos/safe-transaction-service/ .
+COPY --from=pst-builder /out/kaspa-pst /usr/local/bin/kaspa-pst
+RUN chmod +x /usr/local/bin/kaspa-pst
+
+USER 999:999
+
+RUN DJANGO_SETTINGS_MODULE=config.settings.production DJANGO_DOT_ENV_FILE=.env.tracing.sample python manage.py collectstatic --noinput
