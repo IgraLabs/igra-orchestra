@@ -36,6 +36,16 @@ load_env() {
     WALLET_PASSWORD="${WALLET_PASSWORD:-stage-msig-pass}"
 }
 
+ensure_jwt_file() {
+    mkdir -p "$PROJECT_DIR/keys"
+    if [[ ! -f "$PROJECT_DIR/keys/jwt.hex" ]]; then
+        require_cmd openssl
+        openssl rand -hex 32 > "$PROJECT_DIR/keys/jwt.hex"
+        chmod 600 "$PROJECT_DIR/keys/jwt.hex"
+        log "Created keys/jwt.hex"
+    fi
+}
+
 compose() {
     docker compose \
         -p "$COMPOSE_PROJECT_NAME" \
@@ -89,6 +99,7 @@ main() {
         load_env
         log "Skipping repository setup because KASPA_E2E_SKIP_SETUP=true"
     fi
+    ensure_jwt_file
 
     mkdir -p "$PROJECT_DIR/build/kaspa-exit-devnet/wallets" \
         "$PROJECT_DIR/build/kaspa-exit-devnet/logs" \
