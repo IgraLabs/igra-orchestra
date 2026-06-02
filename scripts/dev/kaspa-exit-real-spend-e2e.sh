@@ -128,20 +128,19 @@ main() {
 
     wait_wallet_daemons
 
-    metadata="$PROJECT_DIR/build/kaspa-exit-devnet/wallets/metadata.json"
-    canonical_index="$(jq -r '.signers[] | select(.cosignerIndex == 0) | .index' "$metadata")"
+    canonical_index="$(wallet_exec jq -r '.signers[] | select(.cosignerIndex == 0) | .index' /work/wallets/metadata.json)"
     canonical_port="$((8082 + canonical_index))"
 
-    custody_address="$(jq -r '.custodyAddress // empty' "$metadata")"
+    custody_address="$(wallet_exec jq -r '.custodyAddress // empty' /work/wallets/metadata.json)"
     if [[ -z "$custody_address" || "$custody_address" == "null" ]]; then
         log "Creating canonical custody address from signer ${canonical_index}"
         custody_output="$(wallet_exec kaspawallet --devnet new-address --daemonaddress "127.0.0.1:${canonical_port}")"
         custody_address="$(printf '%s\n' "$custody_output" | parse_kaspa_address)"
         [[ -n "$custody_address" ]] || die "Could not parse custody address from: $custody_output"
 
-        tmp_metadata="${metadata}.tmp"
-        jq --arg custody "$custody_address" '.custodyAddress = $custody' "$metadata" > "$tmp_metadata"
-        mv "$tmp_metadata" "$metadata"
+        wallet_exec bash -lc \
+            'tmp=/work/wallets/metadata.json.tmp; jq --arg custody "$1" ".custodyAddress = \$custody" /work/wallets/metadata.json > "$tmp" && mv "$tmp" /work/wallets/metadata.json' \
+            _ "$custody_address"
     fi
 
     log "Starting miner against custody address $custody_address"
