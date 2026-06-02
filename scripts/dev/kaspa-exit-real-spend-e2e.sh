@@ -78,8 +78,13 @@ main() {
     require_cmd docker
     require_cmd jq
 
-    ORCHESTRA_ENV_FILE="$ENV_FILE" "$PROJECT_DIR/scripts/dev/kaspa-exit-devnet.sh" setup
-    load_env
+    if [[ "${KASPA_E2E_SKIP_SETUP:-false}" != "true" ]]; then
+        ORCHESTRA_ENV_FILE="$ENV_FILE" "$PROJECT_DIR/scripts/dev/kaspa-exit-devnet.sh" setup
+        load_env
+    else
+        load_env
+        log "Skipping repository setup because KASPA_E2E_SKIP_SETUP=true"
+    fi
 
     mkdir -p "$PROJECT_DIR/build/kaspa-exit-devnet/wallets" \
         "$PROJECT_DIR/build/kaspa-exit-devnet/logs" \
