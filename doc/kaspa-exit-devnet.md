@@ -10,6 +10,11 @@ The stack contains:
 - `execution-layer` from `IgraLabs/reth-private`
 - `kaspa-miner` from `IgraLabs/kaspa-miner`
 
+The sample env pins `KASPA_MINER_BRANCH=kaspa-current-rpc-protowire`. That
+branch is required for this e2e path because current kaspad expects miners to
+preserve `RpcTransaction.mass` when submitting a block template that contains
+non-coinbase transactions.
+
 Safe Transaction Service, Foundry, and signer wallets run beside this stack.
 The service-side Kaspa federation APIs and exit proposal-builder live on the
 `safe-transaction-service` branch `kaspa-native-wallet-integration`.

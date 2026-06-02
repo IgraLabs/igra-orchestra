@@ -152,7 +152,7 @@ Follow these steps before the first run:
     # KASWALLET_BRANCH=feature/new-api
     # IGRA_RPC_PROVIDER_BRANCH=main
     # KASPAD_BRANCH=for-wallet
-    # KASPA_MINER_BRANCH=main
+    # KASPA_MINER_BRANCH=kaspa-current-rpc-protowire
     ```
 
 2.  **Clone and setup the repositories:**
