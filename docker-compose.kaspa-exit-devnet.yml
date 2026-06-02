@@ -102,8 +102,8 @@ services:
       - bash
       - -lc
       - |
-        python manage.py migrate kaspa --noinput
-        exec gunicorn --config gunicorn.conf.py --pythonpath "$$PWD" -b 0.0.0.0:8888 config.wsgi:application
+        /app/.venv/bin/python manage.py migrate kaspa --noinput
+        exec /app/.venv/bin/gunicorn --config gunicorn.conf.py --pythonpath "$$PWD" -b 0.0.0.0:8888 config.wsgi:application
     volumes:
       - ./build/kaspa-exit-devnet:/work
     ports:
