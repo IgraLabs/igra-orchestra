@@ -134,7 +134,7 @@ main() {
     fi
 
     log "Starting kaspad, execution-layer, signer wallet tools, and safe-service"
-    up_args=(up -d)
+    up_args=(up -d --force-recreate)
     if [[ "${KASPA_E2E_BUILD_CORE_SERVICES:-true}" == "true" ]]; then
         up_args+=(--build)
     fi
