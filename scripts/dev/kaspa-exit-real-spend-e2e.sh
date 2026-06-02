@@ -78,6 +78,10 @@ main() {
     require_cmd docker
     require_cmd jq
 
+    if [[ -f "$ENV_FILE" ]]; then
+        load_env
+    fi
+
     if [[ "${KASPA_E2E_SKIP_SETUP:-false}" != "true" ]]; then
         ORCHESTRA_ENV_FILE="$ENV_FILE" "$PROJECT_DIR/scripts/dev/kaspa-exit-devnet.sh" setup
         load_env
