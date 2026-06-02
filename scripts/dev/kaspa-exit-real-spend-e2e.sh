@@ -46,7 +46,7 @@ compose() {
 }
 
 wallet_exec() {
-    compose --profile kaspa-exit-e2e exec -T kaspa-wallet-tools "$@"
+    compose --profile kaspad --profile kaspa-exit-e2e exec -T kaspa-wallet-tools "$@"
 }
 
 parse_kaspa_address() {
@@ -95,11 +95,11 @@ main() {
         "$PROJECT_DIR/build/kaspa-exit-devnet/results"
 
     log "Building Kaspa wallet tools and safe-service API images"
-    compose --profile kaspa-exit-e2e build kaspa-wallet-tools kaspa-safe-api
+    compose --profile kaspad --profile kaspa-exit-e2e build kaspa-wallet-tools kaspa-safe-api
 
     if [[ ! -f "$PROJECT_DIR/build/kaspa-exit-devnet/wallets/metadata.json" ]]; then
         log "Creating ${KASPA_E2E_THRESHOLD}-of-${KASPA_E2E_SIGNERS} signer wallet fixture"
-        compose --profile kaspa-exit-e2e run --rm --no-deps \
+        compose --profile kaspad --profile kaspa-exit-e2e run --rm --no-deps \
             --entrypoint /usr/local/bin/kaspa-msig-fixture \
             kaspa-wallet-tools create \
             --network "$NETWORK" \
