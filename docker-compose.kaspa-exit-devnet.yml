@@ -39,6 +39,16 @@ services:
   kaspa-miner:
     container_name: ${KASPA_EXIT_DEVNET_CONTAINER_PREFIX:-igra-kaspa-exit-devnet}-kaspa-miner
     cpus: "${KASPA_MINER_CPUS:-2.00}"
+    entrypoint: >
+      sh -c '
+      KASPAD=$(getent ahostsv4 kaspad | grep kaspad | grep -Eo "\\b([0-9]{1,3}\\.){3}[0-9]{1,3}\\b") &&
+      exec /app/kaspa-miner
+      --mining-address ${MINING_ADDRESS:-}
+      --kaspad-address $$KASPAD
+      --port ${KASPAD_GRPC_PORT}
+      --threads ${MINING_THREADS:-1}
+      --mine-when_not-synced
+      '
 
   kaspa-safe-db:
     image: postgres:18-alpine
