@@ -32,9 +32,13 @@ services:
 
   execution-layer:
     container_name: ${KASPA_EXIT_DEVNET_CONTAINER_PREFIX:-igra-kaspa-exit-devnet}-execution-layer
+    environment:
+      GENESIS_TEMPLATE_JSON: /app/genesis.template.kaspa-exit-devnet.json
     ports: !override
       - "127.0.0.1:${EL_HTTP_HOST_PORT:-9545}:8545"
       - "127.0.0.1:${EL_WS_HOST_PORT:-9546}:8546"
+    volumes:
+      - ./build/kaspa-exit-devnet/reth/genesis.template.json:/app/genesis.template.kaspa-exit-devnet.json:ro
 
   kaspa-miner:
     container_name: ${KASPA_EXIT_DEVNET_CONTAINER_PREFIX:-igra-kaspa-exit-devnet}-kaspa-miner

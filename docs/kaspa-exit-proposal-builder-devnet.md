@@ -128,3 +128,21 @@ If the next KEB window is not finalized, the command skips that cycle and sleeps
 If KEB config, checkpoints, signing keys, contract values, or live spendable
 Kaspa UTXOs are missing, it fails loudly instead of pretending the daemon is
 healthy.
+
+## Igra Genesis Funding
+
+The devnet mounts `build/kaspa-exit-devnet/reth/genesis.template.json` into the
+execution-layer container. `./scripts/dev/kaspa-exit-devnet.sh up` generates this
+template from the checked-out `reth-private` template, adds `EL_ONE_TIME_ADDRESS`
+with `EL_ONE_TIME_BALANCE`, starts the execution layer, reads its real genesis
+hash, writes `GENESIS_BLOCK_HASH` back into `.env.kaspa-exit-devnet`, and only
+then starts kaspad. Kaspad hard-fails if that hash does not match the EL genesis.
+
+If `EL_ONE_TIME_ADDRESS` changes after the execution layer has initialized, stop
+the isolated devnet and remove only its reth/kaspad volumes before running `up`
+again. Genesis allocations cannot be changed in-place.
+
+The KEB audit methodology file is vendored under
+`tools/kasExitBridge/docs/kas-exit-bridge-query-audit-methodology.md`, so the
+proposal-builder image can validate bundle methodology checksums without relying
+on an external history-data checkout.

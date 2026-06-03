@@ -15,7 +15,9 @@ Usage: ./scripts/dev/kaspa-exit-devnet.sh <command> [args]
 
 Commands:
   setup             Create env/JWT files and clone pinned repositories
-  up                Build and start kaspad + Igra execution-layer
+  up                Build and start Igra execution-layer, pin genesis hash, then kaspad
+  prepare-genesis   Generate the funded Igra genesis template for this devnet
+  pin-genesis-hash  Write the current EL genesis hash into the env file
   miner             Build and start kaspa-miner
   real-spend-e2e    Mine to multisig custody and prove safe-service broadcast
   proposal-builder  Build and start the KEB+Foundry Kaspa proposal daemon
@@ -139,12 +141,92 @@ to_decimal_block() {
     fi
 }
 
+update_env_value() {
+    local key="$1"
+    local value="$2"
+    python3 - "$ENV_FILE" "$key" "$value" <<'PY'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+key = sys.argv[2]
+value = sys.argv[3]
+line = f"{key}={value}"
+lines = path.read_text().splitlines()
+for i, existing in enumerate(lines):
+    if existing.startswith(f"{key}="):
+        lines[i] = line
+        break
+else:
+    lines.append(line)
+path.write_text("\n".join(lines) + "\n")
+PY
+}
+
+cmd_prepare_genesis() {
+    load_env
+    require_cmd python3
+    local out_dir="$PROJECT_DIR/build/kaspa-exit-devnet/reth"
+    local src="$PROJECT_DIR/build/repos/reth-private/igra/genesis.template.json"
+    local out="$out_dir/genesis.template.json"
+    local address="${EL_ONE_TIME_ADDRESS:-}"
+    local balance="${EL_ONE_TIME_BALANCE:-0x100000000000000000000000}"
+
+    [[ -n "$address" ]] || die "EL_ONE_TIME_ADDRESS is empty in $ENV_FILE"
+    [[ -f "$src" ]] || die "Missing $src; run setup first"
+    mkdir -p "$out_dir"
+    python3 - "$src" "$out" "$address" "$balance" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+src = Path(sys.argv[1])
+out = Path(sys.argv[2])
+address = sys.argv[3]
+balance = sys.argv[4]
+text = src.read_text()
+data = json.loads(text)
+alloc = data.setdefault("alloc", {})
+placeholder = "${ONE_TIME_ADDRESS}"
+if placeholder in alloc:
+    alloc.pop(placeholder)
+alloc[address] = {"balance": balance}
+out.write_text(json.dumps(data, indent=2) + "\n")
+PY
+    log "Prepared funded Igra genesis template: $out"
+}
+
+wait_el_rpc() {
+    load_env
+    local sleep_seconds="${KASPA_EXIT_DEVNET_POLL_SECONDS:-10}"
+    local result
+    log "Waiting for Igra EL RPC on 127.0.0.1:${EL_HTTP_HOST_PORT}"
+    while true; do
+        result="$(curl -fsS -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_getBlockByNumber","params":["0x0",false]}' "http://127.0.0.1:${EL_HTTP_HOST_PORT}" 2>/dev/null || true)"
+        if jq -e '.result.hash' >/dev/null 2>&1 <<<"$result"; then
+            return 0
+        fi
+        sleep "$sleep_seconds"
+    done
+}
+
+cmd_pin_genesis_hash() {
+    load_env
+    local response
+    local hash
+    response="$(curl -fsS -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_getBlockByNumber","params":["0x0",false]}' "http://127.0.0.1:${EL_HTTP_HOST_PORT}")"
+    hash="$(jq -r '.result.hash // empty' <<<"$response")"
+    [[ "$hash" == 0x* ]] || die "Could not read EL genesis hash from eth_getBlockByNumber(0)"
+    update_env_value GENESIS_BLOCK_HASH "$hash"
+    log "Pinned GENESIS_BLOCK_HASH=$hash in $ENV_FILE"
+}
+
 cmd_setup() {
     require_cmd docker
     require_cmd git
     require_cmd jq
     require_cmd curl
     require_cmd openssl
+    require_cmd python3
 
     ensure_env_file
     mkdir -p "$PROJECT_DIR/keys" "$PROJECT_DIR/build/repos"
@@ -162,7 +244,11 @@ cmd_setup() {
 }
 
 cmd_up() {
-    compose --profile kaspad up -d --build execution-layer kaspad
+    cmd_prepare_genesis
+    compose --profile kaspad up -d --build execution-layer
+    wait_el_rpc
+    cmd_pin_genesis_hash
+    compose --profile kaspad up -d --build kaspad
 }
 
 cmd_miner() {
@@ -267,6 +353,8 @@ main() {
     case "$command" in
         setup) cmd_setup "$@" ;;
         up) cmd_up "$@" ;;
+        prepare-genesis) cmd_prepare_genesis "$@" ;;
+        pin-genesis-hash) cmd_pin_genesis_hash "$@" ;;
         miner) cmd_miner "$@" ;;
         real-spend-e2e) cmd_real_spend_e2e "$@" ;;
         proposal-builder) cmd_proposal_builder "$@" ;;
