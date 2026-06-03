@@ -18,6 +18,7 @@ Commands:
   up                Build and start kaspad + Igra execution-layer
   miner             Build and start kaspa-miner
   real-spend-e2e    Mine to multisig custody and prove safe-service broadcast
+  proposal-builder  Build and start the KEB+Foundry Kaspa proposal daemon
   bootstrap         Run setup, up, miner, then wait for Igra L2 blocks
   wait-daa [score]  Wait until Kaspa virtual DAA reaches score (default: 1000)
   wait-igra [hex]   Wait until eth_blockNumber is at least hex/decimal block (default: 1)
@@ -62,6 +63,18 @@ setup_aux_repo() {
     git -C "$target" fetch
     git -C "$target" checkout "$branch"
     git -C "$target" pull --ff-only
+}
+
+setup_keb_tooling() {
+    if [[ -n "${KAS_EXIT_BRIDGE_REPO_URL:-}" ]]; then
+        setup_aux_repo "${KAS_EXIT_BRIDGE_REPO_URL}" "${KAS_EXIT_BRIDGE_BRANCH:-main}"
+        return 0
+    fi
+
+    require_cmd rsync
+    log "Using vendored KEB tooling from tools/kasExitBridge"
+    mkdir -p "$PROJECT_DIR/build/repos/kasExitBridge"
+    rsync -a "$PROJECT_DIR/tools/kasExitBridge/" "$PROJECT_DIR/build/repos/kasExitBridge/"
 }
 
 ensure_env_file() {
@@ -145,6 +158,7 @@ cmd_setup() {
     load_env
     setup_aux_repo "${SAFE_TRANSACTION_SERVICE_REPO_URL:-}" "${SAFE_TRANSACTION_SERVICE_BRANCH:-main}"
     setup_aux_repo "${FOUNDRY_REPO_URL:-}" "${FOUNDRY_BRANCH:-main}"
+    setup_keb_tooling
 }
 
 cmd_up() {
@@ -230,6 +244,10 @@ cmd_real_spend_e2e() {
     ORCHESTRA_ENV_FILE="$ENV_FILE" "$PROJECT_DIR/scripts/dev/kaspa-exit-real-spend-e2e.sh" "$@"
 }
 
+cmd_proposal_builder() {
+    compose --profile kaspad --profile kaspa-exit-e2e up -d --build kaspa-proposal-builder
+}
+
 cmd_bootstrap() {
     cmd_setup
     cmd_up
@@ -251,6 +269,7 @@ main() {
         up) cmd_up "$@" ;;
         miner) cmd_miner "$@" ;;
         real-spend-e2e) cmd_real_spend_e2e "$@" ;;
+        proposal-builder) cmd_proposal_builder "$@" ;;
         bootstrap) cmd_bootstrap "$@" ;;
         wait-daa) cmd_wait_daa "$@" ;;
         wait-igra) cmd_wait_igra "$@" ;;

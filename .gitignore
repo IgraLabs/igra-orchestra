@@ -7,6 +7,7 @@ keys/
 
 data/
 build/kaspa-exit-devnet/
+tools/kasExitBridge/node_modules/
 
 tasks/
 # .env.local

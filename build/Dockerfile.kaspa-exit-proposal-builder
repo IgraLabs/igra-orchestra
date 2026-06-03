@@ -1,0 +1,71 @@
+FROM golang:1.26-bookworm AS pst-builder
+
+WORKDIR /src
+COPY build/repos/kaspad/go.mod build/repos/kaspad/go.sum ./
+RUN go mod download
+
+COPY build/repos/kaspad/ .
+RUN go build -o /out/kaspa-pst ./cmd/kaspa-pst
+
+FROM rust:1.91-bookworm AS cast-builder
+
+WORKDIR /src
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends clang cmake git libclang-dev libssl-dev pkg-config protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+COPY build/repos/foundry/ .
+ENV VERGEN_GIT_SHA=0000000000000000000000000000000000000000
+RUN cargo build --locked --release --bin cast
+
+FROM node:22-bookworm-slim AS keb-builder
+
+WORKDIR /opt/kasExitBridge
+COPY build/repos/kasExitBridge/package.json build/repos/kasExitBridge/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
+COPY build/repos/kasExitBridge/ .
+
+FROM python:3.13-slim
+
+ARG APP_HOME=/app
+WORKDIR ${APP_HOME}
+ENV PYTHONUNBUFFERED=1
+ENV ETH_HASH_BACKEND=pysha3
+ENV KASPA_PST_HELPER_PATH=/usr/local/bin/kaspa-pst
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+ENV VIRTUAL_ENV=${APP_HOME}/.venv
+ENV PATH="${APP_HOME}/.venv/bin:${PATH}"
+
+COPY build/repos/safe-transaction-service/pyproject.toml build/repos/safe-transaction-service/uv.lock ./
+RUN set -ex \
+    && buildDeps="build-essential git libssl-dev libpq-dev" \
+    && runtimeDeps="bash ca-certificates postgresql-client" \
+    && apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends ${buildDeps} ${runtimeDeps} \
+    && uv sync --no-dev --frozen --no-install-project \
+    && apt-get purge -y --auto-remove ${buildDeps} \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -g 999 python \
+    && useradd -u 999 -r -g python python \
+    && mkdir -p /nginx /work /opt/kasExitBridge \
+    && chown -R python:python /nginx /work /opt/kasExitBridge ${APP_HOME}
+
+COPY --chown=python:python build/repos/safe-transaction-service/ .
+COPY --chown=python:python --from=keb-builder /opt/kasExitBridge /opt/kasExitBridge
+COPY --from=keb-builder /usr/local/bin/node /usr/local/bin/node
+COPY --from=keb-builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+COPY --from=pst-builder /out/kaspa-pst /usr/local/bin/kaspa-pst
+COPY --from=cast-builder /src/target/release/cast /usr/local/bin/cast
+COPY scripts/dev/kaspa-exit-proposal-builder-entrypoint.sh /app/kaspa-exit-proposal-builder-entrypoint.sh
+RUN chmod +x /usr/local/bin/kaspa-pst /usr/local/bin/cast /app/kaspa-exit-proposal-builder-entrypoint.sh
+
+USER 999:999
+
+RUN DJANGO_SETTINGS_MODULE=config.settings.production DJANGO_DOT_ENV_FILE=.env.tracing.sample python manage.py collectstatic --noinput
+
+ENTRYPOINT ["/app/kaspa-exit-proposal-builder-entrypoint.sh"]

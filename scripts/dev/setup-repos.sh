@@ -21,6 +21,8 @@ function print_help() {
     echo "  You can override repository URLs with RETH_REPO_URL, KASWALLET_REPO_URL,"
     echo "  IGRA_RPC_PROVIDER_REPO_URL, KASPAD_REPO_URL, KASPA_GO_WALLET_REPO_URL,"
     echo "  and KASPA_MINER_REPO_URL."
+    echo "  Kaspa exit proposal-builder extras are cloned by kaspa-exit-devnet.sh setup:"
+    echo "    SAFE_TRANSACTION_SERVICE_REPO_URL, FOUNDRY_REPO_URL, KAS_EXIT_BRIDGE_REPO_URL"
     echo ""
     echo "Examples:"
     echo "  ./scripts/dev/setup-repos.sh"

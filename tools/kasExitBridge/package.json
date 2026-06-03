@@ -1,0 +1,21 @@
+{
+  "name": "@igralabs/kas-exit-bridge-tooling",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "kas-exit:run-delta": "tsx runDelta.ts",
+    "kas-exit:audit": "tsx auditExits.ts",
+    "kas-exit:verify": "tsx verifyExits.ts",
+    "kas-exit:match-bundles": "tsx matchBundles.ts",
+    "kas-exit:verify-artifacts": "tsx verifyExitArtifacts.ts"
+  },
+  "dependencies": {
+    "ethers": "6.15.0",
+    "tsx": "4.20.3",
+    "typescript": "5.8.3"
+  },
+  "overrides": {
+    "ws": "8.20.1"
+  }
+}
