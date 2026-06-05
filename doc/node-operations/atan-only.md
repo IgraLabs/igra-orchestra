@@ -69,3 +69,9 @@ Check atan-uploader logs (if running):
 ```bash
 docker compose -f docker-compose.atan.yml logs -f atan-uploader
 ```
+
+## Verifying archives
+
+To confirm the stored post-KIP-21 finality-period archives are valid — the recomputed `seq_commit` chain
+and IGRA-lane replay match the stored values — run the offline `kaspa-atan-verify` tool (bundled in the
+kaspad image) against the data volume read-only. See [ATAN Verification](atan-verification.md).
