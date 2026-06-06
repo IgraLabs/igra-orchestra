@@ -96,6 +96,16 @@ IGRA_Q_GENESIS_BLOCK_HASH=0x1982147dd8e731fc6463b3a8a2c78b92cd8ea6dcb21accdcd60d
 It is not the q logic zone id; q-zone routing still uses logic zone id
 `0x0002` inside the `0x9F` payload envelope.
 
+The isolated devnet template also enables:
+
+```text
+KASPAD_ENABLE_UNSYNCED_MINING=true
+MINER_MINE_WHEN_NOT_SYNCED=true
+```
+
+These are required only for a from-zero isolated stack with no Kaspa peers.
+Do not use them for official Igra testnet/mainnet operation.
+
 If any q genesis input changes, recompute it with q-ethrex:
 
 ```sh
