@@ -1,0 +1,30 @@
+services:
+  execution-layer:
+    container_name: qzone-execution-layer
+    ports: !override
+      - "127.0.0.1:29445:8545"
+      - "127.0.0.1:29446:8546"
+
+  kaspad:
+    container_name: qzone-kaspad
+    build:
+      ssh: !override []
+    ports: !override
+      - "56210:16210"
+      - "56211:16211"
+      - "57210:17210"
+      - "58210:18210"
+
+  node-health-check-client:
+    container_name: qzone-node-health-check-client
+
+  kaswallet-0:
+    container_name: qzone-kaswallet-0
+    ports: !override
+      - "127.0.0.1:28082:8082"
+
+  rpc-provider-0:
+    container_name: qzone-rpc-provider-0
+
+  kaspa-miner:
+    container_name: qzone-kaspa-miner

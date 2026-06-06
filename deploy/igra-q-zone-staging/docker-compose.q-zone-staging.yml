@@ -1,0 +1,8 @@
+services:
+  q-execution-layer:
+    container_name: qzone-q-execution-layer
+    build:
+      ssh: !override []
+    ports: !override
+      - "127.0.0.1:${IGRA_Q_HTTP_PORT:-29545}:8545"
+      - "127.0.0.1:${IGRA_Q_WS_PORT:-29546}:8546"

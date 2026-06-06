@@ -10,6 +10,13 @@ volumes:
       type: tmpfs
       device: tmpfs
       o: size=10m
+  q_ethrex_data:
+  q_ethrex_ipc:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=10m
 networks:
   igra-network:
   traefik-network:
@@ -174,6 +181,9 @@ services:
     depends_on:
       execution-layer:
         condition: service_healthy
+      q-execution-layer:
+        condition: service_healthy
+        required: false
     ports:
       - "${KASPAD_GRPC_PORT}:${KASPAD_GRPC_PORT}"
       - "${KASPAD_P2P_PORT}:${KASPAD_P2P_PORT}"
@@ -190,6 +200,11 @@ services:
       - NETWORK
       - TX_ID_PREFIX
       - IGRA_ENABLE
+      - IGRA_REQUIRE_ATAN_IMPORT
+      - IGRA_Q_ZONE_ENABLE
+      - IGRA_Q_GENESIS_BLOCK_HASH
+      - IGRA_Q_EL_HOST
+      - IGRA_Q_EL_TRANSPORT
       - POST_FORK_LOCK_SCRIPT_PUBKEY
       - LOCK_SCRIPT_FORK_DAA_SCORE
       - RUST_LOG=info,kaspa_viaduct=trace,kaspa_igra_adapter=trace,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace
@@ -239,13 +254,28 @@ services:
           [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && ARGS="$$ARGS --igra-post-fork-lock-script-pubkey=$$POST_FORK_LOCK_SCRIPT_PUBKEY"
           [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ] && ARGS="$$ARGS --igra-lock-script-fork-daa-score=$$LOCK_SCRIPT_FORK_DAA_SCORE"
 
+          if [ "$${IGRA_Q_ZONE_ENABLE:-false}" = "true" ]; then
+            if [ -z "$${IGRA_Q_GENESIS_BLOCK_HASH:-}" ]; then
+              echo "Error: IGRA_Q_GENESIS_BLOCK_HASH must be set when IGRA_Q_ZONE_ENABLE=true" >&2
+              exit 1
+            fi
+            ARGS="$$ARGS \
+              --igra-q-zone-enable \
+              --igra-q-genesis-hash=$$IGRA_Q_GENESIS_BLOCK_HASH \
+              --igra-q-jwt-path=/app/q-jwt.hex \
+              --igra-q-el-host=$${IGRA_Q_EL_HOST:-http://q-execution-layer}"
+            [ -n "$${IGRA_Q_EL_TRANSPORT:-}" ] && ARGS="$$ARGS --igra-q-el-transport=$$IGRA_Q_EL_TRANSPORT"
+          fi
+
           if [ -n "$$ATAN_IMPORT_URL" ]; then
             ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
-          elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ] && [ -n "$$TX_ID_PREFIX" ]; then
-            ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$TX_ID_PREFIX/index.pb"
-          else
-            echo "Error: CDN_BASE_URL, NETWORK and TX_ID_PREFIX must be set for ATAN import" >&2
-            exit 1
+          elif [ "$${IGRA_REQUIRE_ATAN_IMPORT:-true}" = "true" ]; then
+            if [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ] && [ -n "$$TX_ID_PREFIX" ]; then
+              ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$TX_ID_PREFIX/index.pb"
+            else
+              echo "Error: CDN_BASE_URL, NETWORK and TX_ID_PREFIX must be set for ATAN import" >&2
+              exit 1
+            fi
           fi
         fi
 
@@ -254,13 +284,17 @@ services:
           ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
         fi
 
-        exec sh /app/watch-dependencies.sh \
-          --tcp execution-layer execution-layer 8545 \
-          -- /app/kaspad $$ARGS
+        WATCH_ARGS="--tcp execution-layer execution-layer 8545"
+        if [ "$${IGRA_Q_ZONE_ENABLE:-false}" = "true" ]; then
+          WATCH_ARGS="$$WATCH_ARGS --tcp q-execution-layer q-execution-layer 8545"
+        fi
+
+        exec sh /app/watch-dependencies.sh $$WATCH_ARGS -- /app/kaspad $$ARGS
     volumes:
       - kaspad_data:/app/data/
       - ./logs/kaspad/:/app/logs/  # Event logs when ENABLE_EVENT_LOGGING=true
       - ./keys/jwt.hex:/app/jwt.hex:ro
+      - ./keys/${IGRA_Q_JWT_FILE:-jwt.hex}:/app/q-jwt.hex:ro
       - *dependency-watch-volume
     networks:
       - igra-network
@@ -270,7 +304,10 @@ services:
         - CMD-SHELL
         - >
           bash -lc ': > /dev/tcp/127.0.0.1/${KASPAD_GRPC_PORT}' &&
-          bash -lc ': > /dev/tcp/execution-layer/8545'
+          bash -lc ': > /dev/tcp/execution-layer/8545' &&
+          if [ "$${IGRA_Q_ZONE_ENABLE:-false}" = "true" ]; then
+            bash -lc ': > /dev/tcp/q-execution-layer/8545';
+          fi
 
   execution-layer:
     <<: *default-service
@@ -330,6 +367,57 @@ services:
         - >
           test -S /app/socket/auth.ipc &&
           bash -lc ': > /dev/tcp/127.0.0.1/8545'
+
+  q-execution-layer:
+    <<: *default-service
+    build:
+      context: build/repos/ethrex-q
+      dockerfile: Dockerfile
+      ssh:
+        - default
+      args:
+        PROFILE: release
+        BUILD_FLAGS: "--features falcon-l5"
+    image: igranetwork/q-ethrex:${Q_ETHREX_VERSION:-dev}
+    restart: *service-restart-policy
+    container_name: q-execution-layer
+    profiles: ["q-zone"]
+    entrypoint: /app/run-igra-el.sh
+    ports:
+      - "127.0.0.1:${IGRA_Q_HTTP_PORT:-29545}:8545"
+      - "127.0.0.1:${IGRA_Q_WS_PORT:-29546}:8546"
+    expose:
+      - "8545"
+      - "8546"
+      - "8551"
+      - "9001"
+    environment:
+      L1_REFERENCE_TIMESTAMP: ${L1_REFERENCE_TIMESTAMP}
+      L1_REFERENCE_DAA_SCORE: ${L1_REFERENCE_DAA_SCORE}
+      CHAIN_ID: ${IGRA_Q_CHAIN_ID:-}
+      ONE_TIME_ADDRESS: ${IGRA_Q_EL_ONE_TIME_ADDRESS:-}
+      IGRA_LAUNCH_DAA_SCORE: ${IGRA_LAUNCH_DAA_SCORE}
+      TX_ID_PREFIX: ${IGRA_Q_TX_ID_PREFIX:-}
+      MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${IGRA_Q_MIN_PROTOCOL_FEE_PER_GAS_GWEI:-}
+      IGRA_LOCK_SCRIPT_PUBKEY: ${IGRA_LOCK_SCRIPT_PUBKEY:-}
+      IGRA_ENTRY_MIN_AMOUNT: ${IGRA_Q_ENTRY_MIN_AMOUNT:-}
+      BITCOIN_BLOCK_HASH: ${IGRA_Q_BITCOIN_BLOCK_HASH:-0000000000000000000000000000000000000000000000000000000000000000}
+      ETHEREUM_BLOCK_HASH: ${IGRA_Q_ETHEREUM_BLOCK_HASH:-0x0000000000000000000000000000000000000000000000000000000000000000}
+      KASPA_BLOCK_HASH: ${IGRA_Q_KASPA_BLOCK_HASH:-0000000000000000000000000000000000000000000000000000000000000000}
+      NETWORK_PARAMS_OUTPUT: /app/network-params/q-network-params.md
+    volumes:
+      - q_ethrex_data:/app/data/
+      - ./keys/${IGRA_Q_JWT_FILE:-q-jwt.hex}:/app/jwt.hex
+      - q_ethrex_ipc:/app/socket
+      - ./network-params:/app/network-params
+    healthcheck:
+      <<: *default-healthcheck
+      test:
+        - CMD-SHELL
+        - >
+          bash -lc ': > /dev/tcp/127.0.0.1/8545' &&
+          bash -lc ': > /dev/tcp/127.0.0.1/8546' &&
+          bash -lc ': > /dev/tcp/127.0.0.1/8551'
 
   node-health-check-client:
     image: igranetwork/node-health-check-client:${NODE_HEALTH_CHECK_VERSION}
