@@ -86,19 +86,21 @@ MINING_ADDRESS=
 ```
 
 The isolated devnet template is a private from-zero chain. It intentionally
-uses DAA 0 launch/reference anchors:
+uses private devnet DAA anchors:
 
 ```text
 IGRA_LANE_ID=01000001
-IGRA_LAUNCH_DAA_SCORE=0
+IGRA_LAUNCH_DAA_SCORE=1
 L1_REFERENCE_DAA_SCORE=0
-GENESIS_BLOCK_HASH=0xf579a1098c06ad97515aa8a6ee49278fbdacf44ff5e0feef3f00f4c417b9c144
-IGRA_Q_GENESIS_BLOCK_HASH=0xab37235a47e3d163a7812c263e0e89c1b950bf660eae1e5df1a98abf8931eb43
+GENESIS_BLOCK_HASH=0xd936e97a863e49e00482d1cd4b8c23229e54c2d7eca768c4f5375169ad714148
+IGRA_Q_GENESIS_BLOCK_HASH=0xc2af5632f9e01fe47855eb12795b635b12419bf8f8bf67bf858eaf99252f47f1
 ```
 
 Do not copy Galleon/testnet DAA anchors into this isolated mode. A private
 Kaspa devnet starts near DAA 0, so viaduct would otherwise wait for a public
 network DAA target that the local chain cannot reach during normal testing.
+Igra starts at DAA 1, not DAA 0, so viaduct stays strictly above the genesis
+pruning point without changing production pruning-point semantics.
 Official Igra testnet/mainnet sidecar deployments keep their real
 launch/reference DAA values.
 
