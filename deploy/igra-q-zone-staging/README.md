@@ -85,12 +85,22 @@ KASPA_MINER_BRANCH=kaspa-current-rpc-protowire
 MINING_ADDRESS=
 ```
 
-The template pins the current M1 q genesis hash:
+The isolated devnet template is a private from-zero chain. It intentionally
+uses DAA 0 launch/reference anchors:
 
 ```text
 IGRA_LANE_ID=01000001
-IGRA_Q_GENESIS_BLOCK_HASH=0x1982147dd8e731fc6463b3a8a2c78b92cd8ea6dcb21accdcd60de9ee659c375b
+IGRA_LAUNCH_DAA_SCORE=0
+L1_REFERENCE_DAA_SCORE=0
+GENESIS_BLOCK_HASH=0xf579a1098c06ad97515aa8a6ee49278fbdacf44ff5e0feef3f00f4c417b9c144
+IGRA_Q_GENESIS_BLOCK_HASH=0xab37235a47e3d163a7812c263e0e89c1b950bf660eae1e5df1a98abf8931eb43
 ```
+
+Do not copy Galleon/testnet DAA anchors into this isolated mode. A private
+Kaspa devnet starts near DAA 0, so viaduct would otherwise wait for a public
+network DAA target that the local chain cannot reach during normal testing.
+Official Igra testnet/mainnet sidecar deployments keep their real
+launch/reference DAA values.
 
 `IGRA_LANE_ID` is the Kaspa/KIP-21 Igra lane namespace used by viaduct/ATAN.
 It is not the q logic zone id; q-zone routing still uses logic zone id
@@ -101,6 +111,7 @@ The isolated devnet template also enables:
 ```text
 KASPAD_ENABLE_UNSYNCED_MINING=true
 MINER_MINE_WHEN_NOT_SYNCED=true
+VIADUCT_ALLOW_UNSYNCED_CONSENSUS_FALLBACK=true
 ```
 
 These are required only for a from-zero isolated stack with no Kaspa peers.
