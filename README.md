@@ -21,7 +21,7 @@ The `./scripts/dev/setup-repos.sh` script clones the necessary repositories into
 *   `build/repos/kaswallet` - Wallet service for relaying transactions (repo: `IgraLabs/kaswallet`)
 *   `build/repos/rusty-kaspa-private` - Contains the Kaspad node (repo: `IgraLabs/rusty-kaspa-private`)
 
-The `./scripts/dev/setup-repos.sh` script also clones the `kaspa-miner` repository (repo: `elichai/kaspa-miner`).
+The `./scripts/dev/setup-repos.sh` script also clones the `kaspa-miner` repository (repo: `IgraLabs/kaspa-miner`).
 
 Ensure these repositories are present before running the Docker Compose environment. The `./scripts/dev/setup-repos.sh` script handles cloning and configuring the correct branches.
 
@@ -138,7 +138,7 @@ Follow these steps before the first run:
     # KASWALLET_BRANCH=feature/new-api
     # IGRA_RPC_PROVIDER_BRANCH=main
     # KASPAD_BRANCH=for-wallet
-    # KASPA_MINER_BRANCH=main
+    # KASPA_MINER_BRANCH=kaspa-current-rpc-protowire
     ```
 
 2.  **Clone and setup the repositories:**

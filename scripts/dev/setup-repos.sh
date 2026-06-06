@@ -124,7 +124,7 @@ RETH_BRANCH=${RETH_BRANCH:-production}
 KASWALLET_BRANCH=${KASWALLET_BRANCH:-main}
 IGRA_RPC_PROVIDER_BRANCH=${IGRA_RPC_PROVIDER_BRANCH:-main}
 KASPAD_BRANCH=${KASPAD_BRANCH:-master}
-KASPA_MINER_BRANCH=${KASPA_MINER_BRANCH:-main}
+KASPA_MINER_BRANCH=${KASPA_MINER_BRANCH:-kaspa-current-rpc-protowire}
 
 log "Starting repository setup"
 
@@ -138,7 +138,7 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
         "kaspa-miner      "
     )
     URLS=(
-        "git@github.com:elichai/kaspa-miner.git"
+        "https://github.com/IgraLabs/kaspa-miner.git"
     )
     BRANCHES=(
         "$KASPA_MINER_BRANCH"
@@ -161,7 +161,7 @@ else
         "git@github.com:IgraLabs/kaswallet.git"
         "git@github.com:IgraLabs/igra-rpc-provider.git"
         "git@github.com:IgraLabs/rusty-kaspa-private.git"
-        "git@github.com:elichai/kaspa-miner.git"
+        "https://github.com/IgraLabs/kaspa-miner.git"
     )
     BRANCHES=(
         "$RETH_BRANCH"

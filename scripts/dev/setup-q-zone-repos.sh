@@ -6,6 +6,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 IGRA_Q_BRANCH="${IGRA_Q_BRANCH:-igra-q-logic-zone}"
 CANONICAL_ETHREX_BRANCH="${CANONICAL_ETHREX_BRANCH:-igra-mainnet-ethrex-integration}"
+KASPA_MINER_BRANCH="${KASPA_MINER_BRANCH:-kaspa-current-rpc-protowire}"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -32,6 +33,7 @@ clone_or_update() {
 
 clone_or_update "git@github.com:IgraLabs/rusty-kaspa-private.git" "rusty-kaspa-private" "$IGRA_Q_BRANCH"
 clone_or_update "git@github.com:IgraLabs/ethrex.git" "ethrex-q" "$IGRA_Q_BRANCH"
+clone_or_update "https://github.com/IgraLabs/kaspa-miner.git" "kaspa-miner" "$KASPA_MINER_BRANCH"
 
 if [[ "${IGRA_Q_PREPARE_CANONICAL_ETHREX:-false}" == "true" ]]; then
     clone_or_update "git@github.com:IgraLabs/ethrex.git" "ethrex" "$CANONICAL_ETHREX_BRANCH"

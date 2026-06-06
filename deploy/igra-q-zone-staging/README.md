@@ -81,6 +81,7 @@ chmod 600 keys/jwt.hex keys/q-jwt.hex
 Before first boot, set a real mining address:
 
 ```text
+KASPA_MINER_BRANCH=kaspa-current-rpc-protowire
 MINING_ADDRESS=
 ```
 
