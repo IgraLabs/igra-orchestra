@@ -15,9 +15,11 @@ branch is required for this e2e path because current kaspad expects miners to
 preserve `RpcTransaction.mass` when submitting a block template that contains
 non-coinbase transactions.
 
-Safe Transaction Service, Foundry, and signer wallets run beside this stack.
-The service-side Kaspa federation APIs and exit proposal-builder live on the
-`safe-transaction-service` branch `kaspa-native-wallet-integration`.
+Safe Transaction Service, Rust proposal-builder, and signer wallets run beside
+this stack. The service-side Kaspa federation APIs live on the
+`safe-transaction-service` branch `kaspa-native-wallet-integration`. The exit
+proposal-builder and Rust `kaspa-pst` helper live on
+`igra-proposal-builder-rs` branch `feature/rust-proposal-builder`.
 The old Go `IgraLabs/kaspad` repository is cloned only for the signer
 `kaspawallet` CLI on branch `kaspa-exit-proposal-verifier`; it is not the
 devnet node.
@@ -64,7 +66,7 @@ What the command does:
 ```text
 1. Clones/checks out the configured source branches.
 2. Builds the Go signer wallet tools from IgraLabs/kaspad.
-3. Builds Safe Transaction Service with the real kaspa-pst helper inside it.
+3. Builds Safe Transaction Service with the Rust kaspa-pst helper inside it.
 4. Creates a fresh 2-of-3 multisig wallet fixture if one does not exist.
 5. Starts kaspad, Igra execution-layer, safe-service, Redis, Postgres, and
    three signer wallet daemons.
@@ -90,9 +92,10 @@ balance. The command must fail if broadcast fails or if the recipient balance
 does not change.
 
 This command is a real Kaspa spend test, but it is not the full Igra exit
-evidence test. It does not submit `requestExit` or build a KEB evidence bundle.
-It proves the live UTXO, multisig signing, safe-service coordination, PST merge,
-and Kaspa RPC broadcast layer that the exit proposal-builder will use.
+evidence test. It does not submit `requestExit` or build a Rust exit proposal.
+It proves the live UTXO, multisig signing, safe-service coordination, Rust
+kaspa-pst inspect/merge/broadcast path, and Kaspa RPC broadcast layer that the
+exit proposal-builder will use.
 
 ## Devnet Parameters
 
@@ -222,8 +225,9 @@ After the contracts exist, the full e2e sequence is:
 2. Generate three signer wallets and the canonical custody address.
 3. Mine or transfer mature devnet funds to custody.
 4. Submit requestExit on Igra through Foundry's Kaspa payload transport.
-5. Build the exit evidence bundle for the finalized Igra window.
-6. Run build_kaspa_exit_proposal against that bundle and federation.
+5. Render the Rust proposal-builder config with deployed contract addresses,
+   expected-values, methodology, and checkpoint files.
+6. Run `./scripts/dev/kaspa-exit-devnet.sh proposal-builder`.
 7. Each signer independently re-verifies the proposal locally.
 8. Sign locally from signer wallets; submit signed PST bundles to safe-service.
 9. Broadcast once quorum is reached.

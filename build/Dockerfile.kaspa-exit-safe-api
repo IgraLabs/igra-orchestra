@@ -1,11 +1,14 @@
-FROM golang:1.26-bookworm AS pst-builder
+FROM rust:1.91-bookworm AS pst-builder
 
 WORKDIR /src
-COPY build/repos/kaspad/go.mod build/repos/kaspad/go.sum ./
-RUN go mod download
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends clang cmake git libclang-dev libssl-dev pkg-config protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY build/repos/kaspad/ .
-RUN go build -o /out/kaspa-pst ./cmd/kaspa-pst
+COPY build/repos/igra-proposal-builder-rs/ .
+RUN mkdir -p /out \
+    && cargo build --locked --release -p kaspa-pst \
+    && cp target/release/kaspa-pst /out/kaspa-pst
 
 FROM python:3.13-slim
 

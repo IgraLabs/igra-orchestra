@@ -143,32 +143,15 @@ services:
     depends_on:
       kaspad:
         condition: service_healthy
-      kaspa-safe-db:
-        condition: service_healthy
-      kaspa-safe-redis:
-        condition: service_healthy
+      execution-layer:
+        condition: service_started
       kaspa-safe-api:
         condition: service_healthy
     environment:
-      DJANGO_SETTINGS_MODULE: config.settings.production
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-kaspa-exit-devnet-secret}
-      DJANGO_ALLOWED_HOSTS: "*"
-      DATABASE_URL: psql://postgres:postgres@kaspa-safe-db:5432/postgres
-      REDIS_URL: redis://kaspa-safe-redis:6379/0
-      CELERY_BROKER_URL: django://
-      ETH_L2_NETWORK: "0"
-      ETHEREUM_NODE_URL: http://execution-layer:8545
-      ETHEREUM_TRACING_NODE_URL: http://execution-layer:8545
-      KASPA_PST_HELPER_PATH: /usr/local/bin/kaspa-pst
-      KASPA_PST_HELPER_TIMEOUT: "60"
-      KASPA_EXIT_BUILDER_CONFIG: ${KASPA_EXIT_BUILDER_CONFIG:-/work/proposal-builder/builder.json}
-      KASPA_FEDERATION_ID: ${KASPA_FEDERATION_ID:-}
-      KASPA_FEDERATION_ID_FILE: ${KASPA_FEDERATION_ID_FILE:-/work/results/federation.json}
+      RUST_LOG: ${RUST_LOG:-info}
+      IGRA_PROPOSAL_BUILDER_CONFIG: ${IGRA_PROPOSAL_BUILDER_CONFIG:-/work/proposal-builder/builder.json}
       KASPA_EXIT_BUILDER_MODE: ${KASPA_EXIT_BUILDER_MODE:-daemon}
       KASPA_EXIT_BUILDER_POLL_SECONDS: ${KASPA_EXIT_BUILDER_POLL_SECONDS:-300}
-      KASPA_EXIT_BUILDER_SKIP_FINALITY_CHECK: ${KASPA_EXIT_BUILDER_SKIP_FINALITY_CHECK:-false}
-      KASPA_EXIT_BUILDER_SKIP_SUBMIT: ${KASPA_EXIT_BUILDER_SKIP_SUBMIT:-false}
-      KASPA_EXIT_BUILDER_ALLOW_NON_IGRA_LOCK_SCRIPT_FOR_TESTING: ${KASPA_EXIT_BUILDER_ALLOW_NON_IGRA_LOCK_SCRIPT_FOR_TESTING:-false}
     volumes:
       - ./build/kaspa-exit-devnet:/work
     networks:
