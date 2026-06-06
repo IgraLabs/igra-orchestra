@@ -207,6 +207,7 @@ services:
       - IGRA_Q_EL_HOST
       - IGRA_Q_EL_TRANSPORT
       - KASPAD_ENABLE_UNSYNCED_MINING
+      - VIADUCT_ALLOW_UNSYNCED_CONSENSUS_FALLBACK
       - POST_FORK_LOCK_SCRIPT_PUBKEY
       - LOCK_SCRIPT_FORK_DAA_SCORE
       - RUST_LOG=info,kaspa_viaduct=trace,kaspa_igra_adapter=trace,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace
@@ -227,6 +228,7 @@ services:
           ARGS="--$$NETWORK --nodnsseed $$ARGS"
         fi
         [ "$${KASPAD_ENABLE_UNSYNCED_MINING:-false}" = "true" ] && ARGS="$$ARGS --enable-unsynced-mining"
+        [ "$${VIADUCT_ALLOW_UNSYNCED_CONSENSUS_FALLBACK:-false}" = "true" ] && ARGS="$$ARGS --viaduct-allow-unsynced-consensus-fallback"
 
         IGRA_ENABLED="$${IGRA_ENABLE:-true}"
         if [ "$$IGRA_ENABLED" = "true" ]; then
