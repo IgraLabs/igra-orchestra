@@ -88,8 +88,13 @@ MINING_ADDRESS=
 The template pins the current M1 q genesis hash:
 
 ```text
+IGRA_LANE_ID=01000001
 IGRA_Q_GENESIS_BLOCK_HASH=0x1982147dd8e731fc6463b3a8a2c78b92cd8ea6dcb21accdcd60de9ee659c375b
 ```
+
+`IGRA_LANE_ID` is the Kaspa/KIP-21 Igra lane namespace used by viaduct/ATAN.
+It is not the q logic zone id; q-zone routing still uses logic zone id
+`0x0002` inside the `0x9F` payload envelope.
 
 If any q genesis input changes, recompute it with q-ethrex:
 

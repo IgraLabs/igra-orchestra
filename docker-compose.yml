@@ -201,6 +201,7 @@ services:
       - TX_ID_PREFIX
       - IGRA_ENABLE
       - IGRA_REQUIRE_ATAN_IMPORT
+      - IGRA_LANE_ID
       - IGRA_Q_ZONE_ENABLE
       - IGRA_Q_GENESIS_BLOCK_HASH
       - IGRA_Q_EL_HOST
@@ -241,6 +242,7 @@ services:
             --igra-entry-min-amount=${IGRA_ENTRY_MIN_AMOUNT} \
             --igra-el-host=http://execution-layer"
 
+          [ -n "$${IGRA_LANE_ID:-}" ] && ARGS="$$ARGS --igra-lane-id=$$IGRA_LANE_ID"
           [ "$$ENABLE_PERF_DIAGNOSTICS" = "true" ] && ARGS="$$ARGS --igra-enable-perf-diagnostics"
           [ "$$ENABLE_EVENT_LOGGING" = "true" ] && ARGS="$$ARGS --igra-enable-event-logging"
           [ -n "$$WARM_START_BLOCK" ] && ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
