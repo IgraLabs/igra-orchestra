@@ -1,0 +1,31 @@
+services:
+  execution-layer:
+    container_name: qtn10-execution-layer
+    ports: !override
+      - "127.0.0.1:${IGRA_CANONICAL_HTTP_PORT:-39445}:8545"
+      - "127.0.0.1:${IGRA_CANONICAL_WS_PORT:-39446}:8546"
+
+  kaspad:
+    container_name: qtn10-kaspad
+    ports: !override
+      - "127.0.0.1:${IGRA_TN10_KASPAD_GRPC_HOST_PORT:-59210}:${KASPAD_GRPC_PORT:-16210}"
+      - "127.0.0.1:${IGRA_TN10_KASPAD_P2P_HOST_PORT:-59211}:${KASPAD_P2P_PORT:-16211}"
+      - "127.0.0.1:${IGRA_TN10_KASPAD_BORSH_HOST_PORT:-59212}:${KASPAD_BORSH_PORT:-17210}"
+      - "127.0.0.1:${IGRA_TN10_KASPAD_JSON_HOST_PORT:-59213}:${KASPAD_JSON_PORT:-18210}"
+
+  q-execution-layer:
+    container_name: qtn10-q-execution-layer
+    ports: !override
+      - "127.0.0.1:${IGRA_Q_HTTP_PORT:-39545}:8545"
+      - "127.0.0.1:${IGRA_Q_WS_PORT:-39546}:8546"
+
+  node-health-check-client:
+    container_name: qtn10-node-health-check-client
+
+  kaswallet-0:
+    container_name: qtn10-kaswallet-0
+    ports: !override
+      - "127.0.0.1:${IGRA_TN10_KASWALLET_0_HOST_PORT:-38082}:8082"
+
+  rpc-provider-0:
+    container_name: qtn10-rpc-provider-0

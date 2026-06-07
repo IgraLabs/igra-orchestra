@@ -164,15 +164,26 @@ docker compose \
   up -d
 ```
 
-## Official Galleon Plus Q-Zone
+## Official Galleon TN10 Plus Q-Zone
 
-To run beside official Galleon staging with original canonical Igra ethrex,
-prepare the normal Galleon ethrex env first:
+To run beside official Galleon testnet-10 with canonical Igra ethrex and a
+Falcon-L5 q-zone sidecar, start from the root Galleon TN10 env. Do not use the
+older `deploy/ethrex-galleon-staging/.env.example`; it predates the current
+`testnet-10` lane wording.
 
 ```sh
-cp deploy/ethrex-galleon-staging/.env.example .env
+cp .env.galleon-testnet.example .env
 cat versions.galleon-testnet.env >> .env
 cat deploy/igra-q-zone-staging/.env.q-zone.example >> .env
+```
+
+For the q-zone development branch, override the ethrex images after appending
+the files above:
+
+```text
+ETHREX_VERSION=igra-q-logic-zone
+Q_ETHREX_VERSION=igra-q-logic-zone
+NODE_ID=GTN-q-zone-<your-node-name>
 ```
 
 Generate a second JWT:
@@ -183,13 +194,16 @@ openssl rand -hex 32 > keys/q-jwt.hex
 chmod 600 keys/q-jwt.hex
 ```
 
-Use all three compose files:
+On shared staging hosts use the testnet override as the last compose file. It
+renames containers to `qtn10-*` and moves host ports away from any existing
+`galleon-*` or isolated `qzone-*` stack:
 
 ```sh
 docker compose \
   -f docker-compose.yml \
   -f deploy/ethrex-galleon-staging/docker-compose.ethrex-galleon.yml \
   -f deploy/igra-q-zone-staging/docker-compose.q-zone-staging.yml \
+  -f deploy/igra-q-zone-staging/docker-compose.q-zone-testnet.yml \
   --profile backend \
   --profile q-zone \
   config --quiet
@@ -201,19 +215,26 @@ Then start with the same files and profiles.
 
 Default q-zone staging ports:
 
-| Service | Host | Container |
-|---|---:|---:|
-| q-ethrex HTTP RPC | `127.0.0.1:29545` | `8545` |
-| q-ethrex WebSocket RPC | `127.0.0.1:29546` | `8546` |
-| kaspad gRPC | `56210` | `16210` |
-| kaspad P2P | `56211` | `16211` |
-| kaspad Borsh RPC | `57210` | `17210` |
-| kaspad JSON RPC | `58210` | `18210` |
+| Mode | Service | Host | Container |
+|---|---|---:|---:|
+| Isolated devnet | q-ethrex HTTP RPC | `127.0.0.1:29545` | `8545` |
+| Isolated devnet | q-ethrex WebSocket RPC | `127.0.0.1:29546` | `8546` |
+| Isolated devnet | kaspad gRPC | `56210` | `16210` |
+| Isolated devnet | kaspad P2P | `56211` | `16211` |
+| Isolated devnet | kaspad Borsh RPC | `57210` | `17210` |
+| Isolated devnet | kaspad JSON RPC | `58210` | `18210` |
+| Official TN10 sidecar | canonical ethrex HTTP RPC | `127.0.0.1:39445` | `8545` |
+| Official TN10 sidecar | canonical ethrex WebSocket RPC | `127.0.0.1:39446` | `8546` |
+| Official TN10 sidecar | q-ethrex HTTP RPC | `127.0.0.1:39545` | `8545` |
+| Official TN10 sidecar | q-ethrex WebSocket RPC | `127.0.0.1:39546` | `8546` |
+| Official TN10 sidecar | kaspad gRPC | `127.0.0.1:59210` | `16210` |
+| Official TN10 sidecar | kaspad P2P | `127.0.0.1:59211` | `16211` |
+| Official TN10 sidecar | kaspad Borsh RPC | `127.0.0.1:59212` | `17210` |
+| Official TN10 sidecar | kaspad JSON RPC | `127.0.0.1:59213` | `18210` |
 
 Change the host ports in `.env` or the override before using a shared staging
 host if any port is already occupied.
 
 The kaspad ports above are applied only by
-`docker-compose.q-zone-devnet.yml`. The official Galleon sidecar mode keeps the
-Galleon kaspad ports from `docker-compose.ethrex-galleon.yml` and only adds the
-q-ethrex RPC ports.
+`docker-compose.q-zone-devnet.yml` for isolated devnet and
+`docker-compose.q-zone-testnet.yml` for official TN10 sidecar mode.
