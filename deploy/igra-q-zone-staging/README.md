@@ -181,6 +181,7 @@ For the q-zone development branch, override the ethrex images after appending
 the files above:
 
 ```text
+COMPOSE_PROJECT_NAME=qtn10-q-zone-stage
 KASPAD_VERSION=igra-q-logic-zone
 ETHREX_VERSION=galleon-c19d255e
 Q_ETHREX_VERSION=igra-q-logic-zone
@@ -193,6 +194,11 @@ this official-testnet mode. It must compute the official canonical genesis hash
 Use `Q_ETHREX_VERSION=igra-q-logic-zone` only for the q-zone sidecar. Do not
 point canonical official TN10 at the development ethrex image unless its
 computed genesis is first proven to match the official network.
+
+`COMPOSE_PROJECT_NAME` is required on shared hosts. The compose files override
+container names to `qtn10-*`, but Docker volumes and networks are scoped by the
+project name. Without a unique project name, this sidecar can reuse
+`igra-orchestra-testnet-10_*` volumes from another TN10 stack.
 
 Generate a second JWT:
 
