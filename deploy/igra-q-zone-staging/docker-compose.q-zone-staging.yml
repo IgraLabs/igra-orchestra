@@ -1,3 +1,12 @@
+volumes:
+  ethrex_data:
+  ethrex_ipc:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=10m
+
 services:
   kaspad:
     build:
@@ -5,7 +14,28 @@ services:
 
   execution-layer:
     build:
+      context: build/repos/ethrex
+      dockerfile: Dockerfile
       ssh: !override []
+      args: !override
+        PROFILE: release
+    image: igranetwork/ethrex:${ETHREX_VERSION:-igra-q-logic-zone}
+    volumes: !override
+      - ethrex_data:/app/data/
+      - ./keys/jwt.hex:/app/jwt.hex
+      - ethrex_ipc:/app/socket
+      - ./network-params:/app/network-params
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          bash -lc ': > /dev/tcp/127.0.0.1/8545' &&
+          bash -lc ': > /dev/tcp/127.0.0.1/8546' &&
+          bash -lc ': > /dev/tcp/127.0.0.1/8551'
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 5s
 
   q-execution-layer:
     container_name: qzone-q-execution-layer

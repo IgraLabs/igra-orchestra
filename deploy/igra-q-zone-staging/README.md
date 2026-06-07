@@ -7,8 +7,8 @@ The intended M1 topology is:
 
 ```text
 Kaspa / rusty-kaspa-private
-  |-- 0x92/0x94/0x95 --> canonical execution-layer
-  `-- 0x9F zone_id=0x0002 --> q-execution-layer
+  |-- 0x92/0x94/0x95 --> canonical ethrex execution-layer
+  `-- 0x9F zone_id=0x0002 --> Falcon-L5 q-ethrex execution-layer
 ```
 
 Both zones use the same Kaspa sequencing source. The canonical first Igra zone
@@ -26,12 +26,14 @@ Expected q-zone repo layout:
 
 ```text
 build/repos/rusty-kaspa-private  branch igra-q-logic-zone
+build/repos/ethrex               branch igra-q-logic-zone
 build/repos/ethrex-q             branch igra-q-logic-zone
 ```
 
-`build/repos/ethrex-q` is the Falcon-L5 q-ethrex checkout. If the canonical
-first zone is also ethrex, keep it as a separate checkout under
-`build/repos/ethrex`.
+`build/repos/ethrex` is the canonical first-zone ethrex checkout. It is built
+without the `falcon-l5` feature and keeps the canonical/ECDSA transaction path.
+`build/repos/ethrex-q` is the Falcon-L5 q-ethrex checkout. It is built with
+`BUILD_FLAGS="--features falcon-l5"` and serves only the q logic zone.
 
 ## Q-Ethrex Packaging
 
@@ -61,6 +63,7 @@ The script clones/checks out:
 
 ```text
 rusty-kaspa-private -> igra-q-logic-zone
+ethrex              -> igra-q-logic-zone
 ethrex-q            -> igra-q-logic-zone
 ```
 
