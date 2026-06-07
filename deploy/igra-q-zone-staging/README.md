@@ -181,11 +181,18 @@ For the q-zone development branch, override the ethrex images after appending
 the files above:
 
 ```text
-ETHREX_VERSION=igra-q-logic-zone
-Q_ETHREX_VERSION=igra-q-logic-zone
 KASPAD_VERSION=igra-q-logic-zone
+ETHREX_VERSION=galleon-c19d255e
+Q_ETHREX_VERSION=igra-q-logic-zone
 NODE_ID=GTN-q-zone-<your-node-name>
 ```
+
+`ETHREX_VERSION` is intentionally the canonical Galleon TN10 ethrex image in
+this official-testnet mode. It must compute the official canonical genesis hash
+`0x9816ede09a09a8e89c3c0158db66c3ea9ee16a81dfc7f2b80f7f38be5b1c28f2`.
+Use `Q_ETHREX_VERSION=igra-q-logic-zone` only for the q-zone sidecar. Do not
+point canonical official TN10 at the development ethrex image unless its
+computed genesis is first proven to match the official network.
 
 Generate a second JWT:
 
