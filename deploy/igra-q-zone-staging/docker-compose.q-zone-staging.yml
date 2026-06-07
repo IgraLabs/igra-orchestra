@@ -1,4 +1,12 @@
 services:
+  kaspad:
+    build:
+      ssh: !override []
+
+  execution-layer:
+    build:
+      ssh: !override []
+
   q-execution-layer:
     container_name: qzone-q-execution-layer
     build:
