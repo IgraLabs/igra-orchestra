@@ -223,6 +223,9 @@ services:
       - "127.0.0.1:${KASPAD_JSON_PORT}:${KASPAD_JSON_PORT}"
     environment:
       - KASPAD_ADD_PEER
+      - KASPAD_DISABLE_DNS_SEEDING
+      - KASPAD_OUTPEERS
+      - KASPAD_MAXINPEERS
       - KASPAD_NONINTERACTIVE
       - KASPAD_UA_RULE
       - ENABLE_PERF_DIAGNOSTICS
@@ -272,6 +275,9 @@ services:
         if [ -n "$$KASPAD_UA_RULE" ]; then
           ARGS="$$ARGS --ua-rule=$$KASPAD_UA_RULE"
         fi
+        [ "$${KASPAD_DISABLE_DNS_SEEDING:-false}" = "true" ] && ARGS="$$ARGS --nodnsseed"
+        [ -n "$${KASPAD_OUTPEERS:-}" ] && ARGS="$$ARGS --outpeers=$$KASPAD_OUTPEERS"
+        [ -n "$${KASPAD_MAXINPEERS:-}" ] && ARGS="$$ARGS --maxinpeers=$$KASPAD_MAXINPEERS"
         [ "$${KASPAD_ENABLE_UNSYNCED_MINING:-false}" = "true" ] && ARGS="$$ARGS --enable-unsynced-mining"
         [ "$${VIADUCT_ALLOW_UNSYNCED_CONSENSUS_FALLBACK:-false}" = "true" ] && ARGS="$$ARGS --viaduct-allow-unsynced-consensus-fallback"
 

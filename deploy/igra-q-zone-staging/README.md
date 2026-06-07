@@ -94,7 +94,7 @@ IGRA_LANE_ID=97b10000
 IGRA_LAUNCH_DAA_SCORE=1
 L1_REFERENCE_DAA_SCORE=0
 GENESIS_BLOCK_HASH=0xd936e97a863e49e00482d1cd4b8c23229e54c2d7eca768c4f5375169ad714148
-IGRA_Q_GENESIS_BLOCK_HASH=0xe96a6aad3422dbf7c028107fed08fa4656b6363828324d759132efa8718181e7
+IGRA_Q_GENESIS_BLOCK_HASH=0x80c9ae474b688903c78248335dc1a3072b849f552affce07bbe77b5c5e57b62c
 ```
 
 Do not copy Galleon/testnet DAA anchors into this isolated mode. A private
@@ -114,13 +114,20 @@ payload envelope.
 The isolated devnet template also enables:
 
 ```text
+KASPAD_DISABLE_DNS_SEEDING=true
+KASPAD_OUTPEERS=0
+KASPAD_MAXINPEERS=0
 KASPAD_ENABLE_UNSYNCED_MINING=true
 MINER_MINE_WHEN_NOT_SYNCED=true
 VIADUCT_ALLOW_UNSYNCED_CONSENSUS_FALLBACK=true
 ```
 
 These are required only for a from-zero isolated stack with no Kaspa peers.
-Do not use them for official Igra testnet/mainnet operation.
+`NETWORK=testnet-10` and `IGRA_LANE_ID=97b10000` keep the private stack
+aligned with the current Igra/Kaspa tn10 lane format, while
+`KASPAD_DISABLE_DNS_SEEDING=true` and `KASPAD_OUTPEERS=0` keep it isolated
+from public tn10. Do not use the isolation or unsynced-mining settings for
+official Igra testnet/mainnet operation.
 
 If any q genesis input changes, recompute it with q-ethrex:
 
