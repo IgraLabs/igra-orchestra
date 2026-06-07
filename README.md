@@ -71,9 +71,9 @@ For detailed guides, see:
 
 ```bash
 # 1. Copy and configure environment (choose your network)
-cp .env.mainnet.example .env           # For IGRA mainnet
+cp .env.mainnet.example .env && cat versions.mainnet.env >> .env                    # For IGRA mainnet
 # OR
-cp .env.galleon-testnet.example .env   # For Galleon testnet
+cp .env.galleon-testnet.example .env && cat versions.galleon-testnet.env >> .env    # For Galleon testnet (testnet-10)
 # Edit .env and set USE_PREBUILT_IMAGES=true
 
 # 2. Setup repositories and pull images
@@ -130,9 +130,9 @@ Follow these steps before the first run:
     ```bash
     cp .env.dev.example .env                    # For development (build from source)
     # OR
-    cp .env.mainnet.example .env               # For IGRA mainnet (pre-built images)
+    cp .env.mainnet.example .env && cat versions.mainnet.env >> .env
     # OR
-    cp .env.galleon-testnet.example .env        # For Galleon testnet (pre-built images)
+    cp .env.galleon-testnet.example .env && cat versions.galleon-testnet.env >> .env
     # Edit .env and add/modify lines like these:
     # RETH_BRANCH=production
     # KASWALLET_BRANCH=feature/new-api
@@ -267,7 +267,7 @@ Docker Compose will automatically pick up this variable when you run `docker com
 
 ### Image Versions
 
-Docker image versions are centrally pinned in per-network version files: `versions.mainnet.env` and `versions.testnet.env`. These files are used by `docker-compose.yml`, setup scripts, and deployment tools. Update versions there when upgrading services.
+Docker image versions are centrally pinned in per-network version files: `versions.mainnet.env` and `versions.galleon-testnet.env`. These files are used by `docker-compose.yml`, setup scripts, and deployment tools. Update versions there when upgrading services.
 
 ## Running the Stack
 
@@ -375,15 +375,25 @@ WARM_START_BLOCK=200184247
 # Skip lock script public key verification (TESTING ONLY, default: false)
 IGRA_SKIP_LOCK_SCRIPT_CHECK=false
 
-# Transaction ID prefix for ATAN (hex-encoded, e.g., 97b1)
-# Used by kaspad (--atan-transaction-id-prefix) and RPC provider
+# Legacy/pre-KIP21 transaction ID prefix for ATAN (hex-encoded, e.g., 97b1).
+# Used by kaspad (--atan-transaction-id-prefix) for ATAN filtering and as
+# the fallback ATAN import namespace when IGRA_LANE_ID is unset. Not used
+# for post-KIP21 transaction construction.
 TX_ID_PREFIX=97b1
+
+# Post-KIP21 dedicated IGRA lane namespace (4 bytes / 8 lowercase hex chars,
+# no 0x prefix). RPC, kaspad, and kaswallet must all see the same value:
+# kaspad receives --igra-lane-id=$IGRA_LANE_ID; kaswallet receives
+# --subnetwork-id=$IGRA_LANE_ID (appended by the docker-compose.yml
+# entrypoint); RPC reads IGRA_LANE_ID directly. ATAN import/upload paths
+# use this value instead of TX_ID_PREFIX.
+IGRA_LANE_ID=97b10000
 
 # CDN base URL for ATAN data (required)
 CDN_BASE_URL=https://dyehoijgeqfp8.cloudfront.net
 
 # ATAN auto-import URL (passes --atan-import-url flag, remote URLs only)
-# Auto-constructed from CDN_BASE_URL, NETWORK and TX_ID_PREFIX by default
+# Auto-constructed from CDN_BASE_URL, NETWORK and IGRA_LANE_ID/TX_ID_PREFIX by default
 # Override only if you need a custom remote URL:
 # ATAN_IMPORT_URL=https://custom-cdn.example.com/index.pb
 ```
@@ -407,12 +417,14 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork
 ## Documentation
 
 - [Mainnet Deployment Guide](doc/quick-setup-mainnet.md) - Public mainnet deployment with pre-built images
-- [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md) - Public Galleon testnet deployment with pre-built images
+- [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md) - Public Galleon testnet (testnet-10) deployment with pre-built images
+- [Galleon -> testnet-10 Migration Guide](doc/node-operations/migrate-galleon-to-testnet-10.md) - One-shot upgrade for existing Galleon operators on `NETWORK=testnet`
 - [Ethrex Mainnet Override](deploy/ethrex-mainnet/README.md) - Replace mainnet `execution-layer` with `ethrex`
 - [Ethrex Galleon Override](deploy/ethrex-galleon-staging/README.md) - Galleon-specific `ethrex` deployment package
 - [Kaspa Wallet Guide](doc/kaspa-wallet.md) - Wallet setup for all networks
 - [Log Management](doc/log-management.md) - Automated log cleanup for servers
 - [Docker Volume Permissions](doc/troubleshooting/docker-volume-permissions.md) - Fix permission denied errors
+- [Kaspad DB Upgrade Prompt](doc/troubleshooting/kaspad-db-upgrade.md) - Run the one-time noninteractive kaspad DB metadata upgrade
 - [Service Restart Debugging](doc/troubleshooting/service-restart-debugging.md) - Diagnose fail-fast exits, restart loops, and Docker log persistence
 - [SSL Certificate Issues](doc/troubleshooting/ssl-certificate.md) - Fix Traefik certificate resolver errors
 
@@ -428,3 +440,28 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork
 6. **Missing JWT file**: Ensure you've created the JWT file before starting services
 7. **Service connectivity**: Ensure all services can properly connect by starting profiles in the correct order and allowing time for services to initialize
 8. **SSH authentication during build**: If `docker compose build` fails with "failed to authenticate when downloading repository", ensure your SSH agent is running with your GitHub key loaded: `eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_ed25519`
+
+## DoS Hygiene (ENG-1020)
+
+Traefik applies per-real-IP rate limiting, concurrent in-flight caps, request-body size caps, and entry-point read/write/idle timeouts on every public entry point (`rpc`, `websecure`, `web`, `explorer_*`, `el_stats`). The `wallet-api`, `health`, `health-http`, and `web-redirect` routers are intentionally left untouched.
+
+Tunable env vars (all optional, defaults shown):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ORCHESTRA_TRUSTED_PROXIES` | `""` | Comma-separated IP(s)/CIDRs of upstream proxies whose `X-Forwarded-For` to trust. |
+| `RPC_RATE_LIMIT_AVERAGE` | `200` | Avg req/s per real client IP. |
+| `RPC_RATE_LIMIT_BURST` | `400` | Burst capacity. |
+| `RPC_RATE_LIMIT_PERIOD` | `1s` | Token-refill period. |
+| `RPC_MAX_IN_FLIGHT` | `128` | Max concurrent requests per real client IP. |
+| `MAX_REQUEST_BODY_BYTES` | `10485760` | Max request body (10 MB); larger requests get HTTP 413. |
+| `MEM_REQUEST_BODY_BYTES` | `1048576` | Memory buffer before spilling to disk (1 MB). |
+| `ENTRYPOINT_READ_TIMEOUT` | `30s` | Header + body read timeout (slow-loris protection). |
+| `ENTRYPOINT_WRITE_TIMEOUT` | `30s` | Response write timeout. |
+| `ENTRYPOINT_IDLE_TIMEOUT` | `60s` | Keep-alive idle timeout. |
+
+**Trusted-proxy caveat:** when orchestra sits behind another proxy (e.g. an RPC load balancer), set `ORCHESTRA_TRUSTED_PROXIES` to the proxy's egress IP(s) so rate-limit buckets key on the real client IP, not the proxy. Leaving it empty is correct for direct-internet deployments.
+
+**Auto-populated by setup scripts:** `scripts/setup-mainnet.sh` and `scripts/setup-galleon-testnet.sh` resolve their known LB hostnames (`rpc.igralabs.com` / `galleon-testnet.igralabs.com`) and write `RPC_LB_HOSTNAME` + `ORCHESTRA_TRUSTED_PROXIES` into `.env` automatically. Re-run the setup script or edit `.env` manually if any LB IP ever changes.
+
+Responses: oversized bodies return **HTTP 413**; rate-limited or over-the-concurrency-cap requests return **HTTP 429**. Both are recorded in the Traefik access log for observability.

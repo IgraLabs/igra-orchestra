@@ -25,9 +25,10 @@ If the automated script above doesn't work for your environment, follow these ma
 
 | Parameter | Value |
 |-----------|-------|
-| `NETWORK` | testnet |
+| `NETWORK` | testnet-10 |
 | `IGRA_CHAIN_ID` | 38836 |
 | `TX_ID_PREFIX` | 97b4 |
+| `IGRA_LANE_ID` | 97b10000 |
 | `IGRA_LAUNCH_DAA_SCORE` | 368045400 |
 | `GENESIS_BLOCK_HASH` | 0xfa870bcc16b6fbb3225bcc89a92f38e02c95fdc3e3b51a58d066ac7e1e4162a2 |
 | `L1_REFERENCE_DAA_SCORE` | 361004030 |
@@ -52,7 +53,7 @@ cd igra-orchestra
 
 ```bash
 cp .env.galleon-testnet.example .env
-cat versions.testnet.env >> .env
+cat versions.galleon-testnet.env >> .env
 ```
 Edit `.env` and fill in your node-specific values:
 - `NODE_ID` - Your node identifier
@@ -95,7 +96,7 @@ Check hash field: it should match specified in the .env file.
 
 Once kaspad is synced, you can monitor IGRA adapter activity:
 ```bash
-docker logs -f -n 10 kaspad | docker run --rm -i --entrypoint /app/adapter-stats igranetwork/kaspad:$(grep KASPAD_VERSION versions.testnet.env | cut -d= -f2)
+docker logs -f -n 10 kaspad | docker run --rm -i --entrypoint /app/adapter-stats igranetwork/kaspad:$(grep KASPAD_VERSION versions.galleon-testnet.env | cut -d= -f2)
 ```
 
 After kaspad sync, you should be able to see the progress of the building blocks:
@@ -158,10 +159,10 @@ Now you can wait till IGRA network is synced and reaches consensus with other no
 Generate keys for each worker (0-4):
 
 ```bash
-source versions.testnet.env
+source versions.galleon-testnet.env
 for i in {0..4}; do
   docker run --rm -it -v $(pwd)/keys:/keys --entrypoint /app/kaswallet-create \
-    igranetwork/kaswallet:${KASWALLET_VERSION} --testnet -k /keys/keys.kaswallet-$i.json
+    igranetwork/kaswallet:${KASWALLET_VERSION} --testnet --testnet-suffix=10 -k /keys/keys.kaswallet-$i.json
 done
 ```
 
@@ -221,6 +222,14 @@ Check its logs:
 ```bash
 docker compose logs -f node-health-check-client
 ```
+
+## Upgrading from `NETWORK=testnet`
+
+Existing Galleon operators on the legacy `NETWORK=testnet` should follow the
+[Galleon → testnet-10 migration guide](node-operations/migrate-galleon-to-testnet-10.md)
+to preserve IBD state instead of resyncing from scratch. The transitional
+`NETWORK=testnet` alias is still accepted by `scripts/dev/setup-repos.sh`
+while operators migrate; it will be removed in a later release.
 
 ## Troubleshooting
 

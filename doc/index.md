@@ -20,6 +20,7 @@ Choose your deployment guide:
 ## Troubleshooting
 
 - **[Docker Volume Permissions](troubleshooting/docker-volume-permissions.md)** - Fix permission denied errors
+- **[Kaspad DB Upgrade Prompt](troubleshooting/kaspad-db-upgrade.md)** - Run the one-time noninteractive kaspad DB metadata upgrade
 - **[Service Restart Debugging](troubleshooting/service-restart-debugging.md)** - Diagnose fail-fast exits, restart loops, and Docker log persistence
 - **[SSL Certificate Issues](troubleshooting/ssl-certificate.md)** - Fix Traefik certificate resolver errors
 

@@ -25,7 +25,8 @@ All operational variables across the stack.
 | Variable | Where | Description |
 |----------|-------|-------------|
 | `NETWORK` | `.env` | Network to connect to (mainnet, testnet) |
-| `TX_ID_PREFIX` | `.env` | Transaction ID prefix for ATAN filtering |
+| `TX_ID_PREFIX` | `.env` | Legacy/pre-KIP21 transaction ID prefix for ATAN filtering. **Required everywhere.** Compose refuses to render `docker-compose.yml` and `docker-compose.atan.yml` if unset (`${TX_ID_PREFIX:?…}` guards on RPC, execution-layer, and atan-uploader env), and the kaspad entrypoints additionally hard-exit at runtime — an empty prefix would render as `--atan-transaction-id-prefix=` and silently match every transaction, degrading the post-Toccata "lane AND prefix" gate to lane-only mode. Not used for post-KIP21 transaction construction. |
+| `IGRA_LANE_ID` | `.env` | Canonical post-KIP21 dedicated IGRA lane namespace, currently `97b10000` (4 bytes / 8 lowercase hex chars, no `0x`). **Required everywhere.** Compose refuses to render `docker-compose.yml` and `docker-compose.atan.yml` if unset (`${IGRA_LANE_ID:?…}` guards on RPC, execution-layer, and atan-uploader env), and the kaspad and kaswallet entrypoints additionally hard-exit at runtime, mirroring post-Toccata kaspad's own enforcement (`kaspad/src/daemon.rs:828`). Reaches kaspad as `--igra-lane-id`, kaswallet as `--subnetwork-id`, and RPC as `IGRA_LANE_ID` directly; also used as the ATAN import/upload namespace. RPC, kaspad, and kaswallet must all see the same value. |
 | `CDN_BASE_URL` | `.env` | CDN base URL for ATAN data import |
 | `ATAN_IMPORT_URL` | `.env` | Optional override for auto-constructed import URL |
 | `KASPAD_ADD_PEER` | `.env` | Optional peer address |

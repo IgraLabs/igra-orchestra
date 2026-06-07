@@ -71,7 +71,7 @@ mainnet/testnet directory.
 
 ```sh
 cp deploy/igra-q-zone-staging/.env.devnet.example .env
-cat versions.testnet.env >> .env
+cat versions.galleon-testnet.env >> .env
 mkdir -p keys network-params
 openssl rand -hex 32 > keys/jwt.hex
 openssl rand -hex 32 > keys/q-jwt.hex
@@ -89,7 +89,8 @@ The isolated devnet template is a private from-zero chain. It intentionally
 uses private devnet DAA anchors:
 
 ```text
-IGRA_LANE_ID=01000001
+NETWORK=testnet-10
+IGRA_LANE_ID=97b10000
 IGRA_LAUNCH_DAA_SCORE=1
 L1_REFERENCE_DAA_SCORE=0
 GENESIS_BLOCK_HASH=0xd936e97a863e49e00482d1cd4b8c23229e54c2d7eca768c4f5375169ad714148
@@ -105,8 +106,10 @@ Official Igra testnet/mainnet sidecar deployments keep their real
 launch/reference DAA values.
 
 `IGRA_LANE_ID` is the Kaspa/KIP-21 Igra lane namespace used by viaduct/ATAN.
-It is not the q logic zone id; q-zone routing still uses logic zone id
-`0x0002` inside the `0x9F` payload envelope.
+For M1 we use the official Igra lane namespace from the `v3.0` orchestra
+branch, `97b10000`, even in the isolated private stack. It is not the q logic
+zone id; q-zone routing still uses logic zone id `0x0002` inside the `0x9F`
+payload envelope.
 
 The isolated devnet template also enables:
 
@@ -158,7 +161,7 @@ prepare the normal Galleon ethrex env first:
 
 ```sh
 cp deploy/ethrex-galleon-staging/.env.example .env
-cat versions.testnet.env >> .env
+cat versions.galleon-testnet.env >> .env
 cat deploy/igra-q-zone-staging/.env.q-zone.example >> .env
 ```
 

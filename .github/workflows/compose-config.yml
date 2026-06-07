@@ -1,0 +1,238 @@
+name: Compose Config & Shell Lint
+
+on:
+  pull_request:
+    paths:
+      - 'docker-compose.yml'
+      - 'docker-compose.atan.yml'
+      - '.env.example'
+      - '.env.*.example'
+      - 'versions.*.env'
+      - 'scripts/**/*.sh'
+      - '.github/workflows/compose-config.yml'
+  push:
+    branches: [main]
+
+# Least-privilege: this workflow only reads code and runs static analysis;
+# no secrets are needed and no write scopes should ever be required.
+permissions:
+  contents: read
+
+jobs:
+  compose-config:
+    name: docker compose config (${{ matrix.network }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - network: mainnet
+            env_file: .env.mainnet.example
+            versions_file: versions.mainnet.env
+            allow_todo: false
+          - network: galleon-testnet
+            env_file: .env.galleon-testnet.example
+            versions_file: versions.galleon-testnet.env
+            allow_todo: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Render .env from example + versions
+        run: |
+          cp "${{ matrix.env_file }}" .env
+          cat "${{ matrix.versions_file }}" >> .env
+      - name: Assert placeholder state matches expectations
+        run: |
+          set -e
+          matches="$(awk '/^[[:space:]]*(#|$)/ { next } /TODO_[A-Z0-9_]+_REPLACE_ME/ { print FNR ":" $0 }' .env)"
+          if [ -n "$matches" ]; then
+            if [ "${{ matrix.allow_todo }}" = "true" ]; then
+              echo "ok: ${{ matrix.network }} rendered .env still has TODO placeholders (expected pre-launch)"
+            else
+              echo "FAIL: ${{ matrix.network }} should have no TODO_*_REPLACE_ME placeholders" >&2
+              printf '%s\n' "$matches" >&2
+              exit 1
+            fi
+          elif [ "${{ matrix.allow_todo }}" = "true" ]; then
+            echo "FAIL: ${{ matrix.network }} no longer has TODO placeholders; either values were filled in (drop allow_todo) or example was edited" >&2
+            exit 1
+          fi
+      - name: Render docker-compose config
+        run: docker compose --profile backend --profile frontend-w5 config -q
+      - name: Assert compose-render rejects empty IGRA_LANE_ID and TX_ID_PREFIX
+        run: |
+          set -e
+          # Negative path: compose-render must fail with the targeted error
+          # message when either required variable is removed from .env, so
+          # operators see the failure at `docker compose up` instead of as
+          # a silent lane-only-mode degradation post-Toccata.
+          for var in IGRA_LANE_ID TX_ID_PREFIX; do
+            grep -v "^${var}=" .env > "/tmp/no-${var}.env"
+            err=$(docker compose --env-file "/tmp/no-${var}.env" --profile backend --profile frontend-w5 config -q 2>&1 || true)
+            if printf '%s' "$err" | grep -qF "${var} must be set"; then
+              echo "ok: full-stack render rejected empty ${var}"
+            else
+              printf 'FAIL: full-stack render did not reject empty %s; got:\n%s\n' "$var" "$err" >&2
+              exit 1
+            fi
+          done
+      - name: Assert parser mounts and wallet suffix handling are present
+        run: |
+          docker compose --profile backend --profile frontend-w5 config --format json > compose.json
+          python3 - <<'PY'
+          import json
+          import sys
+
+          with open("compose.json", encoding="utf-8") as fh:
+              services = json.load(fh)["services"]
+
+          parser_users = ["kaspad", *(name for name in services if name.startswith("kaswallet-"))]
+          missing = []
+          for name in parser_users:
+              service = services[name]
+              targets = {volume.get("target") for volume in service.get("volumes", [])}
+              if "/app/parse-network-slug.sh" not in targets:
+                  missing.append(name)
+
+          if missing:
+              print("missing parser mount:", ", ".join(sorted(missing)), file=sys.stderr)
+              sys.exit(1)
+
+          kaswallet_entrypoint = "\n".join(services["kaswallet-0"].get("entrypoint", []))
+          if "--testnet-suffix=$$KASPA_NETSUFFIX" not in kaswallet_entrypoint:
+              print("kaswallet entrypoint does not propagate KASPA_NETSUFFIX", file=sys.stderr)
+              sys.exit(1)
+          if "--subnetwork-id=$$IGRA_LANE_ID" not in kaswallet_entrypoint:
+              print("kaswallet entrypoint does not forward IGRA_LANE_ID as --subnetwork-id", file=sys.stderr)
+              sys.exit(1)
+          if "IGRA_LANE_ID must be set" not in kaswallet_entrypoint:
+              print("kaswallet entrypoint is missing the IGRA_LANE_ID fail-fast guard", file=sys.stderr)
+              sys.exit(1)
+
+          kaspad_entrypoint = "\n".join(services["kaspad"].get("entrypoint", []))
+          if "--igra-lane-id=$$IGRA_LANE_ID" not in kaspad_entrypoint:
+              print("kaspad entrypoint does not forward IGRA_LANE_ID as --igra-lane-id", file=sys.stderr)
+              sys.exit(1)
+          if "IGRA_LANE_ID must be set" not in kaspad_entrypoint:
+              print("kaspad entrypoint is missing the IGRA_LANE_ID fail-fast guard", file=sys.stderr)
+              sys.exit(1)
+          if "TX_ID_PREFIX must be set" not in kaspad_entrypoint:
+              print("kaspad entrypoint is missing the TX_ID_PREFIX fail-fast guard", file=sys.stderr)
+              sys.exit(1)
+          PY
+      - name: Render docker-compose.atan config
+        run: |
+          docker compose -f docker-compose.atan.yml --profile atan-uploader config -q
+          # Negative path: same lane/prefix enforcement as the full stack.
+          for var in IGRA_LANE_ID TX_ID_PREFIX; do
+            grep -v "^${var}=" .env > "/tmp/no-${var}-atan.env"
+            err=$(docker compose --env-file "/tmp/no-${var}-atan.env" -f docker-compose.atan.yml --profile atan-uploader config -q 2>&1 || true)
+            if printf '%s' "$err" | grep -qF "${var} must be set"; then
+              echo "ok: atan render rejected empty ${var}"
+            else
+              printf 'FAIL: atan render did not reject empty %s; got:\n%s\n' "$var" "$err" >&2
+              exit 1
+            fi
+          done
+          docker compose -f docker-compose.atan.yml --profile atan-uploader config --format json > compose-atan.json
+          python3 - <<'PY'
+          import json
+          import sys
+
+          with open("compose-atan.json", encoding="utf-8") as fh:
+              services = json.load(fh)["services"]
+
+          targets = {volume.get("target") for volume in services["kaspad"].get("volumes", [])}
+          if "/app/parse-network-slug.sh" not in targets:
+              print("docker-compose.atan.yml kaspad is missing parser mount", file=sys.stderr)
+              sys.exit(1)
+
+          kaspad_entrypoint = "\n".join(services["kaspad"].get("entrypoint", []))
+          if "--igra-lane-id=$$IGRA_LANE_ID" not in kaspad_entrypoint:
+              print("docker-compose.atan.yml kaspad does not forward IGRA_LANE_ID as --igra-lane-id", file=sys.stderr)
+              sys.exit(1)
+          if "IGRA_LANE_ID must be set" not in kaspad_entrypoint:
+              print("docker-compose.atan.yml kaspad is missing the IGRA_LANE_ID fail-fast guard", file=sys.stderr)
+              sys.exit(1)
+          if "TX_ID_PREFIX must be set" not in kaspad_entrypoint:
+              print("docker-compose.atan.yml kaspad is missing the TX_ID_PREFIX fail-fast guard", file=sys.stderr)
+              sys.exit(1)
+          PY
+
+  slug-parser-tests:
+    name: NETWORK slug parser - reject malformed inputs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Bad slugs must exit non-zero
+        run: |
+          set -e
+          # Each entry tests a distinct rejection class; quoted values include
+          # whitespace and control chars to verify the upfront character check.
+          bad_slugs=(
+            ""
+            "testnet-"
+            "-12"
+            "testnet--12"
+            "mainnet-10"
+            "testnet-abc"
+            "Mainnet"
+            "TESTNET-10"
+            "alphanet"
+            "testnet 12"
+            $'testnet-10\r'
+          )
+          for slug in "${bad_slugs[@]}"; do
+            if NETWORK="$slug" sh ./scripts/lib/parse-network-slug.sh >/dev/null 2>&1; then
+              printf "FAIL: %q was accepted but should have been rejected\n" "$slug" >&2
+              exit 1
+            fi
+            printf "ok: rejected %q\n" "$slug"
+          done
+      - name: Good slugs must parse into the expected family + suffix
+        run: |
+          set -e
+          # Format: slug|expected-family|expected-suffix
+          # NOTE: bare 'testnet' is a transitional alias that the parser normalizes
+          # to 'testnet-10' (Galleon) with a stderr deprecation warning. Once the
+          # alias is removed, this case should be moved to the bad_slugs list.
+          cases=(
+            "mainnet|mainnet|"
+            "testnet|testnet|10"
+            "testnet-10|testnet|10"
+            "devnet|devnet|"
+            "devnet-99|devnet|99"
+          )
+          for row in "${cases[@]}"; do
+            IFS='|' read -r slug expected_family expected_suffix <<<"$row"
+            got=$(NETWORK="$slug" sh -c '. ./scripts/lib/parse-network-slug.sh; printf "%s|%s" "$KASPA_FAMILY" "$KASPA_NETSUFFIX"')
+            want="${expected_family}|${expected_suffix}"
+            if [ "$got" != "$want" ]; then
+              echo "FAIL: NETWORK=$slug parsed to '$got', expected '$want'" >&2
+              exit 1
+            fi
+            echo "ok: $slug -> $got"
+          done
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Lint changed shell scripts
+        run: |
+          shellcheck --severity=warning \
+            scripts/lib/parse-network-slug.sh \
+            scripts/lib/setup-common.sh \
+            scripts/lib/watch-dependencies.sh \
+            scripts/setup-mainnet.sh \
+            scripts/setup-galleon-testnet.sh \
+            scripts/dev/setup-repos.sh \
+            scripts/dev/migrate-galleon-to-testnet-10.sh

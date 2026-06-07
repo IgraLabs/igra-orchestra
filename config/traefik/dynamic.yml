@@ -1,0 +1,29 @@
+# Traefik file-provider dynamic config.
+#
+# Workaround for Traefik docker provider failing to resolve `rpc-buffering`
+# and `health-rate-limit` middlewares when referenced from routers declared
+# on rpc-provider-* and execution-layer containers. The same labels declared
+# on the traefik container resolve fine for routers on traefik itself, but
+# routers on other containers report `middleware "<name>@docker" does not
+# exist`. The other cross-container middlewares (cors, rpc-rate-limit,
+# rpc-in-flight) keep resolving via the docker provider — only these two
+# trip the bug. Declaring them here exposes them under `@file` to every
+# router regardless of where the router lives.
+#
+# .env substitution does not apply to file-provider configs. The values below
+# match the defaults that were previously inlined as
+# ${MAX_REQUEST_BODY_BYTES:-10485760} and ${MEM_REQUEST_BODY_BYTES:-1048576};
+# adjust here if you need to deviate from the defaults on a given stage.
+
+http:
+  middlewares:
+    rpc-buffering:
+      buffering:
+        maxRequestBodyBytes: 10485760
+        memRequestBodyBytes: 1048576
+
+    health-rate-limit:
+      rateLimit:
+        average: 10
+        burst: 20
+        period: 1s
