@@ -183,6 +183,7 @@ the files above:
 ```text
 ETHREX_VERSION=igra-q-logic-zone
 Q_ETHREX_VERSION=igra-q-logic-zone
+KASPAD_VERSION=igra-q-logic-zone
 NODE_ID=GTN-q-zone-<your-node-name>
 ```
 
