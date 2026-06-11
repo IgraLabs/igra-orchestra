@@ -1,0 +1,25 @@
+name: ${COMPOSE_PROJECT_NAME:-igra-proposal-builder-mainnet}
+
+x-builder-build: &builder-build
+  context: ../..
+  dockerfile: build/Dockerfile.kaspa-exit-proposal-builder
+
+services:
+  proposal-builder:
+    image: ${PROPOSAL_BUILDER_IMAGE:-igra-proposal-builder-rs-mainnet:local}
+    build: *builder-build
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      IGRA_PROPOSAL_BUILDER_CONFIG: ${IGRA_PROPOSAL_BUILDER_CONFIG:-/config/proposal-builder.json}
+      KASPA_EXIT_BUILDER_MODE: ${KASPA_EXIT_BUILDER_MODE:-daemon}
+      KASPA_EXIT_BUILDER_POLL_SECONDS: ${KASPA_EXIT_BUILDER_POLL_SECONDS:-300}
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      - ./config/proposal-builder.json:/config/proposal-builder.json:ro
+      - ./refs:/refs:ro
+      - proposal-builder-state:/state
+
+volumes:
+  proposal-builder-state:

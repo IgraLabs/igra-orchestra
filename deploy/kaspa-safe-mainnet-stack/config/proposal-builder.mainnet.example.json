@@ -1,0 +1,51 @@
+{
+  "network": "mainnet",
+  "l2ChainId": 38833,
+  "igraRpcUrl": "https://CHANGE_ME_REAL_IGRA_L2_MAINNET_RPC",
+  "safeApiUrl": "https://safe-transaction-service.igralabs.com/api/v1/kaspa",
+  "federationId": null,
+  "proposedBy": "igra-proposal-builder-rs-mainnet",
+  "contracts": {
+    "kasExitBridge": "0xCHANGE_ME_REAL_MAINNET_KAS_EXIT_BRIDGE",
+    "mailbox": "0xCHANGE_ME_REAL_MAINNET_MAILBOX",
+    "merkleTreeHook": "0xCHANGE_ME_REAL_MAINNET_MERKLE_TREE_HOOK"
+  },
+  "bridge": {
+    "address": "kaspa:CHANGE_ME_REAL_MAINNET_BRIDGE_CUSTODY_ADDRESS",
+    "scriptPublicKey": "CHANGE_ME_REAL_MAINNET_BRIDGE_LOCK_SCRIPT_HEX",
+    "derivationPath": "m/0/0/1",
+    "threshold": 2,
+    "ecdsa": false,
+    "kpubs": [
+      "CHANGE_ME_MAINNET_SIGNER_1_KPUB",
+      "CHANGE_ME_MAINNET_SIGNER_2_KPUB",
+      "CHANGE_ME_MAINNET_SIGNER_3_KPUB"
+    ]
+  },
+  "finality": {
+    "confirmationBlocks": 12
+  },
+  "keb": {
+    "expectedValuesFile": "/refs/kas-exit-bridge-contract-authenticity.expected.json",
+    "methodologyFile": "/refs/kas-exit-bridge-query-audit-methodology.md",
+    "methodologySha256": "CHANGE_ME_SHA256_OF_MAINNET_METHODOLOGY_FILE",
+    "initialCheckpointFile": "/refs/checkpoint.initial.json",
+    "deltaBlocks": 86400
+  },
+  "kaspa": {
+    "rpcUrl": "https://CHANGE_ME_REAL_KASPA_MAINNET_RPC",
+    "coinbaseMaturityDaa": 1000,
+    "minConfirmationsDaa": 0,
+    "minAmountSompi": 0,
+    "maxInputs": 64
+  },
+  "pst": {
+    "txIdPrefix": "97b1",
+    "feeSompi": 1000000,
+    "maxPayloadNonceAttempts": 5000000,
+    "allowPlaceholderPstForTests": false
+  },
+  "state": {
+    "path": "/state/proposal-builder-state.json"
+  }
+}

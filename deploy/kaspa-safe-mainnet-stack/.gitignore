@@ -1,0 +1,9 @@
+.env.safe
+.env.proposal-builder
+.env.*
+!.env.safe.example
+!.env.proposal-builder.example
+config/proposal-builder.json
+refs/*
+!refs/README.md
+state/

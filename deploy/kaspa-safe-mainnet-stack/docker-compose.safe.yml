@@ -1,0 +1,97 @@
+name: ${COMPOSE_PROJECT_NAME:-igra-safe-mainnet}
+
+x-safe-build: &safe-build
+  context: ../..
+  dockerfile: build/Dockerfile.kaspa-exit-safe-api
+
+x-safe-env: &safe-env
+  DJANGO_SETTINGS_MODULE: config.settings.production
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY in .env.safe}
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:?set DJANGO_ALLOWED_HOSTS in .env.safe}
+  DJANGO_ADMIN_URL: ${DJANGO_ADMIN_URL:-admin/}
+  DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.safe}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  CELERY_BROKER_URL: ${CELERY_BROKER_URL:-django://}
+  WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+  GUNICORN_REQUEST_TIMEOUT: ${GUNICORN_REQUEST_TIMEOUT:-60}
+  KASPA_PST_HELPER_PATH: ${KASPA_PST_HELPER_PATH:-/usr/local/bin/kaspa-pst}
+  KASPA_PST_HELPER_TIMEOUT: ${KASPA_PST_HELPER_TIMEOUT:-30}
+  ETHEREUM_NODE_URL: ${ETHEREUM_NODE_URL:?set ETHEREUM_NODE_URL to real Igra L2 mainnet RPC}
+  ETHEREUM_TRACING_NODE_URL: ${ETHEREUM_TRACING_NODE_URL:-}
+  ETH_L2_NETWORK: ${ETH_L2_NETWORK:-true}
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:18-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-safe_transaction_service}
+      POSTGRES_USER: ${POSTGRES_USER:-safe}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.safe}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  safe-migrate:
+    image: ${SAFE_API_IMAGE:-igra-kaspa-safe-api-mainnet:local}
+    build: *safe-build
+    restart: "no"
+    profiles: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment: *safe-env
+    command: >
+      bash -c "DB_STATEMENT_TIMEOUT=0 /app/.venv/bin/python manage.py migrate --noinput"
+
+  safe-api:
+    image: ${SAFE_API_IMAGE:-igra-kaspa-safe-api-mainnet:local}
+    build: *safe-build
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment: *safe-env
+    ports:
+      - "${SAFE_API_BIND:-127.0.0.1}:${SAFE_API_PORT:-8888}:8888"
+    volumes:
+      - safe-nginx:/nginx
+    command: docker/web/run_web.sh
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/app/.venv/bin/python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8888/check/', timeout=5).read()\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres-data:
+  redis-data:
+  safe-nginx:
