@@ -7,6 +7,9 @@ enabled, the Rust proposal-builder daemon.
 DevOps should not need to understand the internals. Fill `.env`, build, run
 `up`, put HTTPS in front of the Safe API port, and monitor it.
 
+For the full step-by-step operator runbook, including ports, external URL
+mapping, RPC requirements, and health checks, read `HOWTO.md`.
+
 ## What This Deploys
 
 Default `up` starts:
@@ -77,15 +80,16 @@ REDIS_URL
 SAFE_API_PORT
 KASPA_PST_HELPER_PATH=/usr/local/bin/kaspa-pst
 KASPA_PST_HELPER_TIMEOUT=30
+ETHEREUM_NODE_URL
 ```
 
 Back up the `postgres-data` Docker volume. It contains all durable Safe/Kaspa
 coordination state.
 
 This deploy bundle intentionally runs Django migrations only. It does not run
-upstream `setup_service`, indexer workers, or scheduler services, because those
-require Ethereum/Safe indexing configuration and are not needed for the Kaspa
-proposal coordination API.
+upstream `setup_service`, indexer workers, or scheduler services. Some upstream
+migrations still query `ETHEREUM_NODE_URL` for chain id, so set it to the Igra
+L2 RPC for the target environment.
 
 ## Start Proposal Builder
 

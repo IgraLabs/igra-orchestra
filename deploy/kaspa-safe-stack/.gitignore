@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 config/proposal-builder.json
 refs/*
 !refs/README.md
