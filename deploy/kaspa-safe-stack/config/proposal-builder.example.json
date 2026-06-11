@@ -1,0 +1,51 @@
+{
+  "network": "testnet",
+  "l2ChainId": 38833,
+  "igraRpcUrl": "https://IGRA_RPC_URL_REPLACE_ME",
+  "safeApiUrl": "http://safe-api:8888/api/v1/kaspa",
+  "federationId": null,
+  "proposedBy": "igra-proposal-builder-rs",
+  "contracts": {
+    "kasExitBridge": "0xKAS_EXIT_BRIDGE_REPLACE_ME",
+    "mailbox": "0xMAILBOX_REPLACE_ME",
+    "merkleTreeHook": "0xMERKLE_TREE_HOOK_REPLACE_ME"
+  },
+  "bridge": {
+    "address": "kaspatest:BRIDGE_CUSTODY_ADDRESS_REPLACE_ME",
+    "scriptPublicKey": "BRIDGE_LOCK_SCRIPT_HEX_REPLACE_ME",
+    "derivationPath": "m/0/0/1",
+    "threshold": 2,
+    "ecdsa": false,
+    "kpubs": [
+      "KPUB_SIGNER_1_REPLACE_ME",
+      "KPUB_SIGNER_2_REPLACE_ME",
+      "KPUB_SIGNER_3_REPLACE_ME"
+    ]
+  },
+  "finality": {
+    "confirmationBlocks": 12
+  },
+  "keb": {
+    "expectedValuesFile": "/refs/kas-exit-bridge-contract-authenticity.expected.json",
+    "methodologyFile": "/refs/kas-exit-bridge-query-audit-methodology.md",
+    "methodologySha256": "METHODOLOGY_SHA256_REPLACE_ME",
+    "initialCheckpointFile": "/refs/checkpoint.initial.json",
+    "deltaBlocks": 86400
+  },
+  "kaspa": {
+    "rpcUrl": "https://KASPA_RPC_URL_REPLACE_ME",
+    "coinbaseMaturityDaa": 1000,
+    "minConfirmationsDaa": 0,
+    "minAmountSompi": 0,
+    "maxInputs": 64
+  },
+  "pst": {
+    "txIdPrefix": "97b1",
+    "feeSompi": 1000000,
+    "maxPayloadNonceAttempts": 5000000,
+    "allowPlaceholderPstForTests": false
+  },
+  "state": {
+    "path": "/state/proposal-builder-state.json"
+  }
+}

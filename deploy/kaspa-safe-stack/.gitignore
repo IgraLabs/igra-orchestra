@@ -1,0 +1,5 @@
+.env
+config/proposal-builder.json
+refs/*
+!refs/README.md
+state/
