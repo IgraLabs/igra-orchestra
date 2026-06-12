@@ -94,12 +94,15 @@ services:
         fi
         ARGS="$$ARGS --igra-lane-id=$$IGRA_LANE_ID"
 
-        # IGRA_LANE_ID is guaranteed non-empty by the guard above, so it
-        # is the unconditional ATAN import namespace.
+        # TX_ID_PREFIX is guaranteed non-empty by the guard above and is the
+        # ATAN import namespace: it is the network-specific CDN path segment
+        # (97b1 mainnet, 97b4 testnet-10). IGRA_LANE_ID is the canonical lane
+        # 97b10000 shared by every network, so it can't address per-network
+        # CDN objects and is not used in the import URL.
         if [ -n "$$ATAN_IMPORT_URL" ]; then
           ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
         elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ]; then
-          ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$IGRA_LANE_ID/index.pb"
+          ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$TX_ID_PREFIX/index.pb"
         else
           echo "Warning: No ATAN import URL configured. Set ATAN_IMPORT_URL or CDN_BASE_URL+NETWORK to import historical data." >&2
         fi
