@@ -19,11 +19,11 @@ use `./scripts/setup-galleon-testnet.sh` directly — the template already ships
   After the rename, the old `igra-orchestra-testnet_*` volumes are removed;
   the migration is one-way.
 - **Rewrites `.env`** atomically: `NETWORK=testnet` → `NETWORK=testnet-10`,
-  pins `ATAN_IMPORT_URL` to the legacy published
-  `https://dyehoijgeqfp8.cloudfront.net/testnet/97b4/index.pb` so ATAN keeps
-  importing from the existing CDN path until the `/testnet-10/97b4/index.pb`
-  object is published, sets `IGRA_LANE_ID=97b10000` (post-KIP21 dedicated
-  IGRA lane namespace; 4 bytes / 8 lowercase hex chars, no `0x`), and
+  pins `ATAN_IMPORT_URL` to the canonical prefix-based Galleon path
+  `https://dyehoijgeqfp8.cloudfront.net/testnet-10/97b4/index.pb` (the same URL
+  the entrypoint now auto-constructs from `NETWORK`/`TX_ID_PREFIX`), sets
+  `IGRA_LANE_ID=97b10000` (post-KIP21 dedicated IGRA lane namespace; 4 bytes /
+  8 lowercase hex chars, no `0x`), and
   **syncs every image-version pin** from
   `versions.galleon-testnet.env` into `.env` (`KASPAD_VERSION`,
   `RETH_VERSION`, `RPC_PROVIDER_VERSION`, `KASWALLET_VERSION`,

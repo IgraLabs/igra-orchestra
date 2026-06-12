@@ -11,14 +11,14 @@ Run kaspad saving finality periods without the full IGRA execution layer stack. 
     ```
 
 2. Review and adjust settings in `.env` as needed. The defaults target mainnet.
-   For Galleon testnet-10, set `NETWORK=testnet-10`, `TX_ID_PREFIX=97b4`,
-   `DATADIR=/app/data/kaspa-testnet-10/datadir`, and keep
-   `ATAN_IMPORT_URL=https://dyehoijgeqfp8.cloudfront.net/testnet/97b4/index.pb`
-   until the `/testnet-10/97b4/index.pb` CDN object is published.
-   For post-KIP21 lane-based networks, keep `IGRA_LANE_ID` set to the
+   For Galleon testnet-10, set `NETWORK=testnet-10`, `TX_ID_PREFIX=97b4`, and
+   `DATADIR=/app/data/kaspa-testnet-10/datadir`; the import URL then
+   auto-constructs to
+   `https://dyehoijgeqfp8.cloudfront.net/testnet-10/97b4/index.pb`, so
+   `ATAN_IMPORT_URL` can be left unset. Keep `IGRA_LANE_ID` set to the
    canonical 4-byte lane namespace (8 lowercase hex chars, no `0x`),
-   e.g. `97b10000`. The auto-import path will use `IGRA_LANE_ID` instead
-   of `TX_ID_PREFIX`.
+   e.g. `97b10000` — kaspad requires it, but it is not part of the ATAN
+   import URL, which uses the network-specific `TX_ID_PREFIX`.
 
 3. Start kaspad with ATAN:
 
@@ -50,10 +50,10 @@ See `.env.atan.example` at the repository root for all available variables. Key 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NETWORK` | `mainnet` | Network to connect to |
-| `TX_ID_PREFIX` | `97b1` | Legacy/pre-KIP21 transaction ID prefix for ATAN filtering and fallback import namespace |
-| `IGRA_LANE_ID` | `97b10000` | Post-KIP21 dedicated IGRA lane namespace (4 bytes / 8 lowercase hex chars, no `0x`); passed to kaspad as `--igra-lane-id` and used as the ATAN import/upload namespace |
+| `TX_ID_PREFIX` | `97b1` | Legacy/pre-KIP21 transaction ID prefix for ATAN filtering and the ATAN import namespace (network-specific CDN path segment) |
+| `IGRA_LANE_ID` | `97b10000` | Post-KIP21 dedicated IGRA lane namespace (4 bytes / 8 lowercase hex chars, no `0x`); passed to kaspad as `--igra-lane-id`. Not part of the ATAN import URL (that uses `TX_ID_PREFIX`) |
 | `CDN_BASE_URL` | CloudFront URL | CDN for ATAN data import |
-| `ATAN_IMPORT_URL` | (empty) | Optional full import URL override; required for Galleon testnet-10 until the new CDN path is published |
+| `ATAN_IMPORT_URL` | (empty) | Optional full import URL override; leave unset to use the auto-constructed `{CDN_BASE_URL}/{NETWORK}/{TX_ID_PREFIX}/index.pb` |
 | `KASPAD_ADD_PEER` | (empty) | Optional peer to connect to |
 
 ## Monitoring

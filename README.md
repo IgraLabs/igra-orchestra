@@ -375,23 +375,23 @@ IGRA_SKIP_LOCK_SCRIPT_CHECK=false
 
 # Legacy/pre-KIP21 transaction ID prefix for ATAN (hex-encoded, e.g., 97b1).
 # Used by kaspad (--atan-transaction-id-prefix) for ATAN filtering and as
-# the fallback ATAN import namespace when IGRA_LANE_ID is unset. Not used
-# for post-KIP21 transaction construction.
+# the ATAN import namespace (the network-specific CDN path segment in the
+# import URL). Not used for post-KIP21 transaction construction.
 TX_ID_PREFIX=97b1
 
 # Post-KIP21 dedicated IGRA lane namespace (4 bytes / 8 lowercase hex chars,
 # no 0x prefix). RPC, kaspad, and kaswallet must all see the same value:
 # kaspad receives --igra-lane-id=$IGRA_LANE_ID; kaswallet receives
 # --subnetwork-id=$IGRA_LANE_ID (appended by the docker-compose.yml
-# entrypoint); RPC reads IGRA_LANE_ID directly. ATAN import/upload paths
-# use this value instead of TX_ID_PREFIX.
+# entrypoint); RPC reads IGRA_LANE_ID directly. The ATAN import path uses
+# the network-specific TX_ID_PREFIX, not this lane.
 IGRA_LANE_ID=97b10000
 
 # CDN base URL for ATAN data (required)
 CDN_BASE_URL=https://dyehoijgeqfp8.cloudfront.net
 
 # ATAN auto-import URL (passes --atan-import-url flag, remote URLs only)
-# Auto-constructed from CDN_BASE_URL, NETWORK and IGRA_LANE_ID/TX_ID_PREFIX by default
+# Auto-constructed from CDN_BASE_URL, NETWORK and TX_ID_PREFIX by default
 # Override only if you need a custom remote URL:
 # ATAN_IMPORT_URL=https://custom-cdn.example.com/index.pb
 ```

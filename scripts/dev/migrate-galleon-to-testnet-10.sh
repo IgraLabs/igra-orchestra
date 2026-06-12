@@ -108,7 +108,7 @@ echo "About to:"
 echo "  1. Stop projects $SRC_PROJECT and $DST_PROJECT (across all profiles)"
 echo "  2. Rename volumes ${VOLUMES[*]} from $SRC_PROJECT to $DST_PROJECT (old volumes are removed)"
 echo "  3. Rewrite .env: NETWORK=testnet -> NETWORK=testnet-10"
-echo "  4. Pin ATAN_IMPORT_URL to the legacy published Galleon CDN path"
+echo "  4. Pin ATAN_IMPORT_URL to the canonical Galleon CDN path"
 echo "  5. Set IGRA_LANE_ID=$EXPECTED_IGRA_LANE_ID (post-KIP21 dedicated lane)"
 echo "  6. Sync image-version pins from $VERSIONS_FILE into .env:"
 for version_var in "${IMAGE_VERSION_VARS[@]}"; do
@@ -256,7 +256,7 @@ if grep -q '^ATAN_IMPORT_URL=' "$tmp_env"; then
     mv -f "$tmp_env_with_atan" "$tmp_env"
 else
     {
-        printf '\n# Prefix-based Galleon ATAN path; keep until the lane-based /testnet-10/97b10000/index.pb is published.\n'
+        printf '\n# Prefix-based Galleon ATAN path (the canonical ATAN namespace; matches the auto-constructed URL).\n'
         printf 'ATAN_IMPORT_URL=%s\n' "$LEGACY_ATAN_IMPORT_URL"
     } >> "$tmp_env"
 fi
