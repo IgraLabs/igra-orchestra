@@ -63,6 +63,33 @@ For detailed guides, see:
 - [Mainnet Deployment Guide](doc/quick-setup-mainnet.md)
 - [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md)
 
+### Devnet (local, configurable finality)
+
+Single-node devnet with finality configurable at setup time via
+`FINALITY_PERIOD_SECONDS` (default 600s → `finality_depth` 6000 at 10 BPS),
+overriding kaspad's 12-hour devnet default.
+
+Built from source: configurable finality uses kaspad's `--override-params-file`,
+available on the `rusty-kaspa-private` v3.0 line only. `setup-devnet.sh` builds
+kaspad, reth, kaswallet and rpc-provider locally and starts the stack.
+
+```bash
+# clone sources (kaspad/kaswallet/rpc-provider on v3.0, reth on production):
+KASPAD_BRANCH=v3.0 KASWALLET_BRANCH=v3.0 IGRA_RPC_PROVIDER_BRANCH=v3.0 \
+  ./scripts/dev/setup-repos.sh
+
+# build from source and bring the stack up:
+FINALITY_PERIOD_SECONDS=600 ./scripts/setup-devnet.sh
+
+# start the in-stack miner once kaspad is healthy:
+docker compose -f docker-compose.devnet.yml --profile mining up -d --build kaspa-miner
+```
+
+Local-only: dedicated `docker-compose.devnet.yml`, RPC on `RPC_PORT` (default
+8555, no Traefik/TLS), container names shared with the production stack (run one
+stack per host). Reth data is bind-mounted under `data/` as root
+(`sudo rm -rf data` to reset).
+
 **Manual setup (alternative):**
 
 ```bash

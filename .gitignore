@@ -16,6 +16,8 @@ tasks/
 
 network-params/
 
+overrides/
+
 .DS_Store
 .cursor
 letsencrypt/

@@ -1,0 +1,320 @@
+name: igra-orchestra-devnet
+
+volumes:
+  kaspad_data:
+
+x-default-logging: &default-logging
+  driver: "${LOGGING_DRIVER:-json-file}"
+  options:
+    max-size: "1g"
+    max-file: "10"
+    compress: "true"
+    tag: "igra-orchestra-devnet/{{.Name}}/{{.ID}}"
+
+x-default-healthcheck: &default-healthcheck
+  interval: 10s
+  timeout: 2s
+  retries: 3
+  start_period: 5s
+
+x-service-restart-policy: &service-restart-policy "${SERVICE_RESTART_POLICY:-unless-stopped}"
+x-dependency-watch-volume: &dependency-watch-volume ./scripts/lib/watch-dependencies.sh:/app/watch-dependencies.sh:ro
+
+services:
+  kaspad:
+    # Built from source (rusty-kaspa-private v3.0) for --override-params-file.
+    build:
+      context: build/repos/rusty-kaspa-private
+      dockerfile: build/Dockerfile.kaspad
+      ssh:
+        - default
+    image: igranetwork/kaspad:${KASPAD_VERSION}
+    restart: *service-restart-policy
+    # Shared with the production stack; run one stack per host.
+    container_name: kaspad
+    logging: *default-logging
+    depends_on:
+      execution-layer:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${KASPAD_GRPC_PORT}:${KASPAD_GRPC_PORT}"
+      - "${KASPAD_P2P_PORT}:${KASPAD_P2P_PORT}"
+      - "127.0.0.1:${KASPAD_BORSH_PORT}:${KASPAD_BORSH_PORT}"
+      - "127.0.0.1:${KASPAD_JSON_PORT}:${KASPAD_JSON_PORT}"
+    environment:
+      - KASPAD_ADD_PEER
+      - ENABLE_PERF_DIAGNOSTICS
+      - ENABLE_EVENT_LOGGING
+      - WARM_START_BLOCK
+      - IGRA_SKIP_LOCK_SCRIPT_CHECK
+      - ATAN_IMPORT_URL
+      - CDN_BASE_URL
+      - NETWORK
+      - TX_ID_PREFIX
+      - IGRA_ENABLE
+      - POST_FORK_LOCK_SCRIPT_PUBKEY
+      - LOCK_SCRIPT_FORK_DAA_SCORE
+      - RUST_LOG=info,kaspa_viaduct=trace,kaspa_igra_adapter=trace,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        ARGS="--disable-upnp \
+          --rpclisten-borsh=0.0.0.0 \
+          --rpclisten=0.0.0.0 \
+          --rpclisten-json=0.0.0.0 \
+          --listen=0.0.0.0 \
+          --utxoindex \
+          --logdir=/app/logs \
+          --appdir=/app/data"
+
+        if [ "$$NETWORK" != "mainnet" ]; then
+          ARGS="--$$NETWORK --nodnsseed $$ARGS"
+        fi
+
+        IGRA_ENABLED="$${IGRA_ENABLE:-true}"
+        if [ "$$IGRA_ENABLED" = "true" ]; then
+          ARGS="$$ARGS \
+            --igra-enable \
+            --atan-listen \
+            --atan-transaction-id-prefix=${TX_ID_PREFIX} \
+            --viaduct-start-daa-score=${IGRA_LAUNCH_DAA_SCORE} \
+            --igra-l1-reference-timestamp=${L1_REFERENCE_TIMESTAMP} \
+            --igra-l1-reference-daa-score=${L1_REFERENCE_DAA_SCORE} \
+            --igra-genesis-hash=${GENESIS_BLOCK_HASH} \
+            --igra-min-fee-per-gas-gwei=${MIN_PROTOCOL_FEE_PER_GAS_GWEI} \
+            --igra-jwt-path=/app/jwt.hex \
+            --igra-lock-script-pubkey=${IGRA_LOCK_SCRIPT_PUBKEY} \
+            --igra-entry-min-amount=${IGRA_ENTRY_MIN_AMOUNT} \
+            --igra-el-host=http://execution-layer"
+
+          [ "$$ENABLE_PERF_DIAGNOSTICS" = "true" ] && ARGS="$$ARGS --igra-enable-perf-diagnostics"
+          [ "$$ENABLE_EVENT_LOGGING" = "true" ] && ARGS="$$ARGS --igra-enable-event-logging"
+          [ -n "$$WARM_START_BLOCK" ] && ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
+          [ "$$IGRA_SKIP_LOCK_SCRIPT_CHECK" = "true" ] && ARGS="$$ARGS --igra-skip-lock-script-check"
+          if [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && [ -z "$$LOCK_SCRIPT_FORK_DAA_SCORE" ]; then
+            echo "Error: LOCK_SCRIPT_FORK_DAA_SCORE must be set when POST_FORK_LOCK_SCRIPT_PUBKEY is set" >&2; exit 1
+          fi
+          if [ -z "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ]; then
+            echo "Error: POST_FORK_LOCK_SCRIPT_PUBKEY must be set when LOCK_SCRIPT_FORK_DAA_SCORE is set" >&2; exit 1
+          fi
+          [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && ARGS="$$ARGS --igra-post-fork-lock-script-pubkey=$$POST_FORK_LOCK_SCRIPT_PUBKEY"
+          [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ] && ARGS="$$ARGS --igra-lock-script-fork-daa-score=$$LOCK_SCRIPT_FORK_DAA_SCORE"
+
+          # Devnet has no ATAN data source: missing config is a warning, not fatal.
+          if [ -n "$$ATAN_IMPORT_URL" ]; then
+            ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
+          elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ] && [ -n "$$TX_ID_PREFIX" ]; then
+            ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$TX_ID_PREFIX/index.pb"
+          else
+            echo "Warning: No ATAN import URL configured (devnet has no ATAN data source). Continuing without import." >&2
+          fi
+        fi
+
+        # Peer configuration
+        if [ -n "$$KASPAD_ADD_PEER" ]; then
+          ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
+        fi
+
+        # Load consensus override-params generated by setup-devnet.sh. If absent,
+        # WARN and fall back to kaspad's built-in 12h devnet finality.
+        if [ -f /app/overrides/devnet.json ]; then
+          ARGS="$$ARGS --override-params-file=/app/overrides/devnet.json"
+        else
+          echo "WARN: /app/overrides/devnet.json not found; using kaspad devnet defaults (finality = 12h). Re-run scripts/setup-devnet.sh to regenerate." >&2
+        fi
+
+        exec sh /app/watch-dependencies.sh \
+          --tcp execution-layer execution-layer 8545 \
+          -- /app/kaspad $$ARGS
+    volumes:
+      - kaspad_data:/app/data/
+      - ./logs/kaspad/:/app/logs/  # Event logs when ENABLE_EVENT_LOGGING=true
+      - ./keys/jwt.hex:/app/jwt.hex:ro
+      - *dependency-watch-volume
+      - ./overrides/devnet.json:/app/overrides/devnet.json:ro
+    healthcheck:
+      <<: *default-healthcheck
+      test:
+        - CMD-SHELL
+        - >
+          bash -lc ': > /dev/tcp/127.0.0.1/${KASPAD_GRPC_PORT}' &&
+          bash -lc ': > /dev/tcp/execution-layer/8545'
+
+  execution-layer:
+    build:
+      context: build/repos/reth-private
+      dockerfile: Dockerfile
+      ssh:
+        - default
+    image: igranetwork/reth:${RETH_VERSION}
+    restart: *service-restart-policy
+    container_name: execution-layer
+    logging: *default-logging
+    entrypoint: /app/run-igra-el.sh
+    ports:
+      - "127.0.0.1:9545:8545"  # open 8545 on localhost for blockscout
+      - "127.0.0.1:9546:8546"  # open 8546 on localhost for blockscout
+    expose:
+      - "8545"
+      - "8546"
+      - "8551"
+      - "9001"
+    environment:
+      L1_REFERENCE_TIMESTAMP: ${L1_REFERENCE_TIMESTAMP}
+      L1_REFERENCE_DAA_SCORE: ${L1_REFERENCE_DAA_SCORE}
+      CHAIN_ID: ${IGRA_CHAIN_ID}
+      ONE_TIME_ADDRESS: ${EL_ONE_TIME_ADDRESS}
+      IGRA_LAUNCH_DAA_SCORE: ${IGRA_LAUNCH_DAA_SCORE}
+      TX_ID_PREFIX: ${TX_ID_PREFIX}
+      MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
+      IGRA_LOCK_SCRIPT_PUBKEY: ${IGRA_LOCK_SCRIPT_PUBKEY:-}
+      IGRA_ENTRY_MIN_AMOUNT: ${IGRA_ENTRY_MIN_AMOUNT}
+      BITCOIN_BLOCK_HASH: ${BITCOIN_BLOCK_HASH}
+      ETHEREUM_BLOCK_HASH: ${ETHEREUM_BLOCK_HASH}
+      KASPA_BLOCK_HASH: ${KASPA_BLOCK_HASH}
+      POST_FORK_LOCK_SCRIPT_PUBKEY: ${POST_FORK_LOCK_SCRIPT_PUBKEY:-}
+      LOCK_SCRIPT_FORK_DAA_SCORE: ${LOCK_SCRIPT_FORK_DAA_SCORE:-}
+      NETWORK_PARAMS_OUTPUT: /app/network-params/network-params.md
+    # Bind mounts (not a named volume) so data/reth can be inspected or reset directly.
+    volumes:
+      - ./data/reth:/app/data/
+      - ./keys/jwt.hex:/app/jwt.hex
+      - ./data/reth-ipc:/app/socket
+      - ./network-params:/app/network-params
+    healthcheck:
+      <<: *default-healthcheck
+      test:
+        - CMD-SHELL
+        - >
+          test -S /app/socket/auth.ipc &&
+          bash -lc ': > /dev/tcp/127.0.0.1/8545'
+
+  kaswallet-0:
+    build:
+      context: build/repos/kaswallet
+      dockerfile: Dockerfile
+      ssh:
+        - default
+    image: igranetwork/kaswallet:${KASWALLET_VERSION}
+    restart: *service-restart-policy
+    container_name: kaswallet-0
+    logging: *default-logging
+    expose:
+      - "8082"
+    ports:
+      - "127.0.0.1:8082:8082"  # open 8082 on localhost for entry transactions
+    environment:
+      - RUST_LOG
+      - NETWORK
+      - KASPAD_HOST
+      - KASPAD_GRPC_PORT
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      kaspad:
+        condition: service_healthy
+        required: false
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        ARGS="--logs-level=$$RUST_LOG --keys /app/keys.json --server grpc://$$KASPAD_HOST:$$KASPAD_GRPC_PORT --listen 0.0.0.0:8082"
+        if [ "$$NETWORK" = "mainnet" ]; then
+          ARGS="--enable-mainnet-pre-launch $$ARGS"
+        else
+          ARGS="--$$NETWORK $$ARGS"
+        fi
+        exec sh /app/watch-dependencies.sh \
+          --tcp kaspad "$$KASPAD_HOST" "$$KASPAD_GRPC_PORT" \
+          -- /app/kaswallet-daemon $$ARGS
+    volumes:
+      - ./keys/keys.kaswallet-0.json:/app/keys.json
+      - *dependency-watch-volume
+    healthcheck:
+      <<: *default-healthcheck
+      test:
+        - CMD-SHELL
+        - >
+          bash -lc ': > /dev/tcp/127.0.0.1/8082' &&
+          bash -lc ": > /dev/tcp/$$KASPAD_HOST/$$KASPAD_GRPC_PORT"
+
+  rpc-provider-0:
+    build:
+      context: build/repos/igra-rpc-provider
+      dockerfile: Dockerfile
+      ssh:
+        - default
+    image: igranetwork/rpc-provider:${RPC_PROVIDER_VERSION}
+    restart: *service-restart-policy
+    container_name: rpc-provider-0
+    logging: *default-logging
+    environment:
+      RUST_LOG: ${RUST_LOG}
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: 8535
+      EL_URL: http://execution-layer:8545
+      EL_WS_URL: ws://execution-layer:8546
+      SECURITY_ENABLE_WHITELIST: "true"
+      READ_ONLY: ${RPC_READ_ONLY}
+      MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
+      TX_ID_PREFIX: ${TX_ID_PREFIX}
+      KASWALLET_HOST: kaswallet-0
+      WALLET_DAEMON_URI: http://kaswallet-0:8082
+      WALLET_TO_ADDRESS: ${W0_WALLET_TO_ADDRESS}
+      KASWALLET_PASSWORD: ${W0_KASWALLET_PASSWORD}
+    expose:
+      - "8535"
+    ports:
+      - "0.0.0.0:${RPC_PORT}:8535"  # expose RPC directly on host (no Traefik on devnet)
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        exec sh /app/watch-dependencies.sh \
+          --tcp execution-layer execution-layer 8545 \
+          --tcp-if READ_ONLY false kaswallet "$$KASWALLET_HOST" 8082 \
+          -- /app/igra-rpc-provider
+    volumes:
+      - *dependency-watch-volume
+    depends_on:
+      execution-layer:
+        condition: service_healthy
+        required: false
+    healthcheck:
+      <<: *default-healthcheck
+      test:
+        - CMD-SHELL
+        - >
+          bash -lc ': > /dev/tcp/127.0.0.1/8535' &&
+          bash -lc ': > /dev/tcp/execution-layer/8545' &&
+          if [ "$$READ_ONLY" = "false" ]; then
+            bash -lc ": > /dev/tcp/$$KASWALLET_HOST/8082";
+          fi
+
+  kaspa-miner:
+    # "mining" profile so setup does not start it before it is built. Run manually:
+    #   docker compose --profile mining up -d --build kaspa-miner
+    profiles: ["mining"]
+    restart: *service-restart-policy
+    build:
+      context: build/repos/kaspa-miner
+      dockerfile: ../../Dockerfile.kaspa-miner
+    image: kaspa-miner
+    container_name: kaspa-miner
+    logging: *default-logging
+    environment:
+      - RUST_LOG
+      - REPLAY_ON_ERROR
+      - SYNC_THREADS
+    entrypoint: >
+      sh -c '
+      KASPAD=$$(getent ahostsv4 kaspad | grep kaspad | grep -Eo "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b") &&
+      exec /app/kaspa-miner
+      --mining-address ${MINING_ADDRESS:-}
+      --kaspad-address $$KASPAD
+      --port ${KASPAD_GRPC_PORT}
+      --threads ${MINING_THREADS:-1}
+      '
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
