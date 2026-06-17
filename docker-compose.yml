@@ -17,6 +17,13 @@ volumes:
       type: tmpfs
       device: tmpfs
       o: size=10m
+  kyc_ethrex_data:
+  kyc_ethrex_ipc:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=10m
 networks:
   igra-network:
   traefik-network:
@@ -216,6 +223,9 @@ services:
       q-execution-layer:
         condition: service_healthy
         required: false
+      kyc-execution-layer:
+        condition: service_healthy
+        required: false
     ports:
       - "127.0.0.1:${KASPAD_GRPC_PORT}:${KASPAD_GRPC_PORT}"
       - "${KASPAD_P2P_PORT}:${KASPAD_P2P_PORT}"
@@ -243,6 +253,10 @@ services:
       - IGRA_Q_GENESIS_BLOCK_HASH
       - IGRA_Q_EL_HOST
       - IGRA_Q_EL_TRANSPORT
+      - IGRA_KYC_ZONE_ENABLE
+      - IGRA_KYC_GENESIS_BLOCK_HASH
+      - IGRA_KYC_EL_HOST
+      - IGRA_KYC_EL_TRANSPORT
       - KASPAD_ENABLE_UNSYNCED_MINING
       - VIADUCT_ALLOW_UNSYNCED_CONSENSUS_FALLBACK
       - POST_FORK_LOCK_SCRIPT_PUBKEY
@@ -296,7 +310,7 @@ services:
             --igra-enable \
             --atan-listen \
             --atan-transaction-id-prefix=${TX_ID_PREFIX} \
-            --viaduct-start-daa-score=${IGRA_LAUNCH_DAA_SCORE} \
+            --viaduct-start-daa-score=${VIADUCT_START_DAA_SCORE:-${IGRA_LAUNCH_DAA_SCORE}} \
             --igra-l1-reference-timestamp=${L1_REFERENCE_TIMESTAMP} \
             --igra-l1-reference-daa-score=${L1_REFERENCE_DAA_SCORE} \
             --igra-genesis-hash=${GENESIS_BLOCK_HASH} \
@@ -341,6 +355,19 @@ services:
             [ -n "$${IGRA_Q_EL_TRANSPORT:-}" ] && ARGS="$$ARGS --igra-q-el-transport=$$IGRA_Q_EL_TRANSPORT"
           fi
 
+          if [ "$${IGRA_KYC_ZONE_ENABLE:-false}" = "true" ]; then
+            if [ -z "$${IGRA_KYC_GENESIS_BLOCK_HASH:-}" ]; then
+              echo "Error: IGRA_KYC_GENESIS_BLOCK_HASH must be set when IGRA_KYC_ZONE_ENABLE=true" >&2
+              exit 1
+            fi
+            ARGS="$$ARGS \
+              --igra-kyc-zone-enable \
+              --igra-kyc-genesis-hash=$$IGRA_KYC_GENESIS_BLOCK_HASH \
+              --igra-kyc-jwt-path=/app/kyc-jwt.hex \
+              --igra-kyc-el-host=$${IGRA_KYC_EL_HOST:-http://kyc-execution-layer}"
+            [ -n "$${IGRA_KYC_EL_TRANSPORT:-}" ] && ARGS="$$ARGS --igra-kyc-el-transport=$$IGRA_KYC_EL_TRANSPORT"
+          fi
+
           # IGRA_LANE_ID is guaranteed non-empty by the guard above, so it
           # is the unconditional ATAN import namespace.
           if [ -n "$$ATAN_IMPORT_URL" ]; then
@@ -362,6 +389,9 @@ services:
         if [ "$${IGRA_Q_ZONE_ENABLE:-false}" = "true" ]; then
           WATCH_ARGS="$$WATCH_ARGS --tcp q-execution-layer q-execution-layer 8545"
         fi
+        if [ "$${IGRA_KYC_ZONE_ENABLE:-false}" = "true" ]; then
+          WATCH_ARGS="$$WATCH_ARGS --tcp kyc-execution-layer kyc-execution-layer 8545"
+        fi
 
         exec sh /app/watch-dependencies.sh $$WATCH_ARGS -- /app/kaspad $$ARGS
     volumes:
@@ -369,6 +399,7 @@ services:
       - ./logs/kaspad/:/app/logs/  # Event logs when ENABLE_EVENT_LOGGING=true
       - ./keys/jwt.hex:/app/jwt.hex:ro
       - ./keys/${IGRA_Q_JWT_FILE:-jwt.hex}:/app/q-jwt.hex:ro
+      - ./keys/${IGRA_KYC_JWT_FILE:-kyc-jwt.hex}:/app/kyc-jwt.hex:ro
       - *dependency-watch-volume
       - *parse-network-slug-volume
     networks:
@@ -487,6 +518,53 @@ services:
       - q_ethrex_data:/app/data/
       - ./keys/${IGRA_Q_JWT_FILE:-q-jwt.hex}:/app/jwt.hex
       - q_ethrex_ipc:/app/socket
+      - ./network-params:/app/network-params
+    healthcheck:
+      <<: *default-healthcheck
+      test:
+        - CMD-SHELL
+        - >
+          bash -lc ': > /dev/tcp/127.0.0.1/8545' &&
+          bash -lc ': > /dev/tcp/127.0.0.1/8546' &&
+          bash -lc ': > /dev/tcp/127.0.0.1/8551'
+
+  # IGRA KYC zone EL: canonical-style ethrex (ECDSA) + the EL-level KYC filter, on chain 28836.
+  # Uses the KYC genesis template (adds config.kycRegistry) via GENESIS_TEMPLATE.
+  kyc-execution-layer:
+    <<: *default-service
+    image: igranetwork/ethrex:kyc-zone
+    restart: *service-restart-policy
+    container_name: kyc-execution-layer
+    profiles: ["kyc-zone"]
+    entrypoint: /app/run-igra-el.sh
+    ports:
+      - "127.0.0.1:${IGRA_KYC_HTTP_PORT:-19545}:8545"
+      - "127.0.0.1:${IGRA_KYC_WS_PORT:-19546}:8546"
+    expose:
+      - "8545"
+      - "8546"
+      - "8551"
+      - "9001"
+    environment:
+      GENESIS_TEMPLATE: /app/genesis.kyc.template.json
+      L1_REFERENCE_TIMESTAMP: ${L1_REFERENCE_TIMESTAMP}
+      L1_REFERENCE_DAA_SCORE: ${L1_REFERENCE_DAA_SCORE}
+      CHAIN_ID: ${IGRA_KYC_CHAIN_ID:-}
+      ONE_TIME_ADDRESS: ${IGRA_KYC_EL_ONE_TIME_ADDRESS:-}
+      IGRA_LAUNCH_DAA_SCORE: ${IGRA_LAUNCH_DAA_SCORE}
+      TX_ID_PREFIX: ${TX_ID_PREFIX:?TX_ID_PREFIX must be set (KYC zone sidecar shares the canonical L1 tx-id prefix)}
+      IGRA_LANE_ID: ${IGRA_LANE_ID:?IGRA_LANE_ID must be set (KYC zone sidecar shares the canonical post-Toccata IGRA lane)}
+      MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${IGRA_KYC_MIN_PROTOCOL_FEE_PER_GAS_GWEI:-}
+      IGRA_LOCK_SCRIPT_PUBKEY: ${IGRA_LOCK_SCRIPT_PUBKEY:-}
+      IGRA_ENTRY_MIN_AMOUNT: ${IGRA_KYC_ENTRY_MIN_AMOUNT:-}
+      BITCOIN_BLOCK_HASH: ${IGRA_KYC_BITCOIN_BLOCK_HASH:-0000000000000000000000000000000000000000000000000000000000000000}
+      ETHEREUM_BLOCK_HASH: ${IGRA_KYC_ETHEREUM_BLOCK_HASH:-0x0000000000000000000000000000000000000000000000000000000000000000}
+      KASPA_BLOCK_HASH: ${IGRA_KYC_KASPA_BLOCK_HASH:-0000000000000000000000000000000000000000000000000000000000000000}
+      NETWORK_PARAMS_OUTPUT: /app/network-params/kyc-network-params.md
+    volumes:
+      - kyc_ethrex_data:/app/data/
+      - ./keys/${IGRA_KYC_JWT_FILE:-kyc-jwt.hex}:/app/jwt.hex
+      - kyc_ethrex_ipc:/app/socket
       - ./network-params:/app/network-params
     healthcheck:
       <<: *default-healthcheck
