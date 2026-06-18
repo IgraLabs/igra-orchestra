@@ -58,6 +58,7 @@ services:
       - CDN_BASE_URL
       - NETWORK
       - TX_ID_PREFIX
+      - IGRA_LANE_ID
       - IGRA_ENABLE
       - POST_FORK_LOCK_SCRIPT_PUBKEY
       - LOCK_SCRIPT_FORK_DAA_SCORE
@@ -107,6 +108,22 @@ services:
           fi
           [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && ARGS="$$ARGS --igra-post-fork-lock-script-pubkey=$$POST_FORK_LOCK_SCRIPT_PUBKEY"
           [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ] && ARGS="$$ARGS --igra-lock-script-fork-daa-score=$$LOCK_SCRIPT_FORK_DAA_SCORE"
+          # Toccata/KIP-21 lane: required whenever Toccata is scheduled (the override
+          # file carries toccata_activation). Fail early on a misconfig reached via a
+          # direct `docker compose up` that bypassed setup-devnet.sh's validation.
+          if [ -f /app/overrides/devnet.json ] && grep -q '"toccata_activation"' /app/overrides/devnet.json && [ -z "$$IGRA_LANE_ID" ]; then
+            echo "Error: IGRA_LANE_ID must be set when toccata_activation is scheduled in overrides/devnet.json" >&2; exit 1
+          fi
+          if [ -n "$$IGRA_LANE_ID" ]; then
+            case "$$IGRA_LANE_ID" in
+              *[!0-9a-fA-F]*) echo "Error: IGRA_LANE_ID must be hex (got: $$IGRA_LANE_ID)" >&2; exit 1 ;;
+            esac
+            case "$${#IGRA_LANE_ID}" in
+              8|40) ;;
+              *) echo "Error: IGRA_LANE_ID must be 8 or 40 hex chars (got: $$IGRA_LANE_ID)" >&2; exit 1 ;;
+            esac
+            ARGS="$$ARGS --igra-lane-id=$$IGRA_LANE_ID"
+          fi
 
           # Devnet has no ATAN data source: missing config is a warning, not fatal.
           if [ -n "$$ATAN_IMPORT_URL" ]; then
@@ -223,6 +240,7 @@ services:
       - NETWORK
       - KASPAD_HOST
       - KASPAD_GRPC_PORT
+      - IGRA_LANE_ID
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -238,6 +256,9 @@ services:
           ARGS="--enable-mainnet-pre-launch $$ARGS"
         else
           ARGS="--$$NETWORK $$ARGS"
+        fi
+        if [ -n "$$IGRA_LANE_ID" ]; then
+          ARGS="$$ARGS --subnetwork-id=$$IGRA_LANE_ID"
         fi
         exec sh /app/watch-dependencies.sh \
           --tcp kaspad "$$KASPAD_HOST" "$$KASPAD_GRPC_PORT" \
@@ -276,6 +297,7 @@ services:
       READ_ONLY: ${RPC_READ_ONLY}
       MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
       TX_ID_PREFIX: ${TX_ID_PREFIX}
+      IGRA_LANE_ID: ${IGRA_LANE_ID:-}
       KASWALLET_HOST: kaswallet-0
       WALLET_DAEMON_URI: http://kaswallet-0:8082
       WALLET_TO_ADDRESS: ${W0_WALLET_TO_ADDRESS}
