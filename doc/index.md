@@ -11,7 +11,7 @@ Choose your deployment guide:
 
 ## Operations
 
-- **[Node Operations](node-operations/index.md)** - Worker config, wallet API, balance monitoring, health checks, and ATAN-only mode
+- **[Node Operations](node-operations/index.md)** - Worker config, wallet API, balance monitoring, health checks, ATAN-only mode, and external CPU mining
 - **[Kaspa Wallet Guide](kaspa-wallet.md)** - Wallet setup and management for all networks
 - **[Log Management](log-management.md)** - Automated log cleanup for servers
 

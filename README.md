@@ -21,8 +21,6 @@ The `./scripts/dev/setup-repos.sh` script clones the necessary repositories into
 *   `build/repos/kaswallet` - Wallet service for relaying transactions (repo: `IgraLabs/kaswallet`)
 *   `build/repos/rusty-kaspa-private` - Contains the Kaspad node (repo: `IgraLabs/rusty-kaspa-private`)
 
-The `./scripts/dev/setup-repos.sh` script also clones the `kaspa-miner` repository (repo: `elichai/kaspa-miner`).
-
 Ensure these repositories are present before running the Docker Compose environment. The `./scripts/dev/setup-repos.sh` script handles cloning and configuring the correct branches.
 
 ## Deployment Modes
@@ -33,7 +31,7 @@ Igra Orchestra supports two deployment modes:
 Uses pre-built Docker images from Docker Hub for proprietary services. This mode:
 - Protects intellectual property by not exposing proprietary source code
 - Reduces deployment time significantly
-- Only requires cloning public repositories (kaspad and kaspa-miner)
+- Pulls all service images from Docker Hub; no source repositories need to be cloned
 
 ### 2. Build from Source Mode (For Developers)
 Builds all services from source code. This mode:
@@ -136,7 +134,6 @@ Follow these steps before the first run:
     # KASWALLET_BRANCH=feature/new-api
     # IGRA_RPC_PROVIDER_BRANCH=main
     # KASPAD_BRANCH=for-wallet
-    # KASPA_MINER_BRANCH=main
     ```
 
 2.  **Clone and setup the repositories:**
@@ -174,9 +171,6 @@ The Docker Compose configuration uses profiles and YAML anchors for improved mai
 
 - **Kaspa Services** (profile: `kaspad`):
   - `kaspad` - Kaspa node
-
-- **Kaspa Miner** (profile: `kaspa-miner`):
-  - `kaspa-miner` - Kaspa mining service
 
 - **Worker Services** (profiles: `frontend-w1` through `frontend-w20`):
   - `rpc-provider-0` to `rpc-provider-19` - RPC endpoints for API requests
@@ -274,8 +268,6 @@ The recommended way to run the IGRA Orchestra stack is:
 1. **Start Kaspa Services First**
    ```bash
    docker compose --profile kaspad up -d
-   # Optional: Start the miner (devnet/testnet only)
-   docker compose --profile kaspa-miner up -d
    ```
 
 2. **Start Backend (Core Services)**
