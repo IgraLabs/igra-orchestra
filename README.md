@@ -75,7 +75,7 @@ kaspad, reth, kaswallet and rpc-provider locally and starts the stack.
 
 ```bash
 # clone sources (kaspad/kaswallet/rpc-provider on v3.0, reth on production):
-KASPAD_BRANCH=v3.0 KASWALLET_BRANCH=v3.0 IGRA_RPC_PROVIDER_BRANCH=v3.0 \
+KASPAD_BRANCH=v3.0 KASWALLET_BRANCH=v3.0 IGRA_RPC_PROVIDER_BRANCH=v3.0 RETH_BRANCH=production \
   ./scripts/dev/setup-repos.sh
 
 # build from source and bring the stack up:
@@ -85,10 +85,22 @@ FINALITY_PERIOD_SECONDS=600 ./scripts/setup-devnet.sh
 docker compose -f docker-compose.devnet.yml --profile mining up -d --build kaspa-miner
 ```
 
-Local-only: dedicated `docker-compose.devnet.yml`, RPC on `RPC_PORT` (default
-8555, no Traefik/TLS), container names shared with the production stack (run one
-stack per host). Reth data is bind-mounted under `data/` as root
-(`sudo rm -rf data` to reset).
+Local-only: dedicated `docker-compose.devnet.yml`, RPC bound to
+`RPC_BIND_ADDR` (default `127.0.0.1`) on `RPC_PORT` (default 8555, no
+Traefik/TLS), read-only by default (`RPC_READ_ONLY=true`). Project name
+(`igra-devnet`) and container names (`*-devnet`) are distinct from the
+production stack.
+
+**Reset.** `finality_depth` is baked into kaspad's consensus DB on first run, so
+changing `FINALITY_PERIOD_SECONDS` requires a fresh kaspad volume. To wipe all
+state:
+
+```bash
+# remove containers AND the kaspad_data named volume (destroys the chain):
+docker compose -f docker-compose.devnet.yml down -v
+# remove host-side state created by setup-devnet.sh (reth data is root-owned):
+sudo rm -rf data network-params logs overrides
+```
 
 **Manual setup (alternative):**
 

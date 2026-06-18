@@ -1,4 +1,6 @@
-name: igra-orchestra-devnet
+# Distinct project name from the production stack (igra-orchestra-${NETWORK}) so
+# the two cannot silently share the kaspad_data volume namespace on one host.
+name: igra-devnet
 
 volumes:
   kaspad_data:
@@ -9,7 +11,7 @@ x-default-logging: &default-logging
     max-size: "1g"
     max-file: "10"
     compress: "true"
-    tag: "igra-orchestra-devnet/{{.Name}}/{{.ID}}"
+    tag: "igra-devnet/{{.Name}}/{{.ID}}"
 
 x-default-healthcheck: &default-healthcheck
   interval: 10s
@@ -30,15 +32,20 @@ services:
         - default
     image: igranetwork/kaspad:${KASPAD_VERSION}
     restart: *service-restart-policy
-    # Shared with the production stack; run one stack per host.
-    container_name: kaspad
+    container_name: kaspad-devnet
+    profiles: ["backend"]
     logging: *default-logging
     depends_on:
       execution-layer:
         condition: service_healthy
+        # watch-dependencies.sh handles runtime ordering; don't hard-fail `up`
+        # if the execution layer is slow to report healthy.
+        required: false
     ports:
       - "127.0.0.1:${KASPAD_GRPC_PORT}:${KASPAD_GRPC_PORT}"
-      - "${KASPAD_P2P_PORT}:${KASPAD_P2P_PORT}"
+      # Single-node devnet (--nodnsseed, no --addpeer) needs no inbound P2P;
+      # scope to loopback like the sibling gRPC/borsh/JSON ports.
+      - "127.0.0.1:${KASPAD_P2P_PORT}:${KASPAD_P2P_PORT}"
       - "127.0.0.1:${KASPAD_BORSH_PORT}:${KASPAD_BORSH_PORT}"
       - "127.0.0.1:${KASPAD_JSON_PORT}:${KASPAD_JSON_PORT}"
     environment:
@@ -132,7 +139,9 @@ services:
       - ./logs/kaspad/:/app/logs/  # Event logs when ENABLE_EVENT_LOGGING=true
       - ./keys/jwt.hex:/app/jwt.hex:ro
       - *dependency-watch-volume
-      - ./overrides/devnet.json:/app/overrides/devnet.json:ro
+      # Mount the parent dir (not the single file) so a missing devnet.json is
+      # simply absent, not shadowed by a Docker-auto-created empty directory.
+      - ./overrides:/app/overrides:ro
     healthcheck:
       <<: *default-healthcheck
       test:
@@ -149,12 +158,16 @@ services:
         - default
     image: igranetwork/reth:${RETH_VERSION}
     restart: *service-restart-policy
-    container_name: execution-layer
+    container_name: execution-layer-devnet
+    profiles: ["backend"]
     logging: *default-logging
     entrypoint: /app/run-igra-el.sh
+    # Loopback-only host publish for local debugging (e.g. a co-located
+    # blockscout). Internal consumers reach execution-layer:8545 via `expose`,
+    # so the ports are parameterized to avoid clashing with a production EL.
     ports:
-      - "127.0.0.1:9545:8545"  # open 8545 on localhost for blockscout
-      - "127.0.0.1:9546:8546"  # open 8546 on localhost for blockscout
+      - "127.0.0.1:${EL_RPC_HOST_PORT:-9545}:8545"
+      - "127.0.0.1:${EL_WS_HOST_PORT:-9546}:8546"
     expose:
       - "8545"
       - "8546"
@@ -198,7 +211,8 @@ services:
         - default
     image: igranetwork/kaswallet:${KASWALLET_VERSION}
     restart: *service-restart-policy
-    container_name: kaswallet-0
+    container_name: kaswallet-0-devnet
+    profiles: ["frontend-w1"]
     logging: *default-logging
     expose:
       - "8082"
@@ -247,7 +261,8 @@ services:
         - default
     image: igranetwork/rpc-provider:${RPC_PROVIDER_VERSION}
     restart: *service-restart-policy
-    container_name: rpc-provider-0
+    container_name: rpc-provider-0-devnet
+    profiles: ["frontend-w1"]
     logging: *default-logging
     environment:
       RUST_LOG: ${RUST_LOG}
@@ -256,6 +271,8 @@ services:
       EL_URL: http://execution-layer:8545
       EL_WS_URL: ws://execution-layer:8546
       SECURITY_ENABLE_WHITELIST: "true"
+      # Off-box write exposure is prevented by RPC_READ_ONLY (default true) and
+      # the loopback host bind below; flip RPC_READ_ONLY to enable writes.
       READ_ONLY: ${RPC_READ_ONLY}
       MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
       TX_ID_PREFIX: ${TX_ID_PREFIX}
@@ -266,7 +283,9 @@ services:
     expose:
       - "8535"
     ports:
-      - "0.0.0.0:${RPC_PORT}:8535"  # expose RPC directly on host (no Traefik on devnet)
+      # Loopback by default (no Traefik/TLS/auth on devnet). Set RPC_BIND_ADDR=0.0.0.0
+      # only to deliberately expose the wallet-backed RPC to the LAN/internet.
+      - "${RPC_BIND_ADDR:-127.0.0.1}:${RPC_PORT}:8535"
     entrypoint:
       - sh
       - -ec
@@ -301,7 +320,7 @@ services:
       context: build/repos/kaspa-miner
       dockerfile: ../../Dockerfile.kaspa-miner
     image: kaspa-miner
-    container_name: kaspa-miner
+    container_name: kaspa-miner-devnet
     logging: *default-logging
     environment:
       - RUST_LOG
