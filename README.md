@@ -91,9 +91,21 @@ Traefik/TLS), read-only by default (`RPC_READ_ONLY=true`). Project name
 (`igra-devnet`) and container names (`*-devnet`) are distinct from the
 production stack.
 
-**Reset.** `finality_depth` is baked into kaspad's consensus DB on first run, so
-changing `FINALITY_PERIOD_SECONDS` requires a fresh kaspad volume. To wipe all
-state:
+**Toccata / KIP-21 rehearsal.** The devnet activates the Toccata hardfork after a
+short, predictable number of mined blocks so you can rehearse crossing the KIP-21
+boundary locally. `TOCCATA_ACTIVATION_DAA_SCORE` (default `1000` ≈ ~100s / ~1000
+blocks at 10 BPS) is written as `toccata_activation` into `overrides/devnet.json`;
+kaspad is started with ATAN enabled and `--igra-lane-id=$IGRA_LANE_ID` (default
+`97b10000`, a 4-byte namespace mirroring `TX_ID_PREFIX`). Whenever ATAN is enabled
+(`IGRA_ENABLE=true`) and Toccata is scheduled, the lane id is mandatory. `setup-devnet.sh`
+fails early on a missing or invalid lane, score, or finality value; the compose entrypoint
+re-checks the lane on a direct `docker compose up` (presence plus a hex/length format check,
+with kaspad validating the exact lane shape at startup). Set `TOCCATA_ACTIVATION_DAA_SCORE=`
+(empty) to opt out (no fork). This is independent of `LOCK_SCRIPT_FORK_DAA_SCORE`.
+
+**Reset.** Consensus override params (`finality_depth`, `toccata_activation`) are
+baked into kaspad's consensus DB on first run, so changing `FINALITY_PERIOD_SECONDS`
+or `TOCCATA_ACTIVATION_DAA_SCORE` requires a fresh kaspad volume. To wipe all state:
 
 ```bash
 # remove containers AND the kaspad_data named volume (destroys the chain):
