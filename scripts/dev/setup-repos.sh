@@ -15,7 +15,6 @@ function print_help() {
     echo "    KASWALLET_BRANCH"
     echo "    IGRA_RPC_PROVIDER_BRANCH"
     echo "    KASPAD_BRANCH"
-    echo "    KASPA_MINER_BRANCH"
     echo ""
     echo "Examples:"
     echo "  ./scripts/dev/setup-repos.sh"
@@ -112,7 +111,7 @@ USE_PREBUILT_IMAGES=${USE_PREBUILT_IMAGES:-false}
 # Function to clone a repository if it doesn't exist
 function clone_repo() {
     local repo_url=$1
-    # Extract, e.g. kaspa-miner from git@github.com:elichai/kaspa-miner.git
+    # Extract, e.g. kaswallet from git@github.com:IgraLabs/kaswallet.git
     local folder
     folder=$(basename -s .git "$repo_url")
 
@@ -169,7 +168,6 @@ RETH_BRANCH=${RETH_BRANCH:-production}
 KASWALLET_BRANCH=${KASWALLET_BRANCH:-main}
 IGRA_RPC_PROVIDER_BRANCH=${IGRA_RPC_PROVIDER_BRANCH:-main}
 KASPAD_BRANCH=${KASPAD_BRANCH:-master}
-KASPA_MINER_BRANCH=${KASPA_MINER_BRANCH:-main}
 
 log "Starting repository setup"
 
@@ -189,18 +187,11 @@ fi
 # Check if using pre-built images for proprietary services
 if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
     log "USE_PREBUILT_IMAGES is set to true"
-    log "Will clone Kaspa miner repository only"
-    log "All other services will use pre-built Docker images"
+    log "No source repositories need to be cloned; all services use pre-built Docker images"
 
-    REPOS=(
-        "kaspa-miner      "
-    )
-    URLS=(
-        "git@github.com:elichai/kaspa-miner.git"
-    )
-    BRANCHES=(
-        "$KASPA_MINER_BRANCH"
-    )
+    REPOS=()
+    URLS=()
+    BRANCHES=()
 else
     log "USE_PREBUILT_IMAGES is set to false (or not set)"
     log "Will clone all repositories and build from source"
@@ -211,7 +202,6 @@ else
         "kaswallet        "
         "igra-rpc-provider"
         "kaspad           "
-        "kaspa-miner      "
     )
 
     URLS=(
@@ -219,14 +209,12 @@ else
         "git@github.com:IgraLabs/kaswallet.git"
         "git@github.com:IgraLabs/igra-rpc-provider.git"
         "git@github.com:IgraLabs/rusty-kaspa-private.git"
-        "git@github.com:elichai/kaspa-miner.git"
     )
     BRANCHES=(
         "$RETH_BRANCH"
         "$KASWALLET_BRANCH"
         "$IGRA_RPC_PROVIDER_BRANCH"
         "$KASPAD_BRANCH"
-        "$KASPA_MINER_BRANCH"
     )
 fi
 
