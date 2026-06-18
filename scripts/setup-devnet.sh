@@ -33,11 +33,89 @@ export COMPOSE_FILE="docker-compose.devnet.yml"
 # Single worker by default (devnet runs only kaswallet-0 / rpc-provider-0).
 export NUM_WORKERS="${NUM_WORKERS:-1}"
 
+# Resolve devnet knobs from .env (else the committed example) before generating the
+# override JSON, so a value set in .env reaches it. Inline `VAR=...` still wins.
+DEVNET_ENV_FILE="$SCRIPT_DIR/../.env"
+[ -f "$DEVNET_ENV_FILE" ] || DEVNET_ENV_FILE="$SCRIPT_DIR/../$ENV_FILE"
+
+read_devnet_env() {
+    local key="$1" file="$2" line val found=1
+    [ -f "$file" ] || return 1
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%$'\r'}"
+        case "$line" in
+            "$key"=*)
+                val="${line#*=}"
+                val="${val#"${val%%[![:space:]]*}"}"
+                val="${val%"${val##*[![:space:]]}"}"
+                case "$val" in
+                    \"*\"|\'*\') val="${val:1:${#val}-2}" ;;
+                esac
+                found=0
+                ;;
+        esac
+    done < "$file"
+    [ "$found" -eq 0 ] && printf '%s' "$val"
+    return "$found"
+}
+
+# Precedence: inline env (set, even if empty) > env file > default.
+resolve_devnet_var() {
+    local name="$1" default="$2" val
+    [ -n "${!name+set}" ] && return 0
+    if val="$(read_devnet_env "$name" "$DEVNET_ENV_FILE")"; then
+        printf -v "$name" '%s' "$val"
+    else
+        printf -v "$name" '%s' "$default"
+    fi
+}
+
 # Generate kaspad override-params JSON. Default: 600s finality (= 6000-block depth at BPS=10).
+resolve_devnet_var FINALITY_PERIOD_SECONDS 600
 FINALITY_PERIOD_SECONDS="${FINALITY_PERIOD_SECONDS:-600}"
+# Empty TOCCATA_ACTIVATION_DAA_SCORE opts out of Toccata; defaults match .env.devnet.example.
+resolve_devnet_var TOCCATA_ACTIVATION_DAA_SCORE 1000
+resolve_devnet_var IGRA_LANE_ID 97b10000
+resolve_devnet_var IGRA_LAUNCH_DAA_SCORE 0
+
+# Fail before build/up if the KIP-21 transition config is invalid or incomplete.
+# Toccata is optional: an empty TOCCATA_ACTIVATION_DAA_SCORE opts out (no fork). But
+# when Toccata IS scheduled, a lane id is mandatory (kaspad requires it post-Toccata).
+validate_toccata_and_lane() {
+    local toccata="$1" lane="$2" launch="$3"
+    if [ -n "$toccata" ]; then
+        if ! [[ "$toccata" =~ ^[1-9][0-9]*$ ]]; then
+            echo "ERROR: TOCCATA_ACTIVATION_DAA_SCORE must be a positive integer with no leading zeros, or empty to disable Toccata (got: $toccata)" >&2
+            exit 1
+        fi
+        if (( toccata > 920000 )); then
+            echo "ERROR: TOCCATA_ACTIVATION_DAA_SCORE=$toccata is implausibly large (> 920000); likely a typo. Lower it or set it empty to disable Toccata." >&2
+            exit 1
+        fi
+        if [ -z "$lane" ]; then
+            echo "ERROR: IGRA_LANE_ID is required when TOCCATA_ACTIVATION_DAA_SCORE is set (Toccata scheduled)" >&2
+            exit 1
+        fi
+        if [[ "$launch" =~ ^[0-9]+$ ]] && (( launch >= toccata )); then
+            echo "ERROR: IGRA_LAUNCH_DAA_SCORE ($launch) must be < TOCCATA_ACTIVATION_DAA_SCORE ($toccata) so the pre-fork entry window opens before the fork" >&2
+            exit 1
+        fi
+    fi
+    if [ -n "$lane" ]; then
+        if ! [[ "$lane" =~ ^([0-9a-f]{8}|[0-9a-f]{40})$ ]]; then
+            echo "ERROR: IGRA_LANE_ID must be 8 or 40 lowercase hex chars (got: $lane); kaspad validates the exact lane shape at startup" >&2
+            exit 1
+        fi
+        if [[ "$lane" =~ ^0+$ ]]; then
+            echo "ERROR: IGRA_LANE_ID must not be all-zero (reserved SUBNETWORK_ID_NATIVE shape)" >&2
+            exit 1
+        fi
+    fi
+}
 
 generate_devnet_overrides() {
     local seconds="$1"
+    local toccata="$2"
     # Upper bound is below pruning_depth/BPS (= 108000s): kaspad's effective
     # finalization window is finality_depth + merge_depth + anticone overhead
     # (~159k blocks with these params). Capping at 92000s keeps finality_depth
@@ -52,6 +130,13 @@ generate_devnet_overrides() {
     mkdir -p "$out_dir"
     # blockrate mirrors the kaspad devnet defaults; only finality_depth is tuned.
     # crescendo_activation=0 keeps post-Crescendo consensus active from genesis.
+    # toccata_activation is appended as the last field only when scheduled, so the
+    # JSON has no trailing comma when Toccata is disabled (empty score).
+    local toccata_line=""
+    if [ -n "$toccata" ]; then
+        toccata_line=",
+  \"toccata_activation\": $toccata"
+    fi
     cat > "$out_dir/devnet.json" <<EOF
 {
   "blockrate": {
@@ -66,10 +151,14 @@ generate_devnet_overrides() {
     "pruning_depth": 1080000,
     "coinbase_maturity": 200
   },
-  "crescendo_activation": 0
+  "crescendo_activation": 0$toccata_line
 }
 EOF
-    echo "[setup-devnet] Generated overrides/devnet.json: finality_depth=$depth (= ${seconds}s at 10 BPS)"
+    if [ -n "$toccata" ]; then
+        echo "[setup-devnet] Generated overrides/devnet.json: finality_depth=$depth (= ${seconds}s at 10 BPS), toccata_activation=$toccata"
+    else
+        echo "[setup-devnet] Generated overrides/devnet.json: finality_depth=$depth (= ${seconds}s at 10 BPS), toccata_activation disabled (never)"
+    fi
 }
 
 # finality_depth is baked into kaspad's consensus DB on first run and lives in the
@@ -82,9 +171,10 @@ warn_if_finality_baked() {
         cat >&2 <<EOF
 
 WARNING: existing kaspad volume '$volume' found.
-         finality_depth is baked into the consensus DB on first run; re-running
-         setup with a different FINALITY_PERIOD_SECONDS will NOT take effect until
-         the volume is wiped. To apply a new finality:
+         Consensus override params (finality_depth, toccata_activation) are baked
+         into the consensus DB on first run; re-running setup with a different
+         FINALITY_PERIOD_SECONDS or TOCCATA_ACTIVATION_DAA_SCORE will NOT take effect
+         until the volume is wiped. To apply new values:
 
            docker compose -f docker-compose.devnet.yml down -v
 
@@ -94,7 +184,8 @@ EOF
     fi
 }
 
-generate_devnet_overrides "$FINALITY_PERIOD_SECONDS"
+validate_toccata_and_lane "$TOCCATA_ACTIVATION_DAA_SCORE" "$IGRA_LANE_ID" "$IGRA_LAUNCH_DAA_SCORE"
+generate_devnet_overrides "$FINALITY_PERIOD_SECONDS" "$TOCCATA_ACTIVATION_DAA_SCORE"
 warn_if_finality_baked
 
 # Build the stack from source. kaspad's --override-params-file is only on the
