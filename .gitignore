@@ -17,6 +17,7 @@ tasks/
 network-params/
 
 overrides/
+rehearsals/
 
 .DS_Store
 .cursor
