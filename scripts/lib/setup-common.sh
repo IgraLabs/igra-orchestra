@@ -516,11 +516,15 @@ validate_required_variables() {
     local var
 
     # Validate KASWALLET_FLAG is a known-safe value
-    if [[ "${KASWALLET_FLAG:-}" != "--testnet" \
-        && "${KASWALLET_FLAG:-}" != "--enable-mainnet-pre-launch" \
-        && ! "${KASWALLET_FLAG:-}" =~ ^--testnet[[:space:]]+--testnet-suffix=[0-9]+$ ]]; then
-        die "Invalid KASWALLET_FLAG: ${KASWALLET_FLAG:-<unset>}. Must be --testnet, --testnet --testnet-suffix=<digits>, or --enable-mainnet-pre-launch"
-    fi
+    case "${KASWALLET_FLAG:-}" in
+        --testnet|--devnet|--enable-mainnet-pre-launch)
+            ;;
+        *)
+            if [[ ! "${KASWALLET_FLAG:-}" =~ ^--testnet[[:space:]]+--testnet-suffix=[0-9]+$ ]]; then
+                die "Invalid KASWALLET_FLAG: ${KASWALLET_FLAG:-<unset>}. Must be --testnet, --testnet --testnet-suffix=<digits>, --devnet, or --enable-mainnet-pre-launch"
+            fi
+            ;;
+    esac
 
     for var in ENV_NAME ENV_FILE NODE_ID_PREFIX KASWALLET_FLAG VERSIONS_FILE; do
         if [[ -z "${!var:-}" ]]; then
