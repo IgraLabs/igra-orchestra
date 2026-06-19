@@ -16,7 +16,10 @@ tasks/
 
 network-params/
 
+overrides/
+
 .DS_Store
 .cursor
+.idea/
 letsencrypt/
 site/
