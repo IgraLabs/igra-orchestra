@@ -460,6 +460,7 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork
 - [Mainnet Deployment Guide](doc/quick-setup-mainnet.md) - Public mainnet deployment with pre-built images
 - [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md) - Public Galleon testnet (testnet-10) deployment with pre-built images
 - [Galleon → testnet-10 Migration Guide](doc/node-operations/migrate-galleon-to-testnet-10.md) - One-shot upgrade for existing Galleon operators on `NETWORK=testnet`
+- [Mainnet v2.3 → v3.0 Upgrade Guide](doc/node-operations/upgrade-mainnet-v2.3-to-v3.0.md) - One-shot upgrade for existing mainnet operators from the v2.3 line to v3.0
 - [Kaspa Wallet Guide](doc/kaspa-wallet.md) - Wallet setup for all networks
 - [Log Management](doc/log-management.md) - Automated log cleanup for servers
 - [Docker Volume Permissions](doc/troubleshooting/docker-volume-permissions.md) - Fix permission denied errors
