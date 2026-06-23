@@ -1,5 +1,38 @@
 # Mainnet v2.3 → v3.0 Upgrade
 
+## TL;DR
+
+Existing **mainnet** v2.3 node → v3.0, keeping synced kaspad/reth data. The whole
+upgrade is an `.env` reconcile — **no re-sync, no volume rename**. Backend
+(kaspad/reth) moves to 3.0 now; the frontend workers (`rpc-provider`/`kaswallet`)
+**stay on 2.3 until the Toccata/KIP-21 fork activates** on mainnet.
+
+```bash
+# 1. Pull v3.0 code (ships on main)
+cd /path/to/your/igra-orchestra
+git fetch origin && git checkout main && git pull --ff-only
+#    If config/traefik/dynamic.yml shows as `deleted` or the pull hits "Permission denied":
+#    sudo chown -R "$USER:$USER" config/traefik/ && git restore config/traefik/dynamic.yml
+
+# 2. Reconcile .env (backs up, upserts IGRA_LANE_ID + version pins, validates)
+./scripts/upgrade-mainnet-v2.3-to-v3.0.sh        # add -y to skip the confirmation prompt
+
+# 3. Validate
+docker compose config -q                          # must exit cleanly
+
+# 4. First backend start needs the noninteractive flag (one-time kaspad DB-upgrade prompt)
+KASPAD_NONINTERACTIVE=true docker compose --profile backend up -d --no-build
+docker compose logs -f kaspad                     # wait until it's past the upgrade and syncing
+docker compose --profile backend up -d --no-build --force-recreate kaspad  # drop the override
+```
+
+**Do not recreate the frontend workers in this phase** — they keep emitting native
+(v0) transactions, which is what pre-Toccata mainnet expects. After the fork, set
+`RPC_PROVIDER_VERSION`/`KASWALLET_VERSION` to `3.0` and recreate the worker profile;
+see [After the Toccata switch](#after-the-toccata-switch).
+
+Full rationale, prerequisites, verification, rollback, and troubleshooting follow below.
+
 ## Who this is for
 
 If you run an existing IGRA Orchestra **mainnet** deployment (`NETWORK=mainnet`)
