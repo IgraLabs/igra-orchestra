@@ -50,6 +50,7 @@ services:
       - "127.0.0.1:${KASPAD_JSON_PORT}:${KASPAD_JSON_PORT}"
     environment:
       - KASPAD_ADD_PEER
+      - KASPAD_RETENTION_PERIOD_DAYS
       - ENABLE_PERF_DIAGNOSTICS
       - ENABLE_EVENT_LOGGING
       - WARM_START_BLOCK
@@ -78,6 +79,12 @@ services:
 
         if [ "$$NETWORK" != "mainnet" ]; then
           ARGS="--$$NETWORK --nodnsseed $$ARGS"
+        fi
+
+        # Optional block-data retention window (days). Omit to keep kaspad's default.
+        # Set KASPAD_RETENTION_PERIOD_DAYS in .env to apply.
+        if [ -n "$$KASPAD_RETENTION_PERIOD_DAYS" ]; then
+          ARGS="$$ARGS --retention-period-days=$$KASPAD_RETENTION_PERIOD_DAYS"
         fi
 
         IGRA_ENABLED="$${IGRA_ENABLE:-true}"
