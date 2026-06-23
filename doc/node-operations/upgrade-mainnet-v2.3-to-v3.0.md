@@ -71,6 +71,18 @@ git checkout main        # or whatever ref your deployment tracks
 git pull --ff-only
 ```
 
+**If the pull leaves `config/traefik/dynamic.yml` showing as `deleted`** in
+`git status` (or aborts with `unable to create file config/traefik/dynamic.yml:
+Permission denied`), the Traefik container — which runs as root and bind-mounts
+`./config/traefik` — has left that directory root-owned, so Git (running as your
+login user) can't write the newly tracked file into it. Restore ownership to your
+user and check the file back out, then re-run the pull if it had aborted:
+
+```bash
+sudo chown -R "$USER:$USER" config/traefik/
+git restore config/traefik/dynamic.yml
+```
+
 ### 2. Reconcile `.env`
 
 ```bash
@@ -202,6 +214,7 @@ clean:
 
 | Error | Meaning | Fix |
 |---|---|---|
+| `config/traefik/dynamic.yml` shows as `deleted` after the pull (or `unable to create file ... Permission denied`) | The root-running Traefik container bind-mounts `config/traefik/`, leaving the directory root-owned, so Git can't write the new tracked `dynamic.yml` into it | `sudo chown -R "$USER:$USER" config/traefik/ && git restore config/traefik/dynamic.yml` |
 | `IGRA_LANE_ID must be set ...` at `docker compose` | `.env` is still on the v2.3 schema (missing the lane) | Run `./scripts/upgrade-mainnet-v2.3-to-v3.0.sh` (or set `IGRA_LANE_ID=97b10000` by hand) |
 | `TX_ID_PREFIX must be set ...` at `docker compose` | `TX_ID_PREFIX` missing/empty | Set `TX_ID_PREFIX=97b1` in `.env` |
 | `.env NETWORK is '...', not 'mainnet'` | Wrong network for this script | This guide is mainnet-only; for Galleon use [migrate-galleon-to-testnet-10.md](migrate-galleon-to-testnet-10.md) |
