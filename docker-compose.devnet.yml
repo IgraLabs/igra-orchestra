@@ -62,6 +62,15 @@ services:
       - IGRA_ENABLE
       - POST_FORK_LOCK_SCRIPT_PUBKEY
       - LOCK_SCRIPT_FORK_DAA_SCORE
+      # Passed as runtime env (referenced as $$VAR below) rather than spliced
+      # compose-time, so a $(...) value is treated as data, not shell text.
+      - IGRA_LAUNCH_DAA_SCORE
+      - L1_REFERENCE_TIMESTAMP
+      - L1_REFERENCE_DAA_SCORE
+      - GENESIS_BLOCK_HASH
+      - MIN_PROTOCOL_FEE_PER_GAS_GWEI
+      - IGRA_LOCK_SCRIPT_PUBKEY
+      - IGRA_ENTRY_MIN_AMOUNT
       - RUST_LOG=info,kaspa_viaduct=trace,kaspa_igra_adapter=trace,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace
     entrypoint:
       - sh
@@ -85,15 +94,15 @@ services:
           ARGS="$$ARGS \
             --igra-enable \
             --atan-listen \
-            --atan-transaction-id-prefix=${TX_ID_PREFIX} \
-            --viaduct-start-daa-score=${IGRA_LAUNCH_DAA_SCORE} \
-            --igra-l1-reference-timestamp=${L1_REFERENCE_TIMESTAMP} \
-            --igra-l1-reference-daa-score=${L1_REFERENCE_DAA_SCORE} \
-            --igra-genesis-hash=${GENESIS_BLOCK_HASH} \
-            --igra-min-fee-per-gas-gwei=${MIN_PROTOCOL_FEE_PER_GAS_GWEI} \
+            --atan-transaction-id-prefix=$$TX_ID_PREFIX \
+            --viaduct-start-daa-score=$$IGRA_LAUNCH_DAA_SCORE \
+            --igra-l1-reference-timestamp=$$L1_REFERENCE_TIMESTAMP \
+            --igra-l1-reference-daa-score=$$L1_REFERENCE_DAA_SCORE \
+            --igra-genesis-hash=$$GENESIS_BLOCK_HASH \
+            --igra-min-fee-per-gas-gwei=$$MIN_PROTOCOL_FEE_PER_GAS_GWEI \
             --igra-jwt-path=/app/jwt.hex \
-            --igra-lock-script-pubkey=${IGRA_LOCK_SCRIPT_PUBKEY} \
-            --igra-entry-min-amount=${IGRA_ENTRY_MIN_AMOUNT} \
+            --igra-lock-script-pubkey=$$IGRA_LOCK_SCRIPT_PUBKEY \
+            --igra-entry-min-amount=$$IGRA_ENTRY_MIN_AMOUNT \
             --igra-el-host=http://execution-layer"
 
           [ "$$ENABLE_PERF_DIAGNOSTICS" = "true" ] && ARGS="$$ARGS --igra-enable-perf-diagnostics"
@@ -234,7 +243,9 @@ services:
     expose:
       - "8082"
     ports:
-      - "127.0.0.1:8082:8082"  # open 8082 on localhost for entry transactions
+      # Host side parameterized so the devnet can coexist with a production/testnet
+      # kaswallet, which also binds 8082.
+      - "127.0.0.1:${KASWALLET_HOST_PORT:-8082}:8082"
     environment:
       - RUST_LOG
       - NETWORK
@@ -294,7 +305,7 @@ services:
       SECURITY_ENABLE_WHITELIST: "true"
       # Off-box write exposure is prevented by RPC_READ_ONLY (default true) and
       # the loopback host bind below; flip RPC_READ_ONLY to enable writes.
-      READ_ONLY: ${RPC_READ_ONLY}
+      READ_ONLY: ${RPC_READ_ONLY:-true}
       MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
       TX_ID_PREFIX: ${TX_ID_PREFIX}
       IGRA_LANE_ID: ${IGRA_LANE_ID:-}
@@ -307,7 +318,7 @@ services:
     ports:
       # Loopback by default (no Traefik/TLS/auth on devnet). Set RPC_BIND_ADDR=0.0.0.0
       # only to deliberately expose the wallet-backed RPC to the LAN/internet.
-      - "${RPC_BIND_ADDR:-127.0.0.1}:${RPC_PORT}:8535"
+      - "${RPC_BIND_ADDR:-127.0.0.1}:${RPC_PORT:-8555}:8535"
     entrypoint:
       - sh
       - -ec
@@ -333,29 +344,4 @@ services:
             bash -lc ": > /dev/tcp/$$KASWALLET_HOST/8082";
           fi
 
-  kaspa-miner:
-    # "mining" profile so setup does not start it before it is built. Run manually:
-    #   docker compose --profile mining up -d --build kaspa-miner
-    profiles: ["mining"]
-    restart: *service-restart-policy
-    build:
-      context: build/repos/kaspa-miner
-      dockerfile: ../../Dockerfile.kaspa-miner
-    image: kaspa-miner
-    container_name: kaspa-miner-devnet
-    logging: *default-logging
-    environment:
-      - RUST_LOG
-      - REPLAY_ON_ERROR
-      - SYNC_THREADS
-    entrypoint: >
-      sh -c '
-      KASPAD=$$(getent ahostsv4 kaspad | grep kaspad | grep -Eo "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b") &&
-      exec /app/kaspa-miner
-      --mining-address ${MINING_ADDRESS:-}
-      --kaspad-address $$KASPAD
-      --port ${KASPAD_GRPC_PORT}
-      --threads ${MINING_THREADS:-1}
-      '
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+  # No kaspa-miner service: run one on the host via scripts/dev/run-devnet-miner.sh.
