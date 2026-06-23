@@ -30,6 +30,7 @@ All operational variables across the stack.
 | `CDN_BASE_URL` | `.env` | CDN base URL for ATAN data import |
 | `ATAN_IMPORT_URL` | `.env` | Optional override for auto-constructed import URL |
 | `KASPAD_ADD_PEER` | `.env` | Optional peer address |
+| `KASPAD_RETENTION_PERIOD_DAYS` | `.env` | Optional block-data retention window in days, passed to kaspad as `--retention-period-days`; omit to use kaspad's default. Applies to all kaspad modes |
 | `AWS_ACCESS_KEY_ID` | `.env` | AWS credentials for atan-uploader |
 | `AWS_SECRET_ACCESS_KEY` | `.env` | AWS credentials for atan-uploader |
 | `DATADIR` | `.env` | Data directory path for atan-uploader |

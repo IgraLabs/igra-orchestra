@@ -35,6 +35,7 @@ services:
       - KASPAD_ADD_PEER
       - KASPAD_NONINTERACTIVE
       - KASPAD_UA_RULE
+      - KASPAD_RETENTION_PERIOD_DAYS
       - ATAN_IMPORT_URL
       - CDN_BASE_URL
       - NETWORK
@@ -67,6 +68,12 @@ services:
         # Set KASPAD_UA_RULE in .env to apply; leave empty to skip.
         if [ -n "$$KASPAD_UA_RULE" ]; then
           ARGS="$$ARGS --ua-rule=$$KASPAD_UA_RULE"
+        fi
+
+        # Optional block-data retention window (days). Omit to keep kaspad's default.
+        # Set KASPAD_RETENTION_PERIOD_DAYS in .env to apply.
+        if [ -n "$$KASPAD_RETENTION_PERIOD_DAYS" ]; then
+          ARGS="$$ARGS --retention-period-days=$$KASPAD_RETENTION_PERIOD_DAYS"
         fi
 
         # Empty TX_ID_PREFIX would render as --atan-transaction-id-prefix=

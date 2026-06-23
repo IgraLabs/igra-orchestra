@@ -55,6 +55,7 @@ See `.env.atan.example` at the repository root for all available variables. Key 
 | `CDN_BASE_URL` | CloudFront URL | CDN for ATAN data import |
 | `ATAN_IMPORT_URL` | (empty) | Optional full import URL override; leave unset to use the auto-constructed `{CDN_BASE_URL}/{NETWORK}/{TX_ID_PREFIX}/index.pb` |
 | `KASPAD_ADD_PEER` | (empty) | Optional peer to connect to |
+| `KASPAD_RETENTION_PERIOD_DAYS` | (empty) | Optional block-data retention window in days (passed as `--retention-period-days`); omit to use kaspad's default |
 
 ## Monitoring
 
