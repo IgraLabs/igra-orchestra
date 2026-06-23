@@ -6,11 +6,12 @@
 
 # --- predicate helpers (return 0 = true, 1 = false; no output) ---
 
-is_uint()          { [[ "${1:-}" =~ ^[0-9]+$ ]]; }
-is_positive_int()  { [[ "${1:-}" =~ ^[0-9]+$ ]] && (( ${1:-0} > 0 )); }
+# Reject leading zeros so bash never reads a value as octal in (( ... )).
+is_uint()          { [[ "${1:-}" =~ ^(0|[1-9][0-9]*)$ ]]; }
+is_positive_int()  { [[ "${1:-}" =~ ^[1-9][0-9]*$ ]]; }
 is_hex()           { [[ "${1:-}" =~ ^[0-9a-fA-F]+$ ]]; }
 is_hex_even()      { [[ "${1:-}" =~ ^([0-9a-fA-F]{2})+$ ]]; }
-is_port()          { [[ "${1:-}" =~ ^[0-9]+$ ]] && (( ${1:-0} >= 1 && ${1:-0} <= 65535 )); }
+is_port()          { [[ "${1:-}" =~ ^[1-9][0-9]*$ ]] && (( ${1} >= 1 && ${1} <= 65535 )); }
 # Devnet kaspa address: kaspadev: prefix + bech32 charset payload (>= 59 chars).
 is_valid_mining_address() {
     [[ "${1:-}" =~ ^kaspadev:[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{59,}$ ]]
@@ -34,10 +35,15 @@ validate_devnet_env() {
     is_hex_even "${TX_ID_PREFIX:-}" || \
         errors+=("TX_ID_PREFIX must be hex with an even number of chars (got: '${TX_ID_PREFIX:-<unset>}')")
 
-    # IGRA_LANE_ID: 8 or 40 hex; mandatory when Toccata is scheduled
+    # IGRA_LANE_ID: 8 or 40 lowercase hex (kaspad validates the exact lane shape at
+    # startup); not all-zero (reserved SUBNETWORK_ID_NATIVE); mandatory when Toccata
+    # is scheduled.
     if [ -n "${IGRA_LANE_ID:-}" ]; then
-        [[ "${IGRA_LANE_ID}" =~ ^([0-9a-fA-F]{8}|[0-9a-fA-F]{40})$ ]] || \
-            errors+=("IGRA_LANE_ID must be 8 or 40 hex chars (got: '${IGRA_LANE_ID}')")
+        if ! [[ "${IGRA_LANE_ID}" =~ ^([0-9a-f]{8}|[0-9a-f]{40})$ ]]; then
+            errors+=("IGRA_LANE_ID must be 8 or 40 lowercase hex chars (got: '${IGRA_LANE_ID}')")
+        elif [[ "${IGRA_LANE_ID}" =~ ^0+$ ]]; then
+            errors+=("IGRA_LANE_ID must not be all-zero (reserved SUBNETWORK_ID_NATIVE shape)")
+        fi
     elif [ -n "$toccata" ]; then
         errors+=("IGRA_LANE_ID is required when TOCCATA_ACTIVATION_DAA_SCORE is set")
     fi
@@ -53,7 +59,7 @@ validate_devnet_env() {
     # Ports: range, then collision among the valid ones
     local ports=()
     for name in KASPAD_GRPC_PORT KASPAD_P2P_PORT KASPAD_BORSH_PORT KASPAD_JSON_PORT \
-                RPC_PORT EL_RPC_HOST_PORT EL_WS_HOST_PORT; do
+                RPC_PORT EL_RPC_HOST_PORT EL_WS_HOST_PORT KASWALLET_HOST_PORT; do
         p="${!name:-}"
         if is_port "$p"; then
             ports+=("$p:$name")
@@ -115,7 +121,8 @@ validate_devnet_env() {
             errors+=("$name must be a non-negative integer (got: '${!name:-<unset>}')")
     done
     if is_uint "$launch" && is_uint "$l1daa" && is_uint "$l1ts"; then
-        local genesis_ts=$(( launch / 10 - l1daa / 10 + l1ts - 1 ))
+        # Per-term division mirrors run-igra-el.sh's calculate_genesis_timestamp.
+        local genesis_ts=$(( 10#$launch / 10 - 10#$l1daa / 10 + 10#$l1ts - 1 ))
         (( genesis_ts > 0 )) || \
             errors+=("derived EL genesis timestamp must be positive: (IGRA_LAUNCH_DAA_SCORE/10 - L1_REFERENCE_DAA_SCORE/10 + L1_REFERENCE_TIMESTAMP - 1) = $genesis_ts")
     fi
@@ -187,17 +194,12 @@ resolve_devnet_env() {
     fi
 }
 
-# mining_preflight - verify mining can actually run. Called when Toccata is
-# scheduled, because the KIP-21 rehearsal cannot reach the activation DAA score
-# without mined blocks. Returns 1 (with actionable errors) if mining is impossible.
+# mining_preflight - validate MINING_ADDRESS/MINING_THREADS and remind the operator
+# to start an external miner. Called when Toccata is scheduled, because the KIP-21
+# rehearsal cannot reach the activation DAA score without mined blocks.
 mining_preflight() {
-    local repos_dir="$1" dockerfile="$2"
     local errors=()
 
-    [ -d "$repos_dir/kaspa-miner" ] || \
-        errors+=("kaspa-miner source repo not found at $repos_dir/kaspa-miner (clone via scripts/dev/setup-repos.sh)")
-    [ -f "$dockerfile" ] || \
-        errors+=("kaspa-miner Dockerfile not found at $dockerfile")
     is_valid_mining_address "${MINING_ADDRESS:-}" || \
         errors+=("MINING_ADDRESS must be a devnet address (kaspadev:...) (got: '${MINING_ADDRESS:-<unset>}')")
     is_positive_int "${MINING_THREADS:-}" || \
@@ -208,6 +210,11 @@ mining_preflight() {
         printf '  ERROR: %s\n' "${errors[@]}" >&2
         return 1
     fi
+
+    echo "[setup-devnet] Toccata is scheduled at DAA ${TOCCATA_ACTIVATION_DAA_SCORE:-}." >&2
+    echo "               kaspad mines nothing on its own; point a miner at the devnet" >&2
+    echo "               kaspad gRPC port (127.0.0.1:\${KASPAD_GRPC_PORT}) with" >&2
+    echo "               --mining-address ${MINING_ADDRESS:-} to reach the activation score." >&2
     return 0
 }
 
@@ -216,10 +223,16 @@ mining_preflight() {
 # reproducible. Files accumulate (one per run) under <out_dir>.
 record_source_revisions() {
     local repos_dir="$1" out_dir="$2"
-    local ts manifest repo path branch sha dirty
+    local ts manifest repo path branch sha dirty n
     ts="$(date -u +%Y%m%dT%H%M%SZ)"
     mkdir -p "$out_dir"
+    # Suffix on collision so same-second runs don't clobber each other.
     manifest="$out_dir/$ts.txt"
+    n=1
+    while [ -e "$manifest" ]; do
+        manifest="$out_dir/$ts-$n.txt"
+        n=$((n + 1))
+    done
 
     {
         echo "# Devnet rehearsal manifest"
@@ -231,7 +244,7 @@ record_source_revisions() {
         echo "env_source: ${DEVNET_ENV_SOURCE:-unknown}"
         echo
         printf '%-22s %-22s %-42s %s\n' "repo" "branch" "sha" "state"
-        for repo in rusty-kaspa-private reth-private kaswallet igra-rpc-provider kaspa-miner; do
+        for repo in rusty-kaspa-private reth-private kaswallet igra-rpc-provider; do
             path="$repos_dir/$repo"
             if git -C "$path" rev-parse --git-dir >/dev/null 2>&1; then
                 branch="$(git -C "$path" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
@@ -247,6 +260,17 @@ record_source_revisions() {
             printf '%-22s %-22s %-42s %s\n' "$repo" "$branch" "$sha" "$dirty"
         done
     } > "$manifest"
+
+    # Keep the newest REHEARSAL_KEEP (default 20) manifests.
+    local keep="${REHEARSAL_KEEP:-20}"
+    if is_positive_int "$keep"; then
+        local old
+        # Manifest names are controlled timestamps, so ls -t is safe here.
+        # shellcheck disable=SC2012
+        while IFS= read -r old; do
+            [ -n "$old" ] && rm -f "$old"
+        done < <(ls -1t "$out_dir"/*.txt 2>/dev/null | tail -n "+$((keep + 1))")
+    fi
 
     echo "[setup-devnet] Recorded source revisions -> $manifest"
     cat "$manifest"

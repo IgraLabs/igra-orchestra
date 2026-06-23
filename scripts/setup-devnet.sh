@@ -119,9 +119,10 @@ validate_devnet_env || exit 1
 # Record exactly what will be built (one manifest per rehearsal).
 record_source_revisions "$PROJECT_DIR/build/repos" "$PROJECT_DIR/rehearsals"
 
-# Mining is mandatory for the KIP-21 rehearsal whenever Toccata is scheduled.
+# When Toccata is scheduled, validate the mining config and remind the operator to
+# start an external miner (required to reach the activation DAA score).
 if [ -n "${TOCCATA_ACTIVATION_DAA_SCORE:-}" ]; then
-    mining_preflight "$PROJECT_DIR/build/repos" "$PROJECT_DIR/build/Dockerfile.kaspa-miner" || exit 1
+    mining_preflight || exit 1
 fi
 
 generate_devnet_overrides "$FINALITY_PERIOD_SECONDS" "$TOCCATA_ACTIVATION_DAA_SCORE"
@@ -136,9 +137,9 @@ build_devnet_stack() {
     local repos_dir="$SCRIPT_DIR/../build/repos"
     local missing=()
     local r
-    # kaspa-miner is included so a missing miner repo surfaces here, not later at
-    # the manual `--profile mining up` step.
-    for r in rusty-kaspa-private reth-private kaswallet igra-rpc-provider kaspa-miner; do
+    # The miner is not built from this repo (operators run their own); only the
+    # four core services are required here.
+    for r in rusty-kaspa-private reth-private kaswallet igra-rpc-provider; do
         [ -d "$repos_dir/$r" ] || missing+=("$r")
     done
     if (( ${#missing[@]} > 0 )); then
@@ -165,7 +166,6 @@ build_devnet_stack() {
     fi
 
     echo "[setup-devnet] Building devnet images from source (first build is slow)..."
-    # kaspa-miner is excluded; it builds on demand under the "mining" profile.
     docker compose build kaspad execution-layer kaswallet-0 rpc-provider-0
 }
 
@@ -219,7 +219,8 @@ print_summary() {
     echo "Services started:"
     docker compose ps --format "table {{.Name}}\t{{.Status}}"
     echo
-    echo "NOTE: kaspad mines no blocks until you start the miner (see below)."
+    echo "NOTE: kaspad mines no blocks on its own. Point an external miner at the"
+    echo "      devnet kaspad gRPC port to produce blocks (see below)."
     echo
     echo "Useful commands:"
     echo "  docker compose -f $COMPOSE_FILE logs -f kaspad           # kaspad"
@@ -235,15 +236,19 @@ print_summary() {
 
 run_setup "$@"
 
-# kaspa-miner is gated behind the "mining" profile and built on demand.
+# The miner is not part of this stack; operators run their own against the
+# published devnet kaspad gRPC port.
 cat <<EOF
 
 === Devnet: Mining ===
 
-Start the in-stack kaspa-miner once kaspad is healthy:
+kaspad mines no blocks on its own. The miner is not part of this stack; a helper
+clones, builds and runs tmrlvi/kaspa-miner on the host against the devnet kaspad
+gRPC port. Run it once kaspad is healthy:
 
-  docker compose -f docker-compose.devnet.yml --profile mining up -d --build kaspa-miner
-  docker compose -f docker-compose.devnet.yml logs -f kaspa-miner
+  ./scripts/dev/run-devnet-miner.sh
 
-Stop with: docker compose -f docker-compose.devnet.yml --profile mining down
+It reads MINING_ADDRESS / MINING_THREADS / KASPAD_GRPC_PORT from your .env; see
+'./scripts/dev/run-devnet-miner.sh --help' for options.
+Mining is required to reach TOCCATA_ACTIVATION_DAA_SCORE for the KIP-21 rehearsal.
 EOF

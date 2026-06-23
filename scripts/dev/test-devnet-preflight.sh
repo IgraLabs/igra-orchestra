@@ -35,10 +35,14 @@ ok  "is_uint 123"          is_uint 123
 no  "is_uint empty"        is_uint ""
 no  "is_uint -5"           is_uint -5
 no  "is_uint abc"          is_uint abc
+no  "is_uint 08 (octal)"   is_uint 08
+no  "is_uint 011 (octal)"  is_uint 011
+no  "is_uint 00"           is_uint 00
 
 ok  "is_positive_int 1"    is_positive_int 1
 no  "is_positive_int 0"    is_positive_int 0
 no  "is_positive_int x"    is_positive_int x
+no  "is_positive_int 007"  is_positive_int 007
 
 ok  "is_hex 9ab1"          is_hex 9ab1
 no  "is_hex 0xff"          is_hex 0xff
@@ -54,6 +58,7 @@ ok  "is_port 65535"        is_port 65535
 no  "is_port 0"            is_port 0
 no  "is_port 70000"        is_port 70000
 no  "is_port empty"        is_port ""
+no  "is_port 08 (octal)"   is_port 08
 
 ok  "mining addr valid"    is_valid_mining_address "kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s"
 no  "mining addr mainnet"  is_valid_mining_address "kaspa:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s"
@@ -69,7 +74,7 @@ good_env() {
     TOCCATA_ACTIVATION_DAA_SCORE=1000
     KASPAD_GRPC_PORT=16610 KASPAD_P2P_PORT=16611
     KASPAD_BORSH_PORT=17610 KASPAD_JSON_PORT=18610
-    RPC_PORT=8555 EL_RPC_HOST_PORT=9545 EL_WS_HOST_PORT=9546
+    RPC_PORT=8555 EL_RPC_HOST_PORT=9545 EL_WS_HOST_PORT=9546 KASWALLET_HOST_PORT=8082
     MINING_ADDRESS="kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s"
     MINING_THREADS=1
     IGRA_LOCK_SCRIPT_PUBKEY=20aeb014c0814f5c549bbea36638e08b1e8d4c1b8251780841fce1fdcbf72ee01dac
@@ -92,6 +97,10 @@ no "validate: toccata <= maturity"  bash -c "$(declare -f good_env validate_devn
 no "validate: negative genesis ts"  bash -c "$(declare -f good_env validate_devnet_env is_uint is_positive_int is_hex is_hex_even is_port is_valid_mining_address); good_env; L1_REFERENCE_TIMESTAMP=0; L1_REFERENCE_DAA_SCORE=100; IGRA_LAUNCH_DAA_SCORE=0; validate_devnet_env"
 no "validate: finality too low"     bash -c "$(declare -f good_env validate_devnet_env is_uint is_positive_int is_hex is_hex_even is_port is_valid_mining_address); good_env; FINALITY_PERIOD_SECONDS=10; validate_devnet_env"
 ok "validate: open RPC bind warns not errors" bash -c "$(declare -f good_env validate_devnet_env is_uint is_positive_int is_hex is_hex_even is_port is_valid_mining_address); good_env; RPC_BIND_ADDR=0.0.0.0; RPC_READ_ONLY=false; validate_devnet_env"
+no "validate: lane uppercase"       bash -c "$(declare -f good_env validate_devnet_env is_uint is_positive_int is_hex is_hex_even is_port is_valid_mining_address); good_env; IGRA_LANE_ID=97B10000; validate_devnet_env"
+no "validate: lane all-zero"        bash -c "$(declare -f good_env validate_devnet_env is_uint is_positive_int is_hex is_hex_even is_port is_valid_mining_address); good_env; IGRA_LANE_ID=00000000; validate_devnet_env"
+no "validate: kaswallet port clash" bash -c "$(declare -f good_env validate_devnet_env is_uint is_positive_int is_hex is_hex_even is_port is_valid_mining_address); good_env; KASWALLET_HOST_PORT=8555; validate_devnet_env"
+no "validate: zero-padded launch"   bash -c "$(declare -f good_env validate_devnet_env is_uint is_positive_int is_hex is_hex_even is_port is_valid_mining_address); good_env; IGRA_LAUNCH_DAA_SCORE=08; validate_devnet_env"
 
 # --- resolve_devnet_env ---
 RESOLVE_TMP="$(mktemp -d)"
@@ -100,6 +109,7 @@ cat > "$RESOLVE_TMP/.env.devnet.example" <<'ENVEOF'
 NETWORK=devnet
 FINALITY_PERIOD_SECONDS=600
 RPC_PORT=8555
+IGRA_LANE_ID=97b10000
 ENVEOF
 cat > "$RESOLVE_TMP/versions.devnet.env" <<'ENVEOF'
 KASPAD_VERSION=devnet
@@ -107,30 +117,29 @@ ENVEOF
 
 ok "resolve: loads template when no .env" bash -c "$(declare -f resolve_devnet_env); resolve_devnet_env '$RESOLVE_TMP' .env.devnet.example versions.devnet.env; [ \"\$RPC_PORT\" = 8555 ] && [ \"\$KASPAD_VERSION\" = devnet ] && [ \"\$DEVNET_ENV_SOURCE\" = '$RESOLVE_TMP/.env.devnet.example' ]"
 ok "resolve: shell override wins"         bash -c "$(declare -f resolve_devnet_env); FINALITY_PERIOD_SECONDS=999 resolve_devnet_env '$RESOLVE_TMP' .env.devnet.example versions.devnet.env; [ \"\$FINALITY_PERIOD_SECONDS\" = 999 ]"
+# A set-but-empty shell override must win over the file value (opt-out contract).
+ok "resolve: empty shell override wins"   bash -c "$(declare -f resolve_devnet_env); IGRA_LANE_ID= resolve_devnet_env '$RESOLVE_TMP' .env.devnet.example versions.devnet.env; [ -z \"\$IGRA_LANE_ID\" ]"
+ok "resolve: unset falls to file value"   bash -c "$(declare -f resolve_devnet_env); resolve_devnet_env '$RESOLVE_TMP' .env.devnet.example versions.devnet.env; [ \"\$IGRA_LANE_ID\" = 97b10000 ]"
 no "resolve: missing source fails"        bash -c "$(declare -f resolve_devnet_env); resolve_devnet_env '$RESOLVE_TMP' .nope.example versions.devnet.env"
 rm -rf "$RESOLVE_TMP"
 
-# --- mining_preflight ---
-MINE_TMP="$(mktemp -d)"
-mkdir -p "$MINE_TMP/repos/kaspa-miner"
-touch "$MINE_TMP/Dockerfile.kaspa-miner"
+# --- mining_preflight (validates mining config only; the miner is external) ---
 MINE_FUNCS="$(declare -f mining_preflight is_valid_mining_address is_positive_int)"
 
-ok "mining: all present + valid" bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s MINING_THREADS=1 mining_preflight '$MINE_TMP/repos' '$MINE_TMP/Dockerfile.kaspa-miner'"
-no "mining: miner repo missing"  bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s MINING_THREADS=1 mining_preflight '$MINE_TMP/nope' '$MINE_TMP/Dockerfile.kaspa-miner'"
-no "mining: dockerfile missing"  bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s MINING_THREADS=1 mining_preflight '$MINE_TMP/repos' '$MINE_TMP/nope.Dockerfile'"
-no "mining: bad address"         bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspa:bad MINING_THREADS=1 mining_preflight '$MINE_TMP/repos' '$MINE_TMP/Dockerfile.kaspa-miner'"
-no "mining: bad threads"         bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s MINING_THREADS=0 mining_preflight '$MINE_TMP/repos' '$MINE_TMP/Dockerfile.kaspa-miner'"
-rm -rf "$MINE_TMP"
+ok "mining: valid addr + threads" bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s MINING_THREADS=1 mining_preflight 2>/dev/null"
+no "mining: bad address"          bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspa:bad MINING_THREADS=1 mining_preflight 2>/dev/null"
+no "mining: bad threads"          bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s MINING_THREADS=0 mining_preflight 2>/dev/null"
 
 # --- record_source_revisions ---
 REV_TMP="$(mktemp -d)"
 mkdir -p "$REV_TMP/repos/rusty-kaspa-private" "$REV_TMP/out"
 ( cd "$REV_TMP/repos/rusty-kaspa-private" && git init -q && git config user.email t@t && git config user.name t && git commit -q --allow-empty -m init )
-REV_FUNCS="$(declare -f record_source_revisions)"
+REV_FUNCS="$(declare -f record_source_revisions is_positive_int)"
 ok "revisions: writes a manifest file" bash -c "$REV_FUNCS; NETWORK=devnet record_source_revisions '$REV_TMP/repos' '$REV_TMP/out' >/dev/null; ls '$REV_TMP/out'/*.txt >/dev/null 2>&1"
 ok "revisions: records clean repo"     bash -c "$REV_FUNCS; NETWORK=devnet record_source_revisions '$REV_TMP/repos' '$REV_TMP/out' >/dev/null; grep -q 'rusty-kaspa-private.*clean' \$(ls '$REV_TMP/out'/*.txt | head -1)"
-ok "revisions: marks missing repo"     bash -c "$REV_FUNCS; NETWORK=devnet record_source_revisions '$REV_TMP/repos' '$REV_TMP/out' >/dev/null; grep -q '^kaspa-miner.*missing' \$(ls '$REV_TMP/out'/*.txt | tail -1)"
+ok "revisions: marks missing repo"     bash -c "$REV_FUNCS; NETWORK=devnet record_source_revisions '$REV_TMP/repos' '$REV_TMP/out' >/dev/null; grep -q '^reth-private.*missing' \$(ls '$REV_TMP/out'/*.txt | tail -1)"
+# Retention cap: with REHEARSAL_KEEP=2, three runs leave only the 2 newest manifests.
+ok "revisions: caps retention to REHEARSAL_KEEP" bash -c "$REV_FUNCS; export NETWORK=devnet REHEARSAL_KEEP=2; for i in 1 2 3; do record_source_revisions '$REV_TMP/repos' '$REV_TMP/keep' >/dev/null; done; [ \"\$(ls '$REV_TMP/keep'/*.txt | wc -l)\" -eq 2 ]"
 rm -rf "$REV_TMP"
 
 echo "----"
