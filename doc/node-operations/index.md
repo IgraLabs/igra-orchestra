@@ -9,5 +9,5 @@ Operational reference for running Igra Orchestra nodes.
 - **[ATAN Verification](atan-verification.md)** - Verify stored post-KIP-21 finality-period archives with the offline `kaspa-atan-verify` tool
 - **[Environment Reference](environment-reference.md)** - All operational environment variables
 - **[Galleon → testnet-10 Migration](migrate-galleon-to-testnet-10.md)** - One-shot upgrade for existing Galleon operators on `NETWORK=testnet` to the uniform `NETWORK=testnet-10` schema (preserves IBD state)
-- **[Mainnet v2.3 → v3.0 Upgrade](upgrade-mainnet-v2.3-to-v3.0.md)** - One-shot upgrade for existing mainnet operators from the v2.3 line to v3.0 (reconciles `.env` and bumps images to 3.0; preserves volumes)
+- **[Toccata Upgrade — Part One: Mainnet v2.3 → v3.0](upgrade-mainnet-v2.3-to-v3.0.md)** - Part one of the Toccata (KIP-21) upgrade for existing mainnet operators: bring the backend (kaspad/reth) to v3.0 before the fork while workers stay on 2.3 (reconciles `.env`; preserves volumes)
 - **[Running a CPU Miner](running-a-cpu-miner.md)** - Optionally produce Kaspa L1 blocks for an isolated local network with an external CPU miner

@@ -1,4 +1,11 @@
-# Mainnet v2.3 → v3.0 Upgrade
+# Toccata Upgrade — Part One: Mainnet v2.3 → v3.0
+
+!!! note "A two-part upgrade"
+    The mainnet move to v3.0 is split by the **Toccata (KIP-21) hardfork**.
+    **Part One (this guide)** brings the backend (kaspad/reth) to v3.0 now, while the fork is
+    still inactive — the workers stay on 2.3 and keep emitting native (v0) transactions.
+    **Part Two** brings the `rpc-provider`/`kaswallet` workers to v3.0 once Toccata activates;
+    see [Part Two: after the Toccata switch](#part-two-after-the-toccata-switch).
 
 ## TL;DR
 
@@ -29,7 +36,7 @@ docker compose --profile backend up -d --no-build --force-recreate kaspad  # dro
 **Do not recreate the frontend workers in this phase** — they keep emitting native
 (v0) transactions, which is what pre-Toccata mainnet expects. After the fork, set
 `RPC_PROVIDER_VERSION`/`KASWALLET_VERSION` to `3.0` and recreate the worker profile;
-see [After the Toccata switch](#after-the-toccata-switch).
+see [Part Two: after the Toccata switch](#part-two-after-the-toccata-switch).
 
 Full rationale, prerequisites, verification, rollback, and troubleshooting follow below.
 
@@ -66,7 +73,7 @@ image-version pins. The real upgrade work is reconciling `.env`:
   for now (`NODE_HEALTH_CHECK_VERSION` / `ATAN_UPLOADER_VERSION` stay `2.1`).
   kaspad 3.0 is Toccata-aware but the fork is **not yet active** on mainnet, so
   the network still uses native (v0) transactions. The rpc-provider/kaswallet
-  bump is deferred to [After the Toccata switch](#after-the-toccata-switch) — the
+  bump is deferred to [Part Two: after the Toccata switch](#part-two-after-the-toccata-switch) — the
   v3.0 frontend emits lane/subnetwork (v1) transactions that mainnet rejects
   before the fork.
 
@@ -176,7 +183,7 @@ docker compose --profile backend up -d --no-build --force-recreate kaspad
 `kaswallet` stay on 2.3 and keep emitting native (v0) transactions, which is what
 pre-Toccata mainnet expects. Leave your existing worker containers running — only
 the `backend` profile is recreated now. You'll upgrade the workers in
-[After the Toccata switch](#after-the-toccata-switch).
+[Part Two: after the Toccata switch](#part-two-after-the-toccata-switch).
 
 ### About `KASPAD_NONINTERACTIVE`
 
@@ -208,7 +215,7 @@ In the running stack, confirm:
 - The **health-check client** reports `KASPAD_VERSION=3.0` to the monitoring
   server.
 
-## After the Toccata switch
+## Part Two: after the Toccata switch
 
 Once Toccata (KIP-21) has activated on mainnet, upgrade the workers so they emit
 lane/subnetwork (v1) transactions:
