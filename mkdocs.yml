@@ -55,7 +55,7 @@ nav:
       - Environment Reference: node-operations/environment-reference.md
       - Running a CPU Miner: node-operations/running-a-cpu-miner.md
       - Galleon → testnet-10 Migration: node-operations/migrate-galleon-to-testnet-10.md
-      - Mainnet v2.3 → v3.0 Upgrade: node-operations/upgrade-mainnet-v2.3-to-v3.0.md
+      - Toccata Upgrade — Part One (v2.3 → v3.0): node-operations/upgrade-mainnet-v2.3-to-v3.0.md
     - Kaspa Wallet: kaspa-wallet.md
     - Log Management: log-management.md
   - Troubleshooting:
