@@ -33,98 +33,27 @@ export COMPOSE_FILE="docker-compose.devnet.yml"
 # Single worker by default (devnet runs only kaswallet-0 / rpc-provider-0).
 export NUM_WORKERS="${NUM_WORKERS:-1}"
 
-# Resolve devnet knobs from .env (else the committed example) before generating the
-# override JSON, so a value set in .env reaches it. Inline `VAR=...` still wins.
-DEVNET_ENV_FILE="$SCRIPT_DIR/../.env"
-[ -f "$DEVNET_ENV_FILE" ] || DEVNET_ENV_FILE="$SCRIPT_DIR/../$ENV_FILE"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=scripts/lib/devnet-preflight.sh
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/devnet-preflight.sh"
 
-read_devnet_env() {
-    local key="$1" file="$2" line val found=1
-    [ -f "$file" ] || return 1
-    while IFS= read -r line || [ -n "$line" ]; do
-        line="${line%$'\r'}"
-        case "$line" in
-            "$key"=*)
-                val="${line#*=}"
-                val="${val#"${val%%[![:space:]]*}"}"
-                val="${val%"${val##*[![:space:]]}"}"
-                case "$val" in
-                    \"*\"|\'*\') val="${val:1:${#val}-2}" ;;
-                esac
-                found=0
-                ;;
-        esac
-    done < "$file"
-    [ "$found" -eq 0 ] && printf '%s' "$val"
-    return "$found"
-}
+# Load the single effective env source (.env or template) + versions so
+# validation and the build read identical inputs. Shell overrides win.
+resolve_devnet_env "$PROJECT_DIR" "$ENV_FILE" "$VERSIONS_FILE" || exit 1
 
-# Precedence: inline env (set, even if empty) > env file > default.
-resolve_devnet_var() {
-    local name="$1" default="$2" val
-    [ -n "${!name+set}" ] && return 0
-    if val="$(read_devnet_env "$name" "$DEVNET_ENV_FILE")"; then
-        printf -v "$name" '%s' "$val"
-    else
-        printf -v "$name" '%s' "$default"
-    fi
-}
-
-# Generate kaspad override-params JSON. Default: 600s finality (= 6000-block depth at BPS=10).
-resolve_devnet_var FINALITY_PERIOD_SECONDS 600
+# Tunable defaults applied on top of the resolved env so:
+#   shell override > .env file > default.
+# Use ${VAR-default} (not :-) for TOCCATA/LANE so an explicit empty opts out.
 FINALITY_PERIOD_SECONDS="${FINALITY_PERIOD_SECONDS:-600}"
-# Empty TOCCATA_ACTIVATION_DAA_SCORE opts out of Toccata; defaults match .env.devnet.example.
-resolve_devnet_var TOCCATA_ACTIVATION_DAA_SCORE 1000
-resolve_devnet_var IGRA_LANE_ID 97b10000
-resolve_devnet_var IGRA_LAUNCH_DAA_SCORE 0
-
-# Fail before build/up if the KIP-21 transition config is invalid or incomplete.
-# Toccata is optional: an empty TOCCATA_ACTIVATION_DAA_SCORE opts out (no fork). But
-# when Toccata IS scheduled, a lane id is mandatory (kaspad requires it post-Toccata).
-validate_toccata_and_lane() {
-    local toccata="$1" lane="$2" launch="$3"
-    if [ -n "$toccata" ]; then
-        if ! [[ "$toccata" =~ ^[1-9][0-9]*$ ]]; then
-            echo "ERROR: TOCCATA_ACTIVATION_DAA_SCORE must be a positive integer with no leading zeros, or empty to disable Toccata (got: $toccata)" >&2
-            exit 1
-        fi
-        if (( toccata > 920000 )); then
-            echo "ERROR: TOCCATA_ACTIVATION_DAA_SCORE=$toccata is implausibly large (> 920000); likely a typo. Lower it or set it empty to disable Toccata." >&2
-            exit 1
-        fi
-        if [ -z "$lane" ]; then
-            echo "ERROR: IGRA_LANE_ID is required when TOCCATA_ACTIVATION_DAA_SCORE is set (Toccata scheduled)" >&2
-            exit 1
-        fi
-        if [[ "$launch" =~ ^[0-9]+$ ]] && (( launch >= toccata )); then
-            echo "ERROR: IGRA_LAUNCH_DAA_SCORE ($launch) must be < TOCCATA_ACTIVATION_DAA_SCORE ($toccata) so the pre-fork entry window opens before the fork" >&2
-            exit 1
-        fi
-    fi
-    if [ -n "$lane" ]; then
-        if ! [[ "$lane" =~ ^([0-9a-f]{8}|[0-9a-f]{40})$ ]]; then
-            echo "ERROR: IGRA_LANE_ID must be 8 or 40 lowercase hex chars (got: $lane); kaspad validates the exact lane shape at startup" >&2
-            exit 1
-        fi
-        if [[ "$lane" =~ ^0+$ ]]; then
-            echo "ERROR: IGRA_LANE_ID must not be all-zero (reserved SUBNETWORK_ID_NATIVE shape)" >&2
-            exit 1
-        fi
-    fi
-}
+TOCCATA_ACTIVATION_DAA_SCORE="${TOCCATA_ACTIVATION_DAA_SCORE-1000}"
+IGRA_LANE_ID="${IGRA_LANE_ID-97b10000}"
+export FINALITY_PERIOD_SECONDS TOCCATA_ACTIVATION_DAA_SCORE IGRA_LANE_ID
 
 generate_devnet_overrides() {
     local seconds="$1"
     local toccata="$2"
-    # Upper bound is below pruning_depth/BPS (= 108000s): kaspad's effective
-    # finalization window is finality_depth + merge_depth + anticone overhead
-    # (~159k blocks with these params). Capping at 92000s keeps finality_depth
-    # (920000) plus that overhead safely under pruning_depth (1080000); higher
-    # values silently cap because devnet uses min(pruning_depth, anticone depth).
-    if ! [[ "$seconds" =~ ^[0-9]+$ ]] || (( seconds < 60 )) || (( seconds > 92000 )); then
-        echo "ERROR: FINALITY_PERIOD_SECONDS must be an integer in [60, 92000] (got: $seconds)" >&2
-        exit 1
-    fi
+    # FINALITY_PERIOD_SECONDS range is validated upstream in validate_devnet_env.
     local depth=$(( seconds * 10 ))   # BPS=10 on devnet
     local out_dir="$SCRIPT_DIR/../overrides"
     mkdir -p "$out_dir"
@@ -184,7 +113,18 @@ EOF
     fi
 }
 
-validate_toccata_and_lane "$TOCCATA_ACTIVATION_DAA_SCORE" "$IGRA_LANE_ID" "$IGRA_LAUNCH_DAA_SCORE"
+# Fail fast on bad config BEFORE any expensive build/up.
+validate_devnet_env || exit 1
+
+# Record exactly what will be built (one manifest per rehearsal).
+record_source_revisions "$PROJECT_DIR/build/repos" "$PROJECT_DIR/rehearsals"
+
+# When Toccata is scheduled, validate the mining config and remind the operator to
+# start an external miner (required to reach the activation DAA score).
+if [ -n "${TOCCATA_ACTIVATION_DAA_SCORE:-}" ]; then
+    mining_preflight || exit 1
+fi
+
 generate_devnet_overrides "$FINALITY_PERIOD_SECONDS" "$TOCCATA_ACTIVATION_DAA_SCORE"
 warn_if_finality_baked
 
@@ -197,9 +137,9 @@ build_devnet_stack() {
     local repos_dir="$SCRIPT_DIR/../build/repos"
     local missing=()
     local r
-    # kaspa-miner is included so a missing miner repo surfaces here, not later at
-    # the manual `--profile mining up` step.
-    for r in rusty-kaspa-private reth-private kaswallet igra-rpc-provider kaspa-miner; do
+    # The miner is not built from this repo (operators run their own); only the
+    # four core services are required here.
+    for r in rusty-kaspa-private reth-private kaswallet igra-rpc-provider; do
         [ -d "$repos_dir/$r" ] || missing+=("$r")
     done
     if (( ${#missing[@]} > 0 )); then
@@ -226,21 +166,6 @@ build_devnet_stack() {
     fi
 
     echo "[setup-devnet] Building devnet images from source (first build is slow)..."
-    # Export the inputs the compose file references so `docker compose build` can
-    # interpolate it and tag images as igranetwork/<svc>:devnet. Prefer the live
-    # .env (operator overrides) when it exists so build-time and run-time inputs
-    # match; fall back to the committed example only on first run.
-    local env_source="$SCRIPT_DIR/../.env"
-    if [[ ! -f "$env_source" ]]; then
-        env_source="$SCRIPT_DIR/../$ENV_FILE"
-    fi
-    set -a
-    # shellcheck source=/dev/null
-    source "$env_source"
-    # shellcheck source=/dev/null
-    source "$SCRIPT_DIR/../$VERSIONS_FILE"
-    set +a
-    # kaspa-miner is excluded; it builds on demand under the "mining" profile.
     docker compose build kaspad execution-layer kaswallet-0 rpc-provider-0
 }
 
@@ -254,6 +179,8 @@ mkdir -p "$SCRIPT_DIR/../data/reth" \
          "$SCRIPT_DIR/../logs/kaspad"
 
 # Source common library and run setup
+# shellcheck source=scripts/lib/setup-common.sh
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/setup-common.sh"
 
 # The devnet stack uses distinct container names (*-devnet) to stay isolated from
@@ -292,7 +219,8 @@ print_summary() {
     echo "Services started:"
     docker compose ps --format "table {{.Name}}\t{{.Status}}"
     echo
-    echo "NOTE: kaspad mines no blocks until you start the miner (see below)."
+    echo "NOTE: kaspad mines no blocks on its own. Point an external miner at the"
+    echo "      devnet kaspad gRPC port to produce blocks (see below)."
     echo
     echo "Useful commands:"
     echo "  docker compose -f $COMPOSE_FILE logs -f kaspad           # kaspad"
@@ -308,15 +236,19 @@ print_summary() {
 
 run_setup "$@"
 
-# kaspa-miner is gated behind the "mining" profile and built on demand.
+# The miner is not part of this stack; operators run their own against the
+# published devnet kaspad gRPC port.
 cat <<EOF
 
 === Devnet: Mining ===
 
-Start the in-stack kaspa-miner once kaspad is healthy:
+kaspad mines no blocks on its own. The miner is not part of this stack; a helper
+clones, builds and runs tmrlvi/kaspa-miner on the host against the devnet kaspad
+gRPC port. Run it once kaspad is healthy:
 
-  docker compose -f docker-compose.devnet.yml --profile mining up -d --build kaspa-miner
-  docker compose -f docker-compose.devnet.yml logs -f kaspa-miner
+  ./scripts/dev/run-devnet-miner.sh
 
-Stop with: docker compose -f docker-compose.devnet.yml --profile mining down
+It reads MINING_ADDRESS / MINING_THREADS / KASPAD_GRPC_PORT from your .env; see
+'./scripts/dev/run-devnet-miner.sh --help' for options.
+Mining is required to reach TOCCATA_ACTIVATION_DAA_SCORE for the KIP-21 rehearsal.
 EOF

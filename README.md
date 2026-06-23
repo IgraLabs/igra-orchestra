@@ -73,6 +73,14 @@ Built from source: configurable finality uses kaspad's `--override-params-file`,
 available on the `rusty-kaspa-private` v3.0 line only. `setup-devnet.sh` builds
 kaspad, reth, kaswallet and rpc-provider locally and starts the stack.
 
+`setup-devnet.sh` validates the full configuration and fails fast with a clear
+error summary before any image build or `docker compose up`. Build-time and
+runtime inputs come from one resolved env source: `.env` when present, otherwise
+`.env.devnet.example` (the committed template). Each run writes a timestamped
+source-revision manifest (branch/SHA/dirty for all four built repos) to
+`rehearsals/` so every rehearsal is reproducible (newest `REHEARSAL_KEEP`, default
+20, are retained).
+
 ```bash
 # clone sources (kaspad/kaswallet/rpc-provider on v3.0, reth on production):
 KASPAD_BRANCH=v3.0 KASWALLET_BRANCH=v3.0 IGRA_RPC_PROVIDER_BRANCH=v3.0 RETH_BRANCH=production \
@@ -81,15 +89,20 @@ KASPAD_BRANCH=v3.0 KASWALLET_BRANCH=v3.0 IGRA_RPC_PROVIDER_BRANCH=v3.0 RETH_BRAN
 # build from source and bring the stack up:
 FINALITY_PERIOD_SECONDS=600 ./scripts/setup-devnet.sh
 
-# start the in-stack miner once kaspad is healthy:
-docker compose -f docker-compose.devnet.yml --profile mining up -d --build kaspa-miner
+# kaspad mines no blocks on its own. The miner is not part of the stack; this
+# helper clones, builds and runs tmrlvi/kaspa-miner on the host against the
+# published devnet kaspad gRPC port (reads MINING_ADDRESS / MINING_THREADS /
+# KASPAD_GRPC_PORT from .env). Run it once kaspad is healthy:
+./scripts/dev/run-devnet-miner.sh
 ```
 
 Local-only: dedicated `docker-compose.devnet.yml`, RPC bound to
 `RPC_BIND_ADDR` (default `127.0.0.1`) on `RPC_PORT` (default 8555, no
-Traefik/TLS), read-only by default (`RPC_READ_ONLY=true`). Project name
-(`igra-devnet`) and container names (`*-devnet`) are distinct from the
-production stack.
+Traefik/TLS), read-only by default (`RPC_READ_ONLY=true`). Setting
+`RPC_BIND_ADDR=0.0.0.0` with `RPC_READ_ONLY=false` exposes the wallet-backed
+RPC off-box with no TLS/auth — `setup-devnet.sh` warns when this combination
+is detected. Project name (`igra-devnet`) and container names (`*-devnet`) are
+distinct from the production stack.
 
 **Toccata / KIP-21 rehearsal.** The devnet activates the Toccata hardfork after a
 short, predictable number of mined blocks so you can rehearse crossing the KIP-21
@@ -111,7 +124,7 @@ or `TOCCATA_ACTIVATION_DAA_SCORE` requires a fresh kaspad volume. To wipe all st
 # remove containers AND the kaspad_data named volume (destroys the chain):
 docker compose -f docker-compose.devnet.yml down -v
 # remove host-side state created by setup-devnet.sh (reth data is root-owned):
-sudo rm -rf data network-params logs overrides
+sudo rm -rf data network-params logs overrides rehearsals
 ```
 
 **Manual setup (alternative):**
