@@ -432,6 +432,13 @@ services:
     container_name: node-health-check-client
     networks:
       - igra-network
+    # Gate startup on execution-layer: this client polls execution-layer:8545 and,
+    # if started in parallel on `compose up`, races reth's boot and goes stale.
+    # required:false keeps the standalone node-health-check-client profile working.
+    depends_on:
+      execution-layer:
+        condition: service_healthy
+        required: false
     environment:
       - NODE_RPC_URL=http://execution-layer:8545
       - MONITOR_URL=http://${NODE_HEALTH_CHECK_URL}:8081

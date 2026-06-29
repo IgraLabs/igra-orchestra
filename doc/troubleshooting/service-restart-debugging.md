@@ -29,6 +29,7 @@ Two services currently pin `restart: unless-stopped` directly in Compose:
 flowchart LR
   executionLayer["execution-layer"] --> kaspad["kaspad"]
   executionLayer --> rpcProvider["rpc-provider-*"]
+  executionLayer --> nodeHealthCheck["node-health-check-client"]
   kaspad --> kaswallet["kaswallet-*"]
   kaswallet -->|"RPC_READ_ONLY=false"| rpcProvider
   rpcProvider --> traefik["traefik"]
