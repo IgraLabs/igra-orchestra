@@ -1,0 +1,135 @@
+name: igra-devnet-atan-import
+
+# Second, fresh kaspad node whose ONLY job is to import node 1's ATAN archive
+# from a local directory and validate every finality period on the way in.
+# kaspad startup import is fail-closed: an invalid period => process::exit(1),
+# so a clean, staying-up container == all imported periods validated.
+
+x-default-logging: &default-logging
+  driver: "${LOGGING_DRIVER:-json-file}"
+  options: { max-size: "1g", max-file: "10", compress: "true" }
+
+volumes:
+  # Fresh atan_db so kaspad actually performs the import ("missing or outdated").
+  kaspad_import_data:
+  # Node 1's data volume, mounted read-only as the import SOURCE.
+  node1_archive:
+    external: true
+    name: igra-devnet_kaspad_data
+
+networks:
+  # Join node 1's compose network so node 2 can peer with it for L1 IBD.
+  # ATAN only starts (and imports) once consensus reports "nearly synced", which
+  # for an isolated node requires peering to a node with a fresh tip (node 1,
+  # which keeps mining during validation).
+  node1_net:
+    external: true
+    name: igra-devnet_default
+
+services:
+  kaspad-import:
+    image: igranetwork/kaspad:${KASPAD_VERSION}
+    container_name: kaspad-import-devnet
+    restart: "no"
+    logging: *default-logging
+    # Publish node 2's gRPC so a host cpuminer can drive it: node 2 self-mines a
+    # few blocks to give its sink a fresh timestamp -> is_nearly_synced -> ATAN
+    # starts and imports the archive. This avoids peering/IBD from node 1 (which
+    # hits L1 pruning-point/multiset edge cases with the aggressive devnet
+    # pruning_depth). Host port differs from node 1's 16610 to avoid a clash.
+    ports:
+      - "${IMPORT_GRPC_HOST_PORT:-16620}:${KASPAD_GRPC_PORT:-16610}"
+    environment:
+      - NETWORK=${NETWORK:-devnet}
+      - TX_ID_PREFIX=${TX_ID_PREFIX:-97b1}
+      - IGRA_LANE_ID=${IGRA_LANE_ID:-97b10000}
+      - KASPAD_GRPC_PORT=${KASPAD_GRPC_PORT:-16610}
+      # Empty by default: node 2 self-mines to reach is_nearly_synced instead of
+      # peering to node 1 (peering + aggressive devnet pruning hit L1 IBD edge
+      # cases). Set NODE1_PEER=<host[:port]> explicitly to opt back into peering.
+      - NODE1_PEER=${NODE1_PEER:-}
+      - ATAN_IMPORT_DIR=${ATAN_IMPORT_DIR:-/import-src/kaspa-devnet/datadir/atan/${TX_ID_PREFIX:-97b1}/chain_block_lists}
+      - RUST_LOG=${RUST_LOG:-info,kaspa_atan_core=info,kaspa_atan_server=info,kaspa_atan_storage=info,kaspa_atan_validation=info,kaspa_atan_import_core=info}
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        ARGS="--disable-upnp \
+          --rpclisten-borsh=0.0.0.0 \
+          --rpclisten=0.0.0.0 \
+          --rpclisten-json=0.0.0.0 \
+          --listen=0.0.0.0 \
+          --utxoindex \
+          --enable-unsynced-mining \
+          --logdir=/app/logs \
+          --appdir=/app/data"
+
+        if [ "$$NETWORK" != "mainnet" ]; then
+          ARGS="--$$NETWORK --nodnsseed $$ARGS"
+        fi
+
+        # Peer with node 1 for L1 IBD so consensus reaches "nearly synced" and ATAN
+        # proceeds to import. No mining here (no miner attached); the peer just
+        # supplies the chain up to node 1's (pruned) tip.
+        #
+        # kaspad --addpeer requires an IP (it rejects a hostname with "invalid IP
+        # address syntax"), but on a user-defined docker network peers are reached
+        # by service name via the embedded DNS at 127.0.0.11. So resolve the host
+        # to an IP first (getent/nslookup both consult that DNS). A bare IPv4 is
+        # passed through unchanged.
+        if [ -n "$$NODE1_PEER" ]; then
+          peer_host="$${NODE1_PEER%%:*}"
+          peer_port="$${NODE1_PEER##*:}"
+          [ "$$peer_port" = "$$peer_host" ] && peer_port=16611
+          case "$$peer_host" in
+            *[!0-9.]*)  # contains a non-IPv4 char => a hostname; resolve it.
+              peer_ip=""
+              if command -v getent >/dev/null 2>&1; then
+                peer_ip="$$(getent hosts "$$peer_host" | awk '{print $$1}' | head -1)"
+              fi
+              if [ -z "$$peer_ip" ] && command -v nslookup >/dev/null 2>&1; then
+                peer_ip="$$(nslookup "$$peer_host" 2>/dev/null | awk '/^Address:/{print $$NF}' | grep -E '^[0-9.]+$$' | head -1)"
+              fi
+              ;;
+            *)          # already a bare IPv4.
+              peer_ip="$$peer_host"
+              ;;
+          esac
+          if [ -n "$$peer_ip" ]; then
+            echo "[import] peering to node 1 at $$peer_ip:$$peer_port (from $$NODE1_PEER)" >&2
+            ARGS="$$ARGS --addpeer=$$peer_ip:$$peer_port"
+          else
+            echo "Warning: could not resolve NODE1_PEER host '$$peer_host' to an IP (no getent/nslookup or DNS miss); starting WITHOUT a peer. ATAN may never reach 'synced' and the import will not run." >&2
+          fi
+        fi
+
+        # ATAN-only, importing from a local directory. No IGRA / viaduct / EL.
+        ARGS="$$ARGS \
+          --atan-listen \
+          --atan-transaction-id-prefix=$$TX_ID_PREFIX \
+          --igra-lane-id=$$IGRA_LANE_ID \
+          --atan-import-dir=$$ATAN_IMPORT_DIR"
+
+        # Same consensus params as node 1 (genesis/finality/toccata must match so
+        # the imported periods connect to this node's anchor).
+        if [ -f /app/overrides/devnet.json ]; then
+          ARGS="$$ARGS --override-params-file=/app/overrides/devnet.json"
+        else
+          echo "ERROR: /app/overrides/devnet.json missing; node 2 must use the same overrides as node 1." >&2
+          exit 1
+        fi
+
+        exec /app/kaspad $$ARGS
+    networks:
+      - node1_net
+    volumes:
+      - kaspad_import_data:/app/data/
+      - node1_archive:/import-src:ro
+      - ./overrides:/app/overrides:ro
+      - ./logs/kaspad-import/:/app/logs/
+    healthcheck:
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 5s
+      test: ["CMD-SHELL", "bash -lc ': > /dev/tcp/127.0.0.1/${KASPAD_GRPC_PORT:-16610}'"]
