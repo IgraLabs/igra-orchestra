@@ -1,8 +1,17 @@
 #!/bin/bash
-# run-devnet-miner.sh - Set up and run a standalone kaspa-miner against the local
-# IGRA devnet, outside the docker-compose stack. Clones and builds
-# tmrlvi/kaspa-miner once, then runs it on the host against the devnet kaspad gRPC
+# run-devnet-cpuminer.sh - Set up and run the standalone kaspanet/cpuminer against
+# the local IGRA devnet, outside the docker-compose stack. Clones and builds
+# kaspanet/cpuminer once, then runs it on the host against the devnet kaspad gRPC
 # port. Reads MINING_ADDRESS / MINING_THREADS / KASPAD_GRPC_PORT from .env.
+#
+# Why this miner (vs the older tmrlvi/kaspa-miner used by run-devnet-miner.sh):
+# kaspanet/cpuminer tracks current rusty-kaspa (v3.0) proto and header
+# serialization, so the blocks it mines stay valid across the Toccata/KIP-21
+# boundary. The miner itself is fork-agnostic: it fetches a block template,
+# hashes the HEADER, and submits — it never touches transaction lane/subnetwork/
+# version/prefix. kaspad selects the transactions (native-v0 pre-Toccata,
+# lane-v1 post-Toccata) into the template, which is transparent to the miner, so
+# mining behaves identically before and after activation.
 
 set -euo pipefail
 
@@ -14,16 +23,21 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/devnet-preflight.sh"
 
-log()  { echo "[run-devnet-miner] $*"; }
-warn() { echo "[run-devnet-miner] WARNING: $*" >&2; }
-die()  { echo "[run-devnet-miner] ERROR: $*" >&2; exit 1; }
+log()  { echo "[run-devnet-cpuminer] $*"; }
+warn() { echo "[run-devnet-cpuminer] WARNING: $*" >&2; }
+die()  { echo "[run-devnet-cpuminer] ERROR: $*" >&2; exit 1; }
 
 print_help() {
     cat <<'EOF'
-Usage: ./scripts/dev/run-devnet-miner.sh [--help]
+Usage: ./scripts/dev/run-devnet-cpuminer.sh [--help]
 
-Clones and builds tmrlvi/kaspa-miner (once) and runs it against the local devnet
+Clones and builds kaspanet/cpuminer (once) and runs it against the local devnet
 kaspad gRPC port. Runs in the foreground; press Ctrl+C to stop.
+
+Toccata-compatible: the miner tracks current rusty-kaspa proto/header hashing, so
+its blocks stay valid across the KIP-21 boundary. Mining is fork-agnostic (the
+miner hashes block headers, not transactions), so it behaves the same before and
+after Toccata activation.
 
 Configuration is read from .env (or .env.devnet.example if there is no .env);
 shell/CLI values take precedence over the file.
@@ -37,20 +51,20 @@ Environment variables:
   MINE_WHEN_NOT_SYNCED    true|false. Default: true (a fresh single-node devnet
                           reports "not synced"; pass the flag so it still mines).
 
-  MINER_REPO_URL          Default: https://github.com/tmrlvi/kaspa-miner.git
-  MINER_BRANCH            Branch/tag to clone. Default: repo default branch.
+  MINER_REPO_URL          Default: https://github.com/kaspanet/cpuminer.git
+  MINER_COMMIT            Pinned commit SHA checked out when MINER_BRANCH is unset.
+                          Overriding it opts into a newer, unreviewed revision.
+  MINER_BRANCH            Branch/tag to clone instead of the pinned commit
+                          (unpinned; tracks the moving ref). Default: unset.
   MINER_DIR               Clone/build location.
-                          Default: build/repos/tmrlvi-kaspa-miner
-  MINER_BUILD_GPU         auto|on|off. Default: auto (build GPU crates when CUDA/
-                          OpenCL toolchains are detected, fall back to CPU-only on
-                          build failure; otherwise build CPU-only directly).
+                          Default: build/repos/kaspanet-cpuminer
   MINER_EXTRA_ARGS        Extra flags appended verbatim to the miner invocation.
   SKIP_BUILD=1            Reuse an existing release binary; skip clone/build.
 
 Examples:
-  ./scripts/dev/run-devnet-miner.sh
-  MINING_THREADS=4 ./scripts/dev/run-devnet-miner.sh
-  MINER_BUILD_GPU=off SKIP_BUILD=1 ./scripts/dev/run-devnet-miner.sh
+  ./scripts/dev/run-devnet-cpuminer.sh
+  MINING_THREADS=4 ./scripts/dev/run-devnet-cpuminer.sh
+  SKIP_BUILD=1 ./scripts/dev/run-devnet-cpuminer.sh
 EOF
 }
 
@@ -60,7 +74,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 fi
 
 # --- resolve config (shell/CLI > .env > .env.devnet.example > default) ---
-# read_env/resolve are shared with run-devnet-cpuminer.sh via the lib below.
+# read_env/resolve are shared with run-devnet-miner.sh via the lib below.
 ENV_FILE="$PROJECT_DIR/.env"
 [ -f "$ENV_FILE" ] || ENV_FILE="$PROJECT_DIR/.env.devnet.example"
 
@@ -77,10 +91,14 @@ resolve KASPAD_GRPC_PORT 16610
 resolve KASPAD_RPC_HOST 127.0.0.1
 resolve MINE_WHEN_NOT_SYNCED true
 
-MINER_REPO_URL="${MINER_REPO_URL:-https://github.com/tmrlvi/kaspa-miner.git}"
+MINER_REPO_URL="${MINER_REPO_URL:-https://github.com/kaspanet/cpuminer.git}"
+# Pin a known-good commit (kaspa-miner 0.2.7 release) so an unattended clone+build
+# is reproducible and cannot silently pull a moving upstream head (cargo build
+# scripts/proc-macros run arbitrary code at build time). Override MINER_BRANCH to
+# opt into a newer ref.
+MINER_COMMIT="${MINER_COMMIT:-c4b9bec3a24823eb9c11d5dbd83c4968a6e125ea}"
 MINER_BRANCH="${MINER_BRANCH:-}"
-MINER_DIR="${MINER_DIR:-$PROJECT_DIR/build/repos/tmrlvi-kaspa-miner}"
-MINER_BUILD_GPU="${MINER_BUILD_GPU:-auto}"
+MINER_DIR="${MINER_DIR:-$PROJECT_DIR/build/repos/kaspanet-cpuminer}"
 MINER_EXTRA_ARGS="${MINER_EXTRA_ARGS:-}"
 
 BIN="$MINER_DIR/target/release/kaspa-miner"
@@ -93,51 +111,44 @@ is_positive_int "$MINING_THREADS" || \
     die "MINING_THREADS must be a positive integer (got: '${MINING_THREADS:-<unset>}')"
 is_port "$KASPAD_GRPC_PORT" || \
     die "KASPAD_GRPC_PORT must be an integer in 1-65535 (got: '${KASPAD_GRPC_PORT:-<unset>}')"
-case "$MINER_BUILD_GPU" in auto|on|off) ;; *) die "MINER_BUILD_GPU must be auto|on|off (got: '$MINER_BUILD_GPU')" ;; esac
 
 # --- clone + build (unless SKIP_BUILD reuses an existing binary) ---
-has_opencl() {
-    command -v clinfo >/dev/null 2>&1 || [ -d /etc/OpenCL/vendors ]
-}
-
 build_miner() {
     command -v cargo >/dev/null 2>&1 || \
         die "cargo (Rust toolchain) not found; needed to build the miner. Install via https://rustup.rs, or set SKIP_BUILD=1 to reuse an existing binary."
 
     if [ ! -d "$MINER_DIR/.git" ]; then
-        log "Cloning $MINER_REPO_URL -> $MINER_DIR"
         if [ -n "$MINER_BRANCH" ]; then
+            log "Cloning $MINER_REPO_URL @ $MINER_BRANCH (unpinned) -> $MINER_DIR"
             git clone --depth 1 --branch "$MINER_BRANCH" "$MINER_REPO_URL" "$MINER_DIR"
         else
-            git clone --depth 1 "$MINER_REPO_URL" "$MINER_DIR"
+            log "Cloning $MINER_REPO_URL @ pinned $MINER_COMMIT -> $MINER_DIR"
+            # Shallow-fetch the exact pinned commit (GitHub allows fetching a SHA).
+            git init -q "$MINER_DIR"
+            git -C "$MINER_DIR" remote add origin "$MINER_REPO_URL"
+            git -C "$MINER_DIR" fetch -q --depth 1 origin "$MINER_COMMIT"
+            git -C "$MINER_DIR" checkout -q --detach FETCH_HEAD
         fi
     else
         log "Reusing existing clone at $MINER_DIR"
-    fi
-
-    local want_gpu=false
-    case "$MINER_BUILD_GPU" in
-        on) want_gpu=true ;;
-        off) want_gpu=false ;;
-        auto)
-            if command -v nvcc >/dev/null 2>&1 || has_opencl; then
-                want_gpu=true
-                log "GPU toolchain detected; attempting GPU build (will fall back to CPU-only on failure)."
-            else
-                log "No CUDA/OpenCL toolchain detected; building CPU-only."
-            fi
-            ;;
-    esac
-
-    log "Building kaspa-miner (release)..."
-    if $want_gpu; then
-        if cargo build --release --manifest-path "$MINER_DIR/Cargo.toml" \
-                -p kaspa-miner -p kaspacuda -p kaspaopencl; then
-            return 0
+        # Warn if the existing checkout does not match what was requested: a
+        # changed MINER_COMMIT/MINER_BRANCH/MINER_REPO_URL is otherwise silently
+        # ignored and the stale checkout rebuilt.
+        local have_remote have_head
+        have_remote="$(git -C "$MINER_DIR" remote get-url origin 2>/dev/null || echo '?')"
+        have_head="$(git -C "$MINER_DIR" rev-parse HEAD 2>/dev/null || echo '?')"
+        [ "$have_remote" = "$MINER_REPO_URL" ] || \
+            warn "existing clone remote ($have_remote) != MINER_REPO_URL ($MINER_REPO_URL); using the existing checkout. Remove $MINER_DIR to re-clone."
+        if [ -z "$MINER_BRANCH" ] && [ "$have_head" != "$MINER_COMMIT" ]; then
+            warn "existing clone is at $have_head, not the pinned $MINER_COMMIT; using it as-is. Remove $MINER_DIR to re-clone at the pin."
         fi
-        warn "GPU build failed; retrying CPU-only."
     fi
-    cargo build --release --manifest-path "$MINER_DIR/Cargo.toml" -p kaspa-miner
+
+    # kaspanet/cpuminer is a single CPU-only crate (no GPU crates), so a plain
+    # release build produces target/release/kaspa-miner. --locked builds against
+    # the committed Cargo.lock so dependency versions cannot drift silently.
+    log "Building kaspa-miner (release) at $(git -C "$MINER_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)..."
+    cargo build --release --locked --manifest-path "$MINER_DIR/Cargo.toml"
 }
 
 if [ "${SKIP_BUILD:-}" = "1" ]; then
@@ -162,10 +173,12 @@ else
 fi
 
 # --- run (foreground; Ctrl+C stops) ---
+# No --testnet/--devnet flag: cpuminer is network-agnostic and only uses the
+# network flag to pick a default port, which we always set explicitly with -p.
 args=(-a "$MINING_ADDRESS" -s "$KASPAD_RPC_HOST" -p "$KASPAD_GRPC_PORT" -t "$MINING_THREADS")
 [ "$MINE_WHEN_NOT_SYNCED" = "true" ] && args+=(--mine-when-not-synced)
 
-log "Starting miner -> $KASPAD_RPC_HOST:$KASPAD_GRPC_PORT (address ${MINING_ADDRESS}, ${MINING_THREADS} threads)"
+log "Starting cpuminer -> $KASPAD_RPC_HOST:$KASPAD_GRPC_PORT (address ${MINING_ADDRESS}, ${MINING_THREADS} threads)"
 log "Press Ctrl+C to stop."
 # Word-split MINER_EXTRA_ARGS so callers can pass multiple flags.
 # shellcheck disable=SC2086

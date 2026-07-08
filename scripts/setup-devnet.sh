@@ -9,6 +9,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck source=scripts/lib/devnet-overrides.sh
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/devnet-overrides.sh"
+
 # Environment-specific configuration (used by sourced setup-common.sh)
 # shellcheck disable=SC2034
 ENV_NAME="Devnet"
@@ -49,46 +53,6 @@ FINALITY_PERIOD_SECONDS="${FINALITY_PERIOD_SECONDS:-600}"
 TOCCATA_ACTIVATION_DAA_SCORE="${TOCCATA_ACTIVATION_DAA_SCORE-1000}"
 IGRA_LANE_ID="${IGRA_LANE_ID-97b10000}"
 export FINALITY_PERIOD_SECONDS TOCCATA_ACTIVATION_DAA_SCORE IGRA_LANE_ID
-
-generate_devnet_overrides() {
-    local seconds="$1"
-    local toccata="$2"
-    # FINALITY_PERIOD_SECONDS range is validated upstream in validate_devnet_env.
-    local depth=$(( seconds * 10 ))   # BPS=10 on devnet
-    local out_dir="$SCRIPT_DIR/../overrides"
-    mkdir -p "$out_dir"
-    # blockrate mirrors the kaspad devnet defaults; only finality_depth is tuned.
-    # crescendo_activation=0 keeps post-Crescendo consensus active from genesis.
-    # toccata_activation is appended as the last field only when scheduled, so the
-    # JSON has no trailing comma when Toccata is disabled (empty score).
-    local toccata_line=""
-    if [ -n "$toccata" ]; then
-        toccata_line=",
-  \"toccata_activation\": $toccata"
-    fi
-    cat > "$out_dir/devnet.json" <<EOF
-{
-  "blockrate": {
-    "target_time_per_block": 100,
-    "ghostdag_k": 124,
-    "past_median_time_sample_rate": 10,
-    "difficulty_sample_rate": 2,
-    "max_block_parents": 16,
-    "mergeset_size_limit": 248,
-    "merge_depth": 36000,
-    "finality_depth": $depth,
-    "pruning_depth": 1080000,
-    "coinbase_maturity": 200
-  },
-  "crescendo_activation": 0$toccata_line
-}
-EOF
-    if [ -n "$toccata" ]; then
-        echo "[setup-devnet] Generated overrides/devnet.json: finality_depth=$depth (= ${seconds}s at 10 BPS), toccata_activation=$toccata"
-    else
-        echo "[setup-devnet] Generated overrides/devnet.json: finality_depth=$depth (= ${seconds}s at 10 BPS), toccata_activation disabled (never)"
-    fi
-}
 
 # finality_depth is baked into kaspad's consensus DB on first run and lives in the
 # kaspad_data named volume; --override-params-file only applies to a fresh DB. Warn
@@ -237,7 +201,29 @@ print_summary() {
 run_setup "$@"
 
 # The miner is not part of this stack; operators run their own against the
-# published devnet kaspad gRPC port.
+# published devnet kaspad gRPC port. When Toccata is scheduled, recommend the
+# cpuminer: the older tmrlvi miner does not track v3.0 proto/header serialization
+# and can mine blocks that go invalid across the Toccata/KIP-21 boundary.
+if [ -n "${TOCCATA_ACTIVATION_DAA_SCORE:-}" ]; then
+cat <<EOF
+
+=== Devnet: Mining (Toccata scheduled at DAA ${TOCCATA_ACTIVATION_DAA_SCORE}) ===
+
+kaspad mines no blocks on its own. Because Toccata/KIP-21 is scheduled, use the
+cpuminer helper, whose blocks stay valid across the boundary (it tracks current
+rusty-kaspa v3.0 proto/header serialization). Run it once kaspad is healthy:
+
+  ./scripts/dev/run-devnet-cpuminer.sh
+
+The older ./scripts/dev/run-devnet-miner.sh (tmrlvi/kaspa-miner) does NOT track
+v3.0 serialization and can produce blocks that go invalid post-Toccata; prefer
+the cpuminer whenever Toccata is scheduled.
+
+It reads MINING_ADDRESS / MINING_THREADS / KASPAD_GRPC_PORT from your .env; see
+'./scripts/dev/run-devnet-cpuminer.sh --help' for options.
+Mining is required to reach TOCCATA_ACTIVATION_DAA_SCORE for the KIP-21 rehearsal.
+EOF
+else
 cat <<EOF
 
 === Devnet: Mining ===
@@ -250,5 +236,5 @@ gRPC port. Run it once kaspad is healthy:
 
 It reads MINING_ADDRESS / MINING_THREADS / KASPAD_GRPC_PORT from your .env; see
 './scripts/dev/run-devnet-miner.sh --help' for options.
-Mining is required to reach TOCCATA_ACTIVATION_DAA_SCORE for the KIP-21 rehearsal.
 EOF
+fi

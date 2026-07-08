@@ -61,6 +61,8 @@ services:
       - TX_ID_PREFIX
       - IGRA_LANE_ID
       - IGRA_ENABLE
+      - ATAN_ENABLE
+      - ATAN_IMPORT_DIR
       - POST_FORK_LOCK_SCRIPT_PUBKEY
       - LOCK_SCRIPT_FORK_DAA_SCORE
       # Passed as runtime env (referenced as $$VAR below) rather than spliced
@@ -77,12 +79,18 @@ services:
       - sh
       - -ec
       - |
+        # --enable-unsynced-mining is always on: this cold-start, single-node
+        # (--nodnsseed, typically no --addpeer) devnet never reaches "synced" on
+        # its own, so without it kaspad refuses to serve block templates and the
+        # chain can never start. On a peered setup (KASPAD_ADD_PEER) it also lets
+        # a restarting node serve templates mid-IBD; that is acceptable on devnet.
         ARGS="--disable-upnp \
           --rpclisten-borsh=0.0.0.0 \
           --rpclisten=0.0.0.0 \
           --rpclisten-json=0.0.0.0 \
           --listen=0.0.0.0 \
           --utxoindex \
+          --enable-unsynced-mining \
           --logdir=/app/logs \
           --appdir=/app/data"
 
@@ -97,11 +105,13 @@ services:
         fi
 
         IGRA_ENABLED="$${IGRA_ENABLE:-true}"
+        # ATAN defaults to IGRA's setting so existing deployments are unchanged,
+        # but can be enabled independently (L2 off, ATAN on).
+        ATAN_ENABLED="$${ATAN_ENABLE:-$$IGRA_ENABLED}"
+
         if [ "$$IGRA_ENABLED" = "true" ]; then
           ARGS="$$ARGS \
             --igra-enable \
-            --atan-listen \
-            --atan-transaction-id-prefix=$$TX_ID_PREFIX \
             --viaduct-start-daa-score=$$IGRA_LAUNCH_DAA_SCORE \
             --igra-l1-reference-timestamp=$$L1_REFERENCE_TIMESTAMP \
             --igra-l1-reference-daa-score=$$L1_REFERENCE_DAA_SCORE \
@@ -124,9 +134,22 @@ services:
           fi
           [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && ARGS="$$ARGS --igra-post-fork-lock-script-pubkey=$$POST_FORK_LOCK_SCRIPT_PUBKEY"
           [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ] && ARGS="$$ARGS --igra-lock-script-fork-daa-score=$$LOCK_SCRIPT_FORK_DAA_SCORE"
-          # Toccata/KIP-21 lane: required whenever Toccata is scheduled (the override
-          # file carries toccata_activation). Fail early on a misconfig reached via a
-          # direct `docker compose up` that bypassed setup-devnet.sh's validation.
+        fi
+
+        if [ "$$ATAN_ENABLED" = "true" ]; then
+          ARGS="$$ARGS --atan-listen --atan-transaction-id-prefix=$$TX_ID_PREFIX"
+        fi
+
+        # Toccata/KIP-21 lane selection is NOT ATAN-specific: post-Toccata,
+        # kaswallet tags transactions with the lane and consensus selects lane-v1
+        # transactions regardless of ATAN. So emit --igra-lane-id and enforce the
+        # "lane required when Toccata is scheduled" guard whenever IGRA or ATAN is
+        # on. Keeping this outside the ATAN block covers the IGRA-on/ATAN-off
+        # combination, which would otherwise silently drop the lane id and skip
+        # the guard, surfacing the misconfig only deep in kaspad at runtime.
+        # Fail early here on a misconfig reached via a direct `docker compose up`
+        # that bypassed setup-devnet.sh's validation.
+        if [ "$$IGRA_ENABLED" = "true" ] || [ "$$ATAN_ENABLED" = "true" ]; then
           if [ -f /app/overrides/devnet.json ] && grep -q '"toccata_activation"' /app/overrides/devnet.json && [ -z "$$IGRA_LANE_ID" ]; then
             echo "Error: IGRA_LANE_ID must be set when toccata_activation is scheduled in overrides/devnet.json" >&2; exit 1
           fi
@@ -140,14 +163,23 @@ services:
             esac
             ARGS="$$ARGS --igra-lane-id=$$IGRA_LANE_ID"
           fi
+        fi
 
-          # Devnet has no ATAN data source: missing config is a warning, not fatal.
-          if [ -n "$$ATAN_IMPORT_URL" ]; then
+        if [ "$$ATAN_ENABLED" = "true" ]; then
+          # ATAN import source (mutually exclusive; kaspad panics if both are set).
+          # --atan-import-dir imports from a local directory (used by the second,
+          # import-validation node). --atan-import-url imports from an HTTPS index.
+          if [ -n "$$ATAN_IMPORT_DIR" ] && [ -n "$$ATAN_IMPORT_URL" ]; then
+            echo "Error: ATAN_IMPORT_DIR and ATAN_IMPORT_URL are mutually exclusive (kaspad panics if both are passed); set only one." >&2; exit 1
+          fi
+          if [ -n "$$ATAN_IMPORT_DIR" ]; then
+            ARGS="$$ARGS --atan-import-dir=$$ATAN_IMPORT_DIR"
+          elif [ -n "$$ATAN_IMPORT_URL" ]; then
             ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
           elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ] && [ -n "$$TX_ID_PREFIX" ]; then
             ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$TX_ID_PREFIX/index.pb"
           else
-            echo "Warning: No ATAN import URL configured (devnet has no ATAN data source). Continuing without import." >&2
+            echo "Warning: No ATAN import source configured (devnet mining node has none). Continuing without import." >&2
           fi
         fi
 
@@ -164,9 +196,14 @@ services:
           echo "WARN: /app/overrides/devnet.json not found; using kaspad devnet defaults (finality = 12h). Re-run scripts/setup-devnet.sh to regenerate." >&2
         fi
 
-        exec sh /app/watch-dependencies.sh \
-          --tcp execution-layer execution-layer 8545 \
-          -- /app/kaspad $$ARGS
+        if [ "$$IGRA_ENABLED" = "true" ]; then
+          exec sh /app/watch-dependencies.sh \
+            --tcp execution-layer execution-layer 8545 \
+            -- /app/kaspad $$ARGS
+        else
+          # ATAN-only / L2-off: no execution layer to wait for.
+          exec /app/kaspad $$ARGS
+        fi
     volumes:
       - kaspad_data:/app/data/
       - ./logs/kaspad/:/app/logs/  # Event logs when ENABLE_EVENT_LOGGING=true
@@ -181,7 +218,8 @@ services:
         - CMD-SHELL
         - >
           bash -lc ': > /dev/tcp/127.0.0.1/${KASPAD_GRPC_PORT}' &&
-          bash -lc ': > /dev/tcp/execution-layer/8545'
+          { [ "$${IGRA_ENABLE:-true}" != "true" ] ||
+            bash -lc ': > /dev/tcp/execution-layer/8545'; }
 
   execution-layer:
     build:
