@@ -201,7 +201,29 @@ print_summary() {
 run_setup "$@"
 
 # The miner is not part of this stack; operators run their own against the
-# published devnet kaspad gRPC port.
+# published devnet kaspad gRPC port. When Toccata is scheduled, recommend the
+# cpuminer: the older tmrlvi miner does not track v3.0 proto/header serialization
+# and can mine blocks that go invalid across the Toccata/KIP-21 boundary.
+if [ -n "${TOCCATA_ACTIVATION_DAA_SCORE:-}" ]; then
+cat <<EOF
+
+=== Devnet: Mining (Toccata scheduled at DAA ${TOCCATA_ACTIVATION_DAA_SCORE}) ===
+
+kaspad mines no blocks on its own. Because Toccata/KIP-21 is scheduled, use the
+cpuminer helper, whose blocks stay valid across the boundary (it tracks current
+rusty-kaspa v3.0 proto/header serialization). Run it once kaspad is healthy:
+
+  ./scripts/dev/run-devnet-cpuminer.sh
+
+The older ./scripts/dev/run-devnet-miner.sh (tmrlvi/kaspa-miner) does NOT track
+v3.0 serialization and can produce blocks that go invalid post-Toccata; prefer
+the cpuminer whenever Toccata is scheduled.
+
+It reads MINING_ADDRESS / MINING_THREADS / KASPAD_GRPC_PORT from your .env; see
+'./scripts/dev/run-devnet-cpuminer.sh --help' for options.
+Mining is required to reach TOCCATA_ACTIVATION_DAA_SCORE for the KIP-21 rehearsal.
+EOF
+else
 cat <<EOF
 
 === Devnet: Mining ===
@@ -214,5 +236,5 @@ gRPC port. Run it once kaspad is healthy:
 
 It reads MINING_ADDRESS / MINING_THREADS / KASPAD_GRPC_PORT from your .env; see
 './scripts/dev/run-devnet-miner.sh --help' for options.
-Mining is required to reach TOCCATA_ACTIVATION_DAA_SCORE for the KIP-21 rehearsal.
 EOF
+fi

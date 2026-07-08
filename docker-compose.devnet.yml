@@ -79,6 +79,11 @@ services:
       - sh
       - -ec
       - |
+        # --enable-unsynced-mining is always on: this cold-start, single-node
+        # (--nodnsseed, typically no --addpeer) devnet never reaches "synced" on
+        # its own, so without it kaspad refuses to serve block templates and the
+        # chain can never start. On a peered setup (KASPAD_ADD_PEER) it also lets
+        # a restarting node serve templates mid-IBD; that is acceptable on devnet.
         ARGS="--disable-upnp \
           --rpclisten-borsh=0.0.0.0 \
           --rpclisten=0.0.0.0 \
@@ -133,10 +138,18 @@ services:
 
         if [ "$$ATAN_ENABLED" = "true" ]; then
           ARGS="$$ARGS --atan-listen --atan-transaction-id-prefix=$$TX_ID_PREFIX"
+        fi
 
-          # Toccata/KIP-21 lane: required whenever Toccata is scheduled (the override
-          # file carries toccata_activation). Fail early on a misconfig reached via a
-          # direct `docker compose up` that bypassed setup-devnet.sh's validation.
+        # Toccata/KIP-21 lane selection is NOT ATAN-specific: post-Toccata,
+        # kaswallet tags transactions with the lane and consensus selects lane-v1
+        # transactions regardless of ATAN. So emit --igra-lane-id and enforce the
+        # "lane required when Toccata is scheduled" guard whenever IGRA or ATAN is
+        # on. Keeping this outside the ATAN block covers the IGRA-on/ATAN-off
+        # combination, which would otherwise silently drop the lane id and skip
+        # the guard, surfacing the misconfig only deep in kaspad at runtime.
+        # Fail early here on a misconfig reached via a direct `docker compose up`
+        # that bypassed setup-devnet.sh's validation.
+        if [ "$$IGRA_ENABLED" = "true" ] || [ "$$ATAN_ENABLED" = "true" ]; then
           if [ -f /app/overrides/devnet.json ] && grep -q '"toccata_activation"' /app/overrides/devnet.json && [ -z "$$IGRA_LANE_ID" ]; then
             echo "Error: IGRA_LANE_ID must be set when toccata_activation is scheduled in overrides/devnet.json" >&2; exit 1
           fi
@@ -150,10 +163,15 @@ services:
             esac
             ARGS="$$ARGS --igra-lane-id=$$IGRA_LANE_ID"
           fi
+        fi
 
+        if [ "$$ATAN_ENABLED" = "true" ]; then
           # ATAN import source (mutually exclusive; kaspad panics if both are set).
           # --atan-import-dir imports from a local directory (used by the second,
           # import-validation node). --atan-import-url imports from an HTTPS index.
+          if [ -n "$$ATAN_IMPORT_DIR" ] && [ -n "$$ATAN_IMPORT_URL" ]; then
+            echo "Error: ATAN_IMPORT_DIR and ATAN_IMPORT_URL are mutually exclusive (kaspad panics if both are passed); set only one." >&2; exit 1
+          fi
           if [ -n "$$ATAN_IMPORT_DIR" ]; then
             ARGS="$$ARGS --atan-import-dir=$$ATAN_IMPORT_DIR"
           elif [ -n "$$ATAN_IMPORT_URL" ]; then

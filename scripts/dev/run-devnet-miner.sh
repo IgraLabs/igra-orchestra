@@ -60,41 +60,13 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 fi
 
 # --- resolve config (shell/CLI > .env > .env.devnet.example > default) ---
+# read_env/resolve are shared with run-devnet-cpuminer.sh via the lib below.
 ENV_FILE="$PROJECT_DIR/.env"
 [ -f "$ENV_FILE" ] || ENV_FILE="$PROJECT_DIR/.env.devnet.example"
 
-# read_env KEY -> prints the trimmed, unquoted value from ENV_FILE; returns 1 if absent.
-read_env() {
-    local key="$1" line val found=1
-    [ -f "$ENV_FILE" ] || return 1
-    while IFS= read -r line || [ -n "$line" ]; do
-        line="${line%$'\r'}"
-        case "$line" in
-            "$key"=*)
-                val="${line#*=}"
-                val="${val#"${val%%[![:space:]]*}"}"
-                val="${val%"${val##*[![:space:]]}"}"
-                case "$val" in
-                    \"*\"|\'*\') val="${val:1:${#val}-2}" ;;
-                esac
-                found=0
-                ;;
-        esac
-    done < "$ENV_FILE"
-    [ "$found" -eq 0 ] && printf '%s' "$val"
-    return "$found"
-}
-
-# resolve NAME DEFAULT -> sets NAME from shell (if already set) else file else default.
-resolve() {
-    local name="$1" default="$2" val
-    [ -n "${!name+set}" ] && return 0
-    if val="$(read_env "$name")"; then
-        printf -v "$name" '%s' "$val"
-    else
-        printf -v "$name" '%s' "$default"
-    fi
-}
+# shellcheck source=scripts/lib/devnet-env.sh
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/devnet-env.sh"
 
 [ -f "$ENV_FILE" ] && log "Reading config from $ENV_FILE (shell overrides win)"
 
@@ -102,8 +74,8 @@ resolve MINING_ADDRESS ""
 resolve MINING_THREADS 1
 resolve KASPAD_GRPC_PORT 16610
 # Host loopback, not the compose-internal KASPAD_HOST (=kaspad).
-KASPAD_RPC_HOST="${KASPAD_RPC_HOST:-127.0.0.1}"
-MINE_WHEN_NOT_SYNCED="${MINE_WHEN_NOT_SYNCED:-true}"
+resolve KASPAD_RPC_HOST 127.0.0.1
+resolve MINE_WHEN_NOT_SYNCED true
 
 MINER_REPO_URL="${MINER_REPO_URL:-https://github.com/tmrlvi/kaspa-miner.git}"
 MINER_BRANCH="${MINER_BRANCH:-}"
@@ -177,7 +149,12 @@ else
 fi
 
 # --- preflight: is the devnet kaspad reachable? (non-fatal; the miner retries) ---
-if timeout 2 bash -c ": > /dev/tcp/$KASPAD_RPC_HOST/$KASPAD_GRPC_PORT" 2>/dev/null; then
+# `timeout` is not on stock macOS (it ships with Homebrew coreutils). Without it,
+# skip the probe rather than fall into a misleading "not reachable" branch with
+# `command not found` noise; the miner retries the connection on its own anyway.
+if ! command -v timeout >/dev/null 2>&1; then
+    log "skipping gRPC reachability probe ('timeout' not found); the miner will retry $KASPAD_RPC_HOST:$KASPAD_GRPC_PORT."
+elif timeout 2 bash -c ": > /dev/tcp/$KASPAD_RPC_HOST/$KASPAD_GRPC_PORT" 2>/dev/null; then
     log "devnet kaspad gRPC reachable at $KASPAD_RPC_HOST:$KASPAD_GRPC_PORT"
 else
     warn "devnet kaspad gRPC not reachable at $KASPAD_RPC_HOST:$KASPAD_GRPC_PORT yet."

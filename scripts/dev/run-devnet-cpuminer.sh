@@ -52,7 +52,10 @@ Environment variables:
                           reports "not synced"; pass the flag so it still mines).
 
   MINER_REPO_URL          Default: https://github.com/kaspanet/cpuminer.git
-  MINER_BRANCH            Branch/tag to clone. Default: repo default branch.
+  MINER_COMMIT            Pinned commit SHA checked out when MINER_BRANCH is unset.
+                          Overriding it opts into a newer, unreviewed revision.
+  MINER_BRANCH            Branch/tag to clone instead of the pinned commit
+                          (unpinned; tracks the moving ref). Default: unset.
   MINER_DIR               Clone/build location.
                           Default: build/repos/kaspanet-cpuminer
   MINER_EXTRA_ARGS        Extra flags appended verbatim to the miner invocation.
@@ -71,41 +74,13 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 fi
 
 # --- resolve config (shell/CLI > .env > .env.devnet.example > default) ---
+# read_env/resolve are shared with run-devnet-miner.sh via the lib below.
 ENV_FILE="$PROJECT_DIR/.env"
 [ -f "$ENV_FILE" ] || ENV_FILE="$PROJECT_DIR/.env.devnet.example"
 
-# read_env KEY -> prints the trimmed, unquoted value from ENV_FILE; returns 1 if absent.
-read_env() {
-    local key="$1" line val found=1
-    [ -f "$ENV_FILE" ] || return 1
-    while IFS= read -r line || [ -n "$line" ]; do
-        line="${line%$'\r'}"
-        case "$line" in
-            "$key"=*)
-                val="${line#*=}"
-                val="${val#"${val%%[![:space:]]*}"}"
-                val="${val%"${val##*[![:space:]]}"}"
-                case "$val" in
-                    \"*\"|\'*\') val="${val:1:${#val}-2}" ;;
-                esac
-                found=0
-                ;;
-        esac
-    done < "$ENV_FILE"
-    [ "$found" -eq 0 ] && printf '%s' "$val"
-    return "$found"
-}
-
-# resolve NAME DEFAULT -> sets NAME from shell (if already set) else file else default.
-resolve() {
-    local name="$1" default="$2" val
-    [ -n "${!name+set}" ] && return 0
-    if val="$(read_env "$name")"; then
-        printf -v "$name" '%s' "$val"
-    else
-        printf -v "$name" '%s' "$default"
-    fi
-}
+# shellcheck source=scripts/lib/devnet-env.sh
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/devnet-env.sh"
 
 [ -f "$ENV_FILE" ] && log "Reading config from $ENV_FILE (shell overrides win)"
 
@@ -113,10 +88,15 @@ resolve MINING_ADDRESS ""
 resolve MINING_THREADS 1
 resolve KASPAD_GRPC_PORT 16610
 # Host loopback, not the compose-internal KASPAD_HOST (=kaspad).
-KASPAD_RPC_HOST="${KASPAD_RPC_HOST:-127.0.0.1}"
-MINE_WHEN_NOT_SYNCED="${MINE_WHEN_NOT_SYNCED:-true}"
+resolve KASPAD_RPC_HOST 127.0.0.1
+resolve MINE_WHEN_NOT_SYNCED true
 
 MINER_REPO_URL="${MINER_REPO_URL:-https://github.com/kaspanet/cpuminer.git}"
+# Pin a known-good commit (kaspa-miner 0.2.7 release) so an unattended clone+build
+# is reproducible and cannot silently pull a moving upstream head (cargo build
+# scripts/proc-macros run arbitrary code at build time). Override MINER_BRANCH to
+# opt into a newer ref.
+MINER_COMMIT="${MINER_COMMIT:-c4b9bec3a24823eb9c11d5dbd83c4968a6e125ea}"
 MINER_BRANCH="${MINER_BRANCH:-}"
 MINER_DIR="${MINER_DIR:-$PROJECT_DIR/build/repos/kaspanet-cpuminer}"
 MINER_EXTRA_ARGS="${MINER_EXTRA_ARGS:-}"
@@ -138,20 +118,37 @@ build_miner() {
         die "cargo (Rust toolchain) not found; needed to build the miner. Install via https://rustup.rs, or set SKIP_BUILD=1 to reuse an existing binary."
 
     if [ ! -d "$MINER_DIR/.git" ]; then
-        log "Cloning $MINER_REPO_URL -> $MINER_DIR"
         if [ -n "$MINER_BRANCH" ]; then
+            log "Cloning $MINER_REPO_URL @ $MINER_BRANCH (unpinned) -> $MINER_DIR"
             git clone --depth 1 --branch "$MINER_BRANCH" "$MINER_REPO_URL" "$MINER_DIR"
         else
-            git clone --depth 1 "$MINER_REPO_URL" "$MINER_DIR"
+            log "Cloning $MINER_REPO_URL @ pinned $MINER_COMMIT -> $MINER_DIR"
+            # Shallow-fetch the exact pinned commit (GitHub allows fetching a SHA).
+            git init -q "$MINER_DIR"
+            git -C "$MINER_DIR" remote add origin "$MINER_REPO_URL"
+            git -C "$MINER_DIR" fetch -q --depth 1 origin "$MINER_COMMIT"
+            git -C "$MINER_DIR" checkout -q --detach FETCH_HEAD
         fi
     else
         log "Reusing existing clone at $MINER_DIR"
+        # Warn if the existing checkout does not match what was requested: a
+        # changed MINER_COMMIT/MINER_BRANCH/MINER_REPO_URL is otherwise silently
+        # ignored and the stale checkout rebuilt.
+        local have_remote have_head
+        have_remote="$(git -C "$MINER_DIR" remote get-url origin 2>/dev/null || echo '?')"
+        have_head="$(git -C "$MINER_DIR" rev-parse HEAD 2>/dev/null || echo '?')"
+        [ "$have_remote" = "$MINER_REPO_URL" ] || \
+            warn "existing clone remote ($have_remote) != MINER_REPO_URL ($MINER_REPO_URL); using the existing checkout. Remove $MINER_DIR to re-clone."
+        if [ -z "$MINER_BRANCH" ] && [ "$have_head" != "$MINER_COMMIT" ]; then
+            warn "existing clone is at $have_head, not the pinned $MINER_COMMIT; using it as-is. Remove $MINER_DIR to re-clone at the pin."
+        fi
     fi
 
     # kaspanet/cpuminer is a single CPU-only crate (no GPU crates), so a plain
-    # release build produces target/release/kaspa-miner.
-    log "Building kaspa-miner (release)..."
-    cargo build --release --manifest-path "$MINER_DIR/Cargo.toml"
+    # release build produces target/release/kaspa-miner. --locked builds against
+    # the committed Cargo.lock so dependency versions cannot drift silently.
+    log "Building kaspa-miner (release) at $(git -C "$MINER_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)..."
+    cargo build --release --locked --manifest-path "$MINER_DIR/Cargo.toml"
 }
 
 if [ "${SKIP_BUILD:-}" = "1" ]; then
@@ -163,7 +160,12 @@ else
 fi
 
 # --- preflight: is the devnet kaspad reachable? (non-fatal; the miner retries) ---
-if timeout 2 bash -c ": > /dev/tcp/$KASPAD_RPC_HOST/$KASPAD_GRPC_PORT" 2>/dev/null; then
+# `timeout` is not on stock macOS (it ships with Homebrew coreutils). Without it,
+# skip the probe rather than fall into a misleading "not reachable" branch with
+# `command not found` noise; the miner retries the connection on its own anyway.
+if ! command -v timeout >/dev/null 2>&1; then
+    log "skipping gRPC reachability probe ('timeout' not found); the miner will retry $KASPAD_RPC_HOST:$KASPAD_GRPC_PORT."
+elif timeout 2 bash -c ": > /dev/tcp/$KASPAD_RPC_HOST/$KASPAD_GRPC_PORT" 2>/dev/null; then
     log "devnet kaspad gRPC reachable at $KASPAD_RPC_HOST:$KASPAD_GRPC_PORT"
 else
     warn "devnet kaspad gRPC not reachable at $KASPAD_RPC_HOST:$KASPAD_GRPC_PORT yet."

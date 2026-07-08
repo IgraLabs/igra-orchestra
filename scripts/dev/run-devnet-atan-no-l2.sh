@@ -53,12 +53,22 @@ log "Starting kaspad ONLY (no execution layer, no L2)..."
 docker compose -f "$COMPOSE_FILE" --profile backend up -d --build --no-deps kaspad
 
 log "Waiting for kaspad to report healthy..."
+status=none
 for _ in $(seq 1 30); do
     status="$(docker inspect -f '{{.State.Health.Status}}' kaspad-devnet 2>/dev/null || echo none)"
     [ "$status" = "healthy" ] && break
     sleep 2
 done
-log "kaspad health: $(docker inspect -f '{{.State.Health.Status}}' kaspad-devnet 2>/dev/null || echo unknown)"
+log "kaspad health: $status"
+# Fail closed: a still-unhealthy node (bad overrides, port clash, crash loop)
+# must not print a success banner and exit 0 — downstream callers (the e2e's
+# STEP 2) treat exit 0 + container-exists as a healthy node 1 and would burn the
+# long mining phase against a broken node before surfacing a confusing failure.
+if [ "$status" != "healthy" ]; then
+    log "ERROR: kaspad did not become healthy within 60s (status: $status). Recent logs:"
+    docker logs --tail 40 kaspad-devnet 2>&1 || true
+    exit 1
+fi
 
 cat <<EOF
 
@@ -76,4 +86,11 @@ Node 1 (ATAN-only, L2 off) is up. Next:
 
   3) Validate via import into a second node:
        ./scripts/dev/validate-devnet-atan.sh
+
+NOTE: this run overwrote overrides/devnet.json with harness params
+(finality=${FINALITY_PERIOD_SECONDS}s, toccata=${TOCCATA_ACTIVATION_DAA_SCORE},
+pruning_depth=${PRUNING_DEPTH}). The normal devnet stack loads whatever
+overrides/devnet.json is present, so re-run ./scripts/setup-devnet.sh (and wipe
+the kaspad volume) before returning to it — otherwise these params get baked into
+a fresh volume.
 EOF

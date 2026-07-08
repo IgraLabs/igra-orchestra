@@ -15,7 +15,31 @@ generate_devnet_overrides() {
     local seconds="$1"
     local toccata="$2"
     local pruning_depth="${3:-1080000}"
+
+    # Validate here so every caller is covered: run-devnet-atan-no-l2.sh passes
+    # raw env values through without any upstream validation. A bad value would
+    # otherwise break the arithmetic below, splice invalid JSON / injected fields
+    # into devnet.json, or bake a broken consensus config into the volume on first
+    # run (only fixable by wiping it). (Leading zeros rejected so no octal parse.)
+    if ! [[ "$seconds" =~ ^[1-9][0-9]*$ ]]; then
+        echo "[devnet-overrides] ERROR: FINALITY_PERIOD_SECONDS must be a positive integer (got: '$seconds')" >&2
+        return 1
+    fi
+    if ! [[ "$pruning_depth" =~ ^[1-9][0-9]*$ ]]; then
+        echo "[devnet-overrides] ERROR: PRUNING_DEPTH must be a positive integer (got: '$pruning_depth')" >&2
+        return 1
+    fi
+    if [ -n "$toccata" ] && ! [[ "$toccata" =~ ^(0|[1-9][0-9]*)$ ]]; then
+        echo "[devnet-overrides] ERROR: TOCCATA_ACTIVATION_DAA_SCORE must be a non-negative integer or empty (got: '$toccata')" >&2
+        return 1
+    fi
+
     local depth=$(( seconds * 10 ))   # BPS=10 on devnet
+    # pruning_depth must stay > finality_depth (the invariant this file documents).
+    if (( pruning_depth <= depth )); then
+        echo "[devnet-overrides] ERROR: pruning_depth ($pruning_depth) must be > finality_depth ($depth = ${seconds}s*10)" >&2
+        return 1
+    fi
     local lib_dir out_dir
     lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     out_dir="${OVERRIDES_OUT_DIR:-$lib_dir/../../overrides}"

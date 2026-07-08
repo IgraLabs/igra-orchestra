@@ -212,9 +212,13 @@ mining_preflight() {
     fi
 
     echo "[setup-devnet] Toccata is scheduled at DAA ${TOCCATA_ACTIVATION_DAA_SCORE:-}." >&2
-    echo "               kaspad mines nothing on its own; point a miner at the devnet" >&2
-    echo "               kaspad gRPC port (127.0.0.1:\${KASPAD_GRPC_PORT}) with" >&2
-    echo "               --mining-address ${MINING_ADDRESS:-} to reach the activation score." >&2
+    echo "               kaspad mines nothing on its own. Use the Toccata-compatible" >&2
+    echo "               cpuminer, whose blocks stay valid across the KIP-21 boundary:" >&2
+    echo "                 ./scripts/dev/run-devnet-cpuminer.sh" >&2
+    echo "               (The older ./scripts/dev/run-devnet-miner.sh does not track the" >&2
+    echo "               v3.0 proto/header serialization and can mine blocks that go" >&2
+    echo "               invalid post-Toccata.) It reads MINING_ADDRESS=${MINING_ADDRESS:-}" >&2
+    echo "               and dials the devnet kaspad gRPC port to reach the activation score." >&2
     return 0
 }
 

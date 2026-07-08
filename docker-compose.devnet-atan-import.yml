@@ -18,17 +18,22 @@ volumes:
     name: igra-devnet_kaspad_data
 
 networks:
-  # Join node 1's compose network so node 2 can peer with it for L1 IBD.
-  # ATAN only starts (and imports) once consensus reports "nearly synced", which
-  # for an isolated node requires peering to a node with a fresh tip (node 1,
-  # which keeps mining during validation).
+  # Join node 1's compose network so node 2 CAN peer with it for L1 IBD when
+  # NODE1_PEER is set. ATAN only starts (and imports) once consensus reports
+  # "nearly synced". The default path reaches that by self-mining from a host
+  # cpuminer against node 2's published gRPC (peering is an opt-in that hits L1
+  # pruning-point/multiset edge cases). In the e2e flow node 1's miner is stopped
+  # before node 2 IBDs, so no post-IBD block is relayed into node 2.
   node1_net:
     external: true
     name: igra-devnet_default
 
 services:
   kaspad-import:
-    image: igranetwork/kaspad:${KASPAD_VERSION}
+    # Default the tag so `docker compose` on a clone that never ran
+    # setup-devnet.sh (which merges KASPAD_VERSION from versions.devnet.env into
+    # .env) does not interpolate to the invalid ref "igranetwork/kaspad:".
+    image: igranetwork/kaspad:${KASPAD_VERSION:-devnet}
     container_name: kaspad-import-devnet
     restart: "no"
     logging: *default-logging
@@ -38,7 +43,10 @@ services:
     # hits L1 pruning-point/multiset edge cases with the aggressive devnet
     # pruning_depth). Host port differs from node 1's 16610 to avoid a clash.
     ports:
-      - "${IMPORT_GRPC_HOST_PORT:-16620}:${KASPAD_GRPC_PORT:-16610}"
+      # Loopback-only, like every published port in docker-compose.devnet.yml:
+      # devnet runs kaspad gRPC without TLS/auth, and Docker-published ports
+      # bypass host firewall rules. Only a host cpuminer on loopback dials this.
+      - "127.0.0.1:${IMPORT_GRPC_HOST_PORT:-16620}:${KASPAD_GRPC_PORT:-16610}"
     environment:
       - NETWORK=${NETWORK:-devnet}
       - TX_ID_PREFIX=${TX_ID_PREFIX:-97b1}
