@@ -22,25 +22,29 @@ cd /path/to/your/igra-orchestra
 # 1. Get the new compose + migration script (ships on main)
 git fetch origin && git checkout main && git pull --ff-only
 
-# 2. Migrate existing keys into per-worker directories (idempotent; preview first)
+# 2. Stop the workers so nothing writes keys during the move
+docker ps --format '{{.Names}}' | grep -E '^(kaswallet|rpc-provider)-[0-9]+$' | xargs -r docker stop
+
+# 3. Migrate existing keys into per-worker directories (idempotent; preview first)
 ./scripts/dev/migrate-keys-to-subdirs.sh --dry-run
 ./scripts/dev/migrate-keys-to-subdirs.sh
 
-# 3. Confirm NO flat key files remain, THEN recreate the workers
-ls keys/keys.kaswallet-*.json 2>/dev/null && echo "STOP: still flat — re-run step 2" || echo "all migrated ✓"
+# 4. Confirm NO flat key files remain, THEN recreate the workers
+ls keys/keys.kaswallet-*.json 2>/dev/null && echo "STOP: still flat — re-run step 3" || echo "all migrated ✓"
 docker compose --profile backend --profile frontend-wN up -d   # your normal profiles
 
-# 4. Verify
+# 5. Verify
 docker compose ps                                              # kaswallet-* Up (healthy), not restarting
 docker compose logs --since 3m $(docker compose ps --services | grep '^kaswallet-') \
   | grep -iE "EBUSY|persist keys|panic" && echo "still failing" || echo "no EBUSY ✓"
 ```
 
-> **Order matters — migrate BEFORE `up -d`.** If you recreate the containers
-> while any key is still flat, Docker auto-creates an **empty, root-owned**
-> `keys/kaswallet-N/` directory; that worker then has no key, and the empty
-> root-owned directory **blocks the migration** (a non-root operator can't `mv`
-> into it). See [Troubleshooting](#troubleshooting).
+> **Order matters — stop the frontend, migrate, _then_ `up -d`.** Don't migrate
+> while a kaswallet worker is running (it may be writing keys — the migration
+> script will refuse), and don't `up -d` while any key is still flat, or Docker
+> auto-creates an **empty, root-owned** `keys/kaswallet-N/` directory that leaves
+> the worker keyless and **blocks the migration** (a non-root operator can't
+> `mv` into it). See [Troubleshooting](#troubleshooting).
 
 ## Who this is for
 
@@ -66,14 +70,21 @@ changes; kaspad, reth, traefik, `.env`, and volumes are untouched.
 - The node's checkout is on `main` with this change (step 1 above).
 - You run the migration as the **owner of the `keys/` directory** (typically
   `devnet`). You do **not** need root; the script does not require it.
-- A brief kaswallet/rpc-provider restart is expected when you recreate in step 3.
+- The frontend workers are stopped during the migration and recreated at the end
+  (a brief kaswallet/rpc-provider downtime).
 
 ## Step-by-step
 
 1. **Pull the update** (step 1 above). This brings the new `docker-compose.yml`,
    `scripts/dev/migrate-keys-to-subdirs.sh`, and generator changes.
 
-2. **Preview, then migrate.** `--dry-run` prints the moves without changing
+2. **Stop the frontend workers** so nothing writes keys during the move — the
+   migration script **refuses to run** while any `kaswallet-N` container is up:
+   ```bash
+   docker ps --format '{{.Names}}' | grep -E '^(kaswallet|rpc-provider)-[0-9]+$' | xargs -r docker stop
+   ```
+
+3. **Preview, then migrate.** `--dry-run` prints the moves without changing
    anything; the real run moves each `keys/keys.kaswallet-N.json` →
    `keys/kaswallet-N/keys.json`. It is **idempotent** and **re-runnable** — an
    already-migrated worker is skipped, so it is safe to run again after any
@@ -89,11 +100,11 @@ changes; kaspad, reth, traefik, `.env`, and volumes are untouched.
    can't tighten its permissions. The file was still moved into place, and the
    root daemon reads it fine.
 
-3. **Confirm no flat files remain**, then recreate the workers with your normal
+4. **Confirm no flat files remain**, then recreate the workers with your normal
    profiles (`docker compose --profile … up -d`). Compose only recreates the
    services whose mount changed (the kaswallets and their paired rpc-providers).
 
-4. **Verify** (see below).
+5. **Verify** (see below).
 
 ## Verification
 

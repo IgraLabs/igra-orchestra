@@ -48,6 +48,19 @@ cd "$PROJECT_DIR"
 [[ -d keys ]] || die "no keys/ directory in $PROJECT_DIR — run from an orchestra deployment"
 [[ -f docker-compose.yml ]] || die "no docker-compose.yml in $PROJECT_DIR — is this an orchestra checkout?"
 
+# Refuse to run while a kaswallet worker is live (running or crash-looping): the
+# daemon may be writing keys, and moving a file out from under a container that
+# still bind-mounts it is unsafe. Stop the frontend first. (Skipped for --dry-run.)
+if [[ "$DRY_RUN" == 0 ]] && command -v docker >/dev/null 2>&1; then
+    live="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^kaswallet-[0-9]+$' || true)"
+    if [[ -n "$live" ]]; then
+        die "kaswallet worker(s) still running: $(echo "$live" | tr '\n' ' ').
+Stop the frontend workers before migrating — nothing must write keys during the move —
+then re-run. See doc/node-operations/migrate-keys-to-directory-mounts.md.
+(Use --dry-run to preview without this check.)"
+    fi
+fi
+
 echo "Migrating kaswallet keys to per-worker subdirectories in: $PROJECT_DIR/keys"
 [[ "$DRY_RUN" == 1 ]] && echo "(dry run — no changes will be made)"
 
