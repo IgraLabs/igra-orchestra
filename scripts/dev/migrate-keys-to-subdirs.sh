@@ -77,8 +77,12 @@ for src in keys/keys.kaswallet-*.json; do
     echo "  + worker $idx: $src -> $dst"
     run bash -c "umask 077 && mkdir -p '$dst_dir'"
     run mv "$src" "$dst"
-    run chmod 600 "$dst"          # keys are owner-only
-    run chmod 700 "$dst_dir"
+    # Best-effort perm hardening. A key written by the containerized daemon (which
+    # runs as root) is root-owned on the host, so a non-root operator gets EPERM
+    # on chmod. The mv already succeeded and the root daemon reads the file fine,
+    # so warn and keep going rather than aborting the migration under `set -e`.
+    run chmod 600 "$dst" 2>/dev/null || echo "  ! note: could not chmod 600 $dst (not owner, e.g. root-owned) — left as-is"
+    run chmod 700 "$dst_dir" 2>/dev/null || echo "  ! note: could not chmod 700 $dst_dir — left as-is"
     moved=$((moved + 1))
 done
 shopt -u nullglob
