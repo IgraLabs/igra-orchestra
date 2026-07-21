@@ -10,4 +10,5 @@ Operational reference for running Igra Orchestra nodes.
 - **[Environment Reference](environment-reference.md)** - All operational environment variables
 - **[Galleon → testnet-10 Migration](migrate-galleon-to-testnet-10.md)** - One-shot upgrade for existing Galleon operators on `NETWORK=testnet` to the uniform `NETWORK=testnet-10` schema (preserves IBD state)
 - **[Toccata Upgrade — Part One: Mainnet v2.3 → v3.0](upgrade-mainnet-v2.3-to-v3.0.md)** - Part one of the Toccata (KIP-21) upgrade for existing mainnet operators: bring the backend (kaspad/reth) to v3.0 before the fork while workers stay on 2.3 (reconciles `.env`; preserves volumes)
+- **[Migrate keys to directory mounts](migrate-keys-to-directory-mounts.md)** - One-time per-node move of flat `keys.kaswallet-N.json` files into per-worker directories, required by the kaswallet 3.0.3 atomic `keys.json` save (avoids the single-file-mount `EBUSY` crash-loop)
 - **[Running a CPU Miner](running-a-cpu-miner.md)** - Optionally produce Kaspa L1 blocks for an isolated local network with an external CPU miner
