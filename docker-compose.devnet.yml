@@ -307,7 +307,7 @@ services:
       - sh
       - -ec
       - |
-        ARGS="--logs-level=$$RUST_LOG --keys /app/keys.json --server grpc://$$KASPAD_HOST:$$KASPAD_GRPC_PORT --listen 0.0.0.0:8082"
+        ARGS="--logs-level=$$RUST_LOG --keys /app/keys/keys.json --server grpc://$$KASPAD_HOST:$$KASPAD_GRPC_PORT --listen 0.0.0.0:8082"
         if [ "$$NETWORK" = "mainnet" ]; then
           ARGS="--enable-mainnet-pre-launch $$ARGS"
         else
@@ -320,7 +320,7 @@ services:
           --tcp kaspad "$$KASPAD_HOST" "$$KASPAD_GRPC_PORT" \
           -- /app/kaswallet-daemon $$ARGS
     volumes:
-      - ./keys/keys.kaswallet-0.json:/app/keys.json
+      - ./keys/kaswallet-0:/app/keys
       - *dependency-watch-volume
     healthcheck:
       <<: *default-healthcheck

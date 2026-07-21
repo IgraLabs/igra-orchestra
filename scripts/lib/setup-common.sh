@@ -341,7 +341,7 @@ update_env_var() {
 generate_wallet() {
     local index="$1"
     local password="$2"
-    local keyfile="keys/keys.kaswallet-${index}.json"
+    local keyfile="keys/kaswallet-${index}/keys.json"
 
     log "Generating wallet $index..."
 
@@ -357,6 +357,11 @@ generate_wallet() {
     fi
     chmod 600 "$wallet_log" 2>/dev/null || true
 
+    # Per-worker key DIRECTORY (owner-only). The daemon mounts this directory
+    # (not the file), so kaswallet's atomic keys.json save can create a temp
+    # file beside keys.json and rename over it.
+    (umask 077 && mkdir -p "$PROJECT_DIR/keys/kaswallet-${index}")
+
     # Use expect for password prompts; pass the password via env and run as the caller.
     # shellcheck disable=SC2016 # Variables are intentionally spliced via quote-breaking, not expanded inside single quotes
     if ! WALLET_PASS="$password" expect -c '
@@ -365,7 +370,7 @@ generate_wallet() {
             -v "'"$PROJECT_DIR"'/keys:/keys" \
             --entrypoint /app/kaswallet-create \
             '"$KASWALLET_IMAGE"' '"$KASWALLET_FLAG"' \
-            -k /keys/keys.kaswallet-'"${index}"'.json
+            -k /keys/kaswallet-'"${index}"'/keys.json
         expect "password:"
         send -- "$env(WALLET_PASS)\r"
         expect "password"
@@ -708,14 +713,28 @@ run_setup() {
     # Check for existing wallet files
     EXISTING_WALLETS=()
     MISSING_WALLETS=()
+    LEGACY_FLAT_WALLETS=()
     for i in $(seq 0 $((NUM_WORKERS - 1))); do
-        keyfile="keys/keys.kaswallet-${i}.json"
+        keyfile="keys/kaswallet-${i}/keys.json"
         if [[ -f "$keyfile" ]]; then
             EXISTING_WALLETS+=("$i")
+        elif [[ -f "keys/keys.kaswallet-${i}.json" ]]; then
+            # Legacy flat-layout key present but not yet migrated to the
+            # per-worker directory. Do NOT treat it as missing — that would
+            # generate a NEW wallet identity and orphan the funded legacy key.
+            LEGACY_FLAT_WALLETS+=("$i")
         else
             MISSING_WALLETS+=("$i")
         fi
     done
+
+    if [[ ${#LEGACY_FLAT_WALLETS[@]} -gt 0 ]]; then
+        die "Found legacy flat key files (keys/keys.kaswallet-N.json) for workers: ${LEGACY_FLAT_WALLETS[*]}.
+Migrate them to the per-worker directory layout before continuing (this preserves your existing wallet identities):
+    scripts/dev/migrate-keys-to-subdirs.sh --dry-run   # preview
+    scripts/dev/migrate-keys-to-subdirs.sh             # migrate
+Then re-run setup."
+    fi
 
     if [[ ${#EXISTING_WALLETS[@]} -gt 0 ]]; then
         log "Found existing wallet files for workers: ${EXISTING_WALLETS[*]}"
@@ -727,7 +746,9 @@ run_setup() {
             backup_dir="keys/backup.$(date +%Y%m%d_%H%M%S)"
             mkdir -p "$backup_dir"
             for i in "${EXISTING_WALLETS[@]}"; do
-                mv "keys/keys.kaswallet-${i}.json" "$backup_dir/"
+                # Back up the whole per-worker directory (preserves per-worker
+                # separation in the backup; avoids keys.json name collisions).
+                mv "keys/kaswallet-${i}" "$backup_dir/"
             done
             log "Backed up existing wallets to $backup_dir"
             MISSING_WALLETS=()

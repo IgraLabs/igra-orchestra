@@ -162,7 +162,7 @@ Generate keys for each worker (0-4):
 source versions.galleon-testnet.env
 for i in {0..4}; do
   docker run --rm -it -v $(pwd)/keys:/keys --entrypoint /app/kaswallet-create \
-    igranetwork/kaswallet:${KASWALLET_VERSION} --testnet --testnet-suffix=10 -k /keys/keys.kaswallet-$i.json
+    igranetwork/kaswallet:${KASWALLET_VERSION} --testnet --testnet-suffix=10 -k /keys/kaswallet-$i/keys.json
 done
 ```
 

@@ -157,7 +157,7 @@ x-kaswallet-runtime: &kaswallet-runtime
       # Sets KASPA_FAMILY and KASPA_NETSUFFIX from NETWORK.
       . /app/parse-network-slug.sh
 
-      ARGS="--logs-level=$$RUST_LOG --keys /app/keys.json --server grpc://$$KASPAD_HOST:$$KASPAD_GRPC_PORT --listen 0.0.0.0:8082"
+      ARGS="--logs-level=$$RUST_LOG --keys /app/keys/keys.json --server grpc://$$KASPAD_HOST:$$KASPAD_GRPC_PORT --listen 0.0.0.0:8082"
       if [ "$$KASPA_FAMILY" = "mainnet" ]; then
         ARGS="--enable-mainnet-pre-launch $$ARGS"
       else
@@ -479,7 +479,7 @@ services:
     ports:
       - "127.0.0.1:8082:8082"  # open 8082 on localhost for entry transactions
     volumes:
-      - ./keys/keys.kaswallet-0.json:/app/keys.json
+      - ./keys/kaswallet-0:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -499,7 +499,7 @@ services:
     profiles: ["frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-1
     volumes:
-      - ./keys/keys.kaswallet-1.json:/app/keys.json
+      - ./keys/kaswallet-1:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -519,7 +519,7 @@ services:
     profiles: ["frontend-w3", "frontend-w4", "frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-2
     volumes:
-      - ./keys/keys.kaswallet-2.json:/app/keys.json
+      - ./keys/kaswallet-2:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -539,7 +539,7 @@ services:
     profiles: ["frontend-w4", "frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-3
     volumes:
-      - ./keys/keys.kaswallet-3.json:/app/keys.json
+      - ./keys/kaswallet-3:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -559,7 +559,7 @@ services:
     profiles: ["frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-4
     volumes:
-      - ./keys/keys.kaswallet-4.json:/app/keys.json
+      - ./keys/kaswallet-4:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -579,7 +579,7 @@ services:
     profiles: ["frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-5
     volumes:
-      - ./keys/keys.kaswallet-5.json:/app/keys.json
+      - ./keys/kaswallet-5:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -599,7 +599,7 @@ services:
     profiles: ["frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-6
     volumes:
-      - ./keys/keys.kaswallet-6.json:/app/keys.json
+      - ./keys/kaswallet-6:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -619,7 +619,7 @@ services:
     profiles: ["frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-7
     volumes:
-      - ./keys/keys.kaswallet-7.json:/app/keys.json
+      - ./keys/kaswallet-7:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -639,7 +639,7 @@ services:
     profiles: ["frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-8
     volumes:
-      - ./keys/keys.kaswallet-8.json:/app/keys.json
+      - ./keys/kaswallet-8:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -659,7 +659,7 @@ services:
     profiles: ["frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-9
     volumes:
-      - ./keys/keys.kaswallet-9.json:/app/keys.json
+      - ./keys/kaswallet-9:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -679,7 +679,7 @@ services:
     profiles: ["frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-10
     volumes:
-      - ./keys/keys.kaswallet-10.json:/app/keys.json
+      - ./keys/kaswallet-10:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -699,7 +699,7 @@ services:
     profiles: ["frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-11
     volumes:
-      - ./keys/keys.kaswallet-11.json:/app/keys.json
+      - ./keys/kaswallet-11:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -719,7 +719,7 @@ services:
     profiles: ["frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-12
     volumes:
-      - ./keys/keys.kaswallet-12.json:/app/keys.json
+      - ./keys/kaswallet-12:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -739,7 +739,7 @@ services:
     profiles: ["frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-13
     volumes:
-      - ./keys/keys.kaswallet-13.json:/app/keys.json
+      - ./keys/kaswallet-13:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -759,7 +759,7 @@ services:
     profiles: ["frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-14
     volumes:
-      - ./keys/keys.kaswallet-14.json:/app/keys.json
+      - ./keys/kaswallet-14:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -779,7 +779,7 @@ services:
     profiles: ["frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-15
     volumes:
-      - ./keys/keys.kaswallet-15.json:/app/keys.json
+      - ./keys/kaswallet-15:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -799,7 +799,7 @@ services:
     profiles: ["frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-16
     volumes:
-      - ./keys/keys.kaswallet-16.json:/app/keys.json
+      - ./keys/kaswallet-16:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -819,7 +819,7 @@ services:
     profiles: ["frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: kaswallet-17
     volumes:
-      - ./keys/keys.kaswallet-17.json:/app/keys.json
+      - ./keys/kaswallet-17:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -839,7 +839,7 @@ services:
     profiles: ["frontend-w19", "frontend-w20"]
     container_name: kaswallet-18
     volumes:
-      - ./keys/keys.kaswallet-18.json:/app/keys.json
+      - ./keys/kaswallet-18:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 
@@ -859,7 +859,7 @@ services:
     profiles: ["frontend-w20"]
     container_name: kaswallet-19
     volumes:
-      - ./keys/keys.kaswallet-19.json:/app/keys.json
+      - ./keys/kaswallet-19:/app/keys
       - *dependency-watch-volume
       - *parse-network-slug-volume
 

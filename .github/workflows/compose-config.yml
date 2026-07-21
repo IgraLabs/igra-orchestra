@@ -235,4 +235,5 @@ jobs:
             scripts/setup-mainnet.sh \
             scripts/setup-galleon-testnet.sh \
             scripts/dev/setup-repos.sh \
-            scripts/dev/migrate-galleon-to-testnet-10.sh
+            scripts/dev/migrate-galleon-to-testnet-10.sh \
+            scripts/dev/migrate-keys-to-subdirs.sh
