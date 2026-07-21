@@ -215,7 +215,7 @@ Follow these steps before the first run:
     ```
 
 4.  **Create worker keys:**
-    Generate the necessary key files for the wallet services. At minimum, you need `keys.kaswallet-0.json` for one worker. Additional workers require corresponding files (e.g., `keys.kaswallet-1.json`, `keys.kaswallet-2.json`, up to `keys.kaswallet-19.json` for 20 workers).
+    Generate the necessary key files for the wallet services. Each worker's key lives in its own directory: at minimum you need `keys/kaswallet-0/keys.json` for one worker. Additional workers require corresponding files (e.g., `keys/kaswallet-1/keys.json`, up to `keys/kaswallet-19/keys.json` for 20 workers). The daemon mounts each worker's *directory* (`./keys/kaswallet-N`) so kaswallet can update `keys.json` atomically. Existing flat `keys.kaswallet-N.json` deployments can be migrated with `scripts/dev/migrate-keys-to-subdirs.sh` — run it on each node **before** recreating the kaswallet services (`docker compose ... up -d`) with this compose, because an un-migrated node cannot load its key (and an old single-file-mount node running the atomic-save image crash-loops with EBUSY).
 
 5.  **Sync wallet addresses (after wallets are running):**
     Once the kaswallet containers are running (requires kaspad to have completed IBD sync), sync their addresses into `.env`:

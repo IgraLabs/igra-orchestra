@@ -128,7 +128,7 @@ Generate keys for each worker (0-4):
 source versions.mainnet.env
 for i in {0..4}; do
   docker run --rm -it -v $(pwd)/keys:/keys --entrypoint /app/kaswallet-create \
-    igranetwork/kaswallet:${KASWALLET_VERSION} --enable-mainnet-pre-launch -k /keys/keys.kaswallet-$i.json
+    igranetwork/kaswallet:${KASWALLET_VERSION} --enable-mainnet-pre-launch -k /keys/kaswallet-$i/keys.json
 done
 ```
 
