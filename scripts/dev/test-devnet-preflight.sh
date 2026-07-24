@@ -124,11 +124,17 @@ no "resolve: missing source fails"        bash -c "$(declare -f resolve_devnet_e
 rm -rf "$RESOLVE_TMP"
 
 # --- mining_preflight (validates mining config only; the miner is external) ---
-MINE_FUNCS="$(declare -f mining_preflight is_valid_mining_address is_positive_int)"
+MINE_FUNCS="$(declare -f mining_preflight is_valid_mining_address is_positive_int is_uint)"
 
 ok "mining: valid addr + threads" bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s MINING_THREADS=1 mining_preflight 2>/dev/null"
 no "mining: bad address"          bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspa:bad MINING_THREADS=1 mining_preflight 2>/dev/null"
 no "mining: bad threads"          bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s MINING_THREADS=0 mining_preflight 2>/dev/null"
+
+# MINING_MIN_BLOCK_INTERVAL_MS: valid, zero (disabled), and invalid
+ok "mining: interval 150 accepted"       bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s MINING_THREADS=1 MINING_MIN_BLOCK_INTERVAL_MS=150 mining_preflight 2>/dev/null"
+ok "mining: interval 0 (disabled) accepted" bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s MINING_THREADS=1 MINING_MIN_BLOCK_INTERVAL_MS=0 mining_preflight 2>/dev/null"
+no "mining: negative interval rejected"  bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s MINING_THREADS=1 MINING_MIN_BLOCK_INTERVAL_MS=-5 mining_preflight 2>/dev/null"
+no "mining: non-numeric interval rejected" bash -c "$MINE_FUNCS; MINING_ADDRESS=kaspadev:qqdk7fjp3dk6yln3d8epz6exafv65jecxkz9ujkhlvgkqwefwtdwsw3q78u7s MINING_THREADS=1 MINING_MIN_BLOCK_INTERVAL_MS=abc mining_preflight 2>/dev/null"
 
 # --- record_source_revisions ---
 REV_TMP="$(mktemp -d)"

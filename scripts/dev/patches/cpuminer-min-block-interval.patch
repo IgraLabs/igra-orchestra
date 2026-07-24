@@ -1,0 +1,181 @@
+diff --git a/src/cli.rs b/src/cli.rs
+index 3c1d4b1..f9a9247 100644
+--- a/src/cli.rs
++++ b/src/cli.rs
+@@ -41,10 +41,15 @@ pub struct Opt {
+     #[clap(long = "throttle", display_order = 9)]
+     /// Throttle (milliseconds) between each pow hash generation (used for development testing)
+     pub throttle: Option<u64>,
+-    #[clap(long, display_order = 10)]
++    #[clap(long = "min-block-interval-ms", display_order = 12)]
++    /// Hard global minimum milliseconds between SUBMITTED blocks across all
++    /// threads (blocks found sooner are dropped). Caps blocks/sec so devnet
++    /// stays under viaduct's per-window block limit. 0 or unset = disabled.
++    pub min_block_interval_ms: Option<u64>,
++    #[clap(long, display_order = 13)]
+     /// Output logs in alternative format (same as kaspad)
+     pub altlogs: bool,
+-    #[clap(long = "user-agent-suffix", display_order = 11)]
++    #[clap(long = "user-agent-suffix", display_order = 14)]
+     /// Custom user agent suffix (max 20 characters)
+     pub user_agent_suffix: Option<String>,
+ }
+diff --git a/src/main.rs b/src/main.rs
+index dca2a3c..7c8e2e4 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -73,6 +73,7 @@ async fn main() -> Result<(), Error> {
+     builder.init();
+ 
+     let throttle = opt.throttle.map(Duration::from_millis);
++    let min_block_interval_ms = opt.min_block_interval_ms.unwrap_or(0);
+     let shutdown = ShutdownHandler(Arc::new(AtomicBool::new(false)));
+     let _shutdown_when_dropped = shutdown.arm();
+ 
+@@ -96,8 +97,13 @@ async fn main() -> Result<(), Error> {
+         client.client_send(NotifyNewBlockTemplateRequestMessage {}).await?;
+         client.client_get_block_template().await?;
+ 
+-        let mut miner_manager =
+-            MinerManager::new(client.send_channel.clone(), opt.num_threads, throttle, shutdown.clone());
++        let mut miner_manager = MinerManager::new(
++            client.send_channel.clone(),
++            opt.num_threads,
++            throttle,
++            min_block_interval_ms,
++            shutdown.clone(),
++        );
+         client.listen(&mut miner_manager, shutdown.clone()).await?;
+         warn!("Disconnected from kaspad, retrying");
+     }
+diff --git a/src/miner.rs b/src/miner.rs
+index 09e0176..070c9cf 100644
+--- a/src/miner.rs
++++ b/src/miner.rs
+@@ -12,7 +12,7 @@ use std::{
+         atomic::{AtomicU64, AtomicUsize, Ordering},
+         Arc,
+     },
+-    time::Duration,
++    time::{Duration, SystemTime, UNIX_EPOCH},
+ };
+ use tokio::{
+     sync::mpsc::Sender,
+@@ -47,14 +47,38 @@ pub fn get_num_cpus(n_cpus: Option<u16>) -> u16 {
+ 
+ const LOG_RATE: Duration = Duration::from_secs(10);
+ 
++/// Global, cross-thread submission gate. Returns `true` and atomically claims
++/// the slot (storing `now_ms`) iff at least `interval_ms` has elapsed since the
++/// last claimed submission; otherwise returns `false` without mutating. A CAS
++/// loop guarantees at most one thread wins the slot per interval.
++fn try_claim_submit_slot(last_submit_ms: &AtomicU64, now_ms: u64, interval_ms: u64) -> bool {
++    loop {
++        let prev = last_submit_ms.load(Ordering::Relaxed);
++        if now_ms.saturating_sub(prev) < interval_ms {
++            return false;
++        }
++        match last_submit_ms.compare_exchange_weak(prev, now_ms, Ordering::SeqCst, Ordering::Relaxed) {
++            Ok(_) => return true,
++            Err(_) => continue,
++        }
++    }
++}
++
++#[inline]
++fn now_epoch_ms() -> u64 {
++    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
++}
++
+ impl MinerManager {
+     pub fn new(
+         send_channel: Sender<KaspadMessage>,
+         n_cpus: Option<u16>,
+         throttle: Option<Duration>,
++        min_block_interval_ms: u64,
+         shutdown: ShutdownHandler,
+     ) -> Self {
+         let hashes_tried = Arc::new(AtomicU64::new(0));
++        let last_submit_ms = Arc::new(AtomicU64::new(0));
+         let watch = WatchSwap::empty();
+         let handles = Self::launch_cpu_threads(
+             send_channel.clone(),
+@@ -63,6 +87,8 @@ impl MinerManager {
+             shutdown,
+             n_cpus,
+             throttle,
++            min_block_interval_ms,
++            last_submit_ms,
+         )
+         .collect();
+ 
+@@ -84,6 +110,8 @@ impl MinerManager {
+         shutdown: ShutdownHandler,
+         n_cpus: Option<u16>,
+         throttle: Option<Duration>,
++        min_block_interval_ms: u64,
++        last_submit_ms: Arc<AtomicU64>,
+     ) -> impl Iterator<Item = MinerHandler> {
+         let n_cpus = get_num_cpus(n_cpus);
+         info!("Launching: {} cpu miners", n_cpus);
+@@ -93,6 +121,8 @@ impl MinerManager {
+                 work_channel.clone(),
+                 hashes_tried.clone(),
+                 throttle,
++                min_block_interval_ms,
++                last_submit_ms.clone(),
+                 shutdown.clone(),
+             )
+         })
+@@ -122,6 +152,8 @@ impl MinerManager {
+         mut block_channel: WatchSwap<pow::State>,
+         hashes_tried: Arc<AtomicU64>,
+         throttle: Option<Duration>,
++        min_block_interval_ms: u64,
++        last_submit_ms: Arc<AtomicU64>,
+         shutdown: ShutdownHandler,
+     ) -> MinerHandler {
+         // We mark it cold as the function is not called often, and it's not in the hot path
+@@ -146,7 +178,14 @@ impl MinerManager {
+                 state_ref.nonce = nonce.0;
+ 
+                 if let Some(block) = state_ref.generate_block_if_pow() {
+-                    found_block(&send_channel, block)?;
++                    let allowed = if min_block_interval_ms > 0 {
++                        try_claim_submit_slot(&last_submit_ms, now_epoch_ms(), min_block_interval_ms)
++                    } else {
++                        true
++                    };
++                    if allowed {
++                        found_block(&send_channel, block)?;
++                    }
+                 }
+                 nonce += Wrapping(1);
+ 
+@@ -241,3 +280,26 @@ mod benches {
+         });
+     }
+ }
++
++#[cfg(test)]
++mod min_interval_tests {
++    use super::try_claim_submit_slot;
++    use std::sync::atomic::{AtomicU64, Ordering};
++
++    #[test]
++    fn first_submit_allowed_then_gated_then_allowed() {
++        let last = AtomicU64::new(0);
++        assert!(try_claim_submit_slot(&last, 1000, 150), "first submit allowed");
++        assert_eq!(last.load(Ordering::Relaxed), 1000);
++        assert!(!try_claim_submit_slot(&last, 1100, 150), "within interval blocked");
++        assert_eq!(last.load(Ordering::Relaxed), 1000, "blocked submit does not advance");
++        assert!(try_claim_submit_slot(&last, 1200, 150), "after interval allowed");
++        assert_eq!(last.load(Ordering::Relaxed), 1200);
++    }
++
++    #[test]
++    fn exactly_at_interval_boundary_allowed() {
++        let last = AtomicU64::new(1000);
++        assert!(try_claim_submit_slot(&last, 1150, 150), "elapsed == interval allowed");
++    }
++}

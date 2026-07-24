@@ -45,6 +45,10 @@ shell/CLI values take precedence over the file.
 Environment variables:
   MINING_ADDRESS          Reward address; must be a devnet address (kaspadev:...).
   MINING_THREADS          CPU miner threads (positive integer). Default: 1.
+  MINING_MIN_BLOCK_INTERVAL_MS
+                          Minimum interval between mined blocks, in ms. Passed
+                          as --min-block-interval-ms when a positive integer;
+                          0 disables the throttle. Default: 150.
   KASPAD_GRPC_PORT        Devnet kaspad gRPC port on the host. Default: 16610.
   KASPAD_RPC_HOST         Host the miner dials. Default: 127.0.0.1 (NOT the
                           compose-internal KASPAD_HOST, which is unreachable here).
@@ -86,6 +90,7 @@ source "$SCRIPT_DIR/../lib/devnet-env.sh"
 
 resolve MINING_ADDRESS ""
 resolve MINING_THREADS 1
+resolve MINING_MIN_BLOCK_INTERVAL_MS 150
 resolve KASPAD_GRPC_PORT 16610
 # Host loopback, not the compose-internal KASPAD_HOST (=kaspad).
 resolve KASPAD_RPC_HOST 127.0.0.1
@@ -144,6 +149,20 @@ build_miner() {
         fi
     fi
 
+    # Apply the min-block-interval throttle patch (idempotent). Keeps devnet block
+    # production under viaduct's per-window cap. See scripts/dev/patches/.
+    PATCH_FILE="$SCRIPT_DIR/patches/cpuminer-min-block-interval.patch"
+    if [ -f "$PATCH_FILE" ]; then
+        if git -C "$MINER_DIR" apply --reverse --check "$PATCH_FILE" 2>/dev/null; then
+            log "min-block-interval patch already applied"
+        elif git -C "$MINER_DIR" apply --check "$PATCH_FILE" 2>/dev/null; then
+            git -C "$MINER_DIR" apply "$PATCH_FILE"
+            log "applied min-block-interval patch"
+        else
+            warn "min-block-interval patch does not apply cleanly; miner will run WITHOUT the rate cap"
+        fi
+    fi
+
     # kaspanet/cpuminer is a single CPU-only crate (no GPU crates), so a plain
     # release build produces target/release/kaspa-miner. --locked builds against
     # the committed Cargo.lock so dependency versions cannot drift silently.
@@ -177,6 +196,12 @@ fi
 # network flag to pick a default port, which we always set explicitly with -p.
 args=(-a "$MINING_ADDRESS" -s "$KASPAD_RPC_HOST" -p "$KASPAD_GRPC_PORT" -t "$MINING_THREADS")
 [ "$MINE_WHEN_NOT_SYNCED" = "true" ] && args+=(--mine-when-not-synced)
+# Throttle block production to stay under viaduct's per-window cap; 0 disables.
+case "$MINING_MIN_BLOCK_INTERVAL_MS" in
+    ''|*[!0-9]*) ;;                                   # non-numeric/empty: skip
+    0) ;;                                             # 0: disabled
+    *) args+=(--min-block-interval-ms "$MINING_MIN_BLOCK_INTERVAL_MS") ;;
+esac
 
 log "Starting cpuminer -> $KASPAD_RPC_HOST:$KASPAD_GRPC_PORT (address ${MINING_ADDRESS}, ${MINING_THREADS} threads)"
 log "Press Ctrl+C to stop."

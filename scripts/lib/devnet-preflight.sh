@@ -173,8 +173,18 @@ resolve_devnet_env() {
 
     # Capture shell-provided tunables (set, even if empty) so the file cannot
     # clobber a command-line override.
+    # Every tunable a caller may legitimately override on the command line must be
+    # listed here: `set -a; source` below overwrites the whole environment, so a
+    # variable missing from this list silently loses to the file even though
+    # docker compose would otherwise honour the shell value. That silent loss is
+    # how a harness can end up running with a genesis hash and launch DAA it never
+    # asked for (kaspad then halts on "Genesis hash mismatch", or the L2 collector
+    # panics on the genesis window).
     local k saved=()
-    for k in FINALITY_PERIOD_SECONDS TOCCATA_ACTIVATION_DAA_SCORE IGRA_LANE_ID; do
+    for k in FINALITY_PERIOD_SECONDS TOCCATA_ACTIVATION_DAA_SCORE IGRA_LANE_ID \
+             IGRA_ENABLE ATAN_ENABLE RPC_READ_ONLY IGRA_SKIP_LOCK_SCRIPT_CHECK \
+             IGRA_LAUNCH_DAA_SCORE L1_REFERENCE_DAA_SCORE L1_REFERENCE_TIMESTAMP \
+             GENESIS_BLOCK_HASH MINING_ADDRESS MINING_MIN_BLOCK_INTERVAL_MS; do
         [ -n "${!k+x}" ] && saved+=("$k=${!k}")
     done
 
@@ -194,9 +204,10 @@ resolve_devnet_env() {
     fi
 }
 
-# mining_preflight - validate MINING_ADDRESS/MINING_THREADS and remind the operator
-# to start an external miner. Called when Toccata is scheduled, because the KIP-21
-# rehearsal cannot reach the activation DAA score without mined blocks.
+# mining_preflight - validate MINING_ADDRESS/MINING_THREADS/MINING_MIN_BLOCK_INTERVAL_MS
+# and remind the operator to start an external miner. Called when Toccata is
+# scheduled, because the KIP-21 rehearsal cannot reach the activation DAA score
+# without mined blocks.
 mining_preflight() {
     local errors=()
 
@@ -204,6 +215,8 @@ mining_preflight() {
         errors+=("MINING_ADDRESS must be a devnet address (kaspadev:...) (got: '${MINING_ADDRESS:-<unset>}')")
     is_positive_int "${MINING_THREADS:-}" || \
         errors+=("MINING_THREADS must be a positive integer (got: '${MINING_THREADS:-<unset>}')")
+    is_uint "${MINING_MIN_BLOCK_INTERVAL_MS:-150}" || \
+        errors+=("MINING_MIN_BLOCK_INTERVAL_MS must be a non-negative integer in ms (0 disables) (got: '${MINING_MIN_BLOCK_INTERVAL_MS:-<unset>}')")
 
     if (( ${#errors[@]} > 0 )); then
         echo "Mining preflight failed (required for the Toccata/KIP-21 rehearsal):" >&2
