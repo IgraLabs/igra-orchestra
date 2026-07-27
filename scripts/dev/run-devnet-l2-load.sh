@@ -18,7 +18,13 @@ FINALITY_OVERRIDE="${FINALITY_PERIOD_SECONDS:-}"
 LAUNCH_DAA_OVERRIDE="${IGRA_LAUNCH_DAA_SCORE:-}"
 
 set -a; [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; set +a
+[ "${NETWORK:-}" = "devnet" ] || {
+    echo "refusing to run: .env has NETWORK='${NETWORK:-<unset>}', expected 'devnet'" >&2
+    exit 2
+}
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-igra-devnet}"
 RPC_PORT="${RPC_PORT:-8555}"
+EL_RPC_HOST_PORT="${EL_RPC_HOST_PORT:-9545}"
 FINALITY_PERIOD_SECONDS="${FINALITY_OVERRIDE:-60}"
 L2_ALIVE_TIMEOUT_SECS="${L2_ALIVE_TIMEOUT_SECS:-900}"
 IGRA_LAUNCH_DAA_SCORE="${LAUNCH_DAA_OVERRIDE:-10}"
@@ -35,17 +41,23 @@ log(){ echo "[l2-load] $*"; }
 for t in docker jq cast websocat; do command -v "$t" >/dev/null || { echo "missing tool: $t" >&2; exit 2; }; done
 [ -d "$IGRA_E2E_DIR" ] || { echo "IGRA_E2E_DIR not found: $IGRA_E2E_DIR" >&2; exit 2; }
 
-mkdir -p "$RUN_DIR"
+(umask 077 && mkdir -p "$RUN_DIR")
 
 export IGRA_LAUNCH_DAA_SCORE FINALITY_PERIOD_SECONDS
 
 # --- 0b. reconcile GENESIS_BLOCK_HASH with the EL this config builds ---------
+mkdir -p "$ROOT_DIR/data/reth" "$ROOT_DIR/data/reth-ipc" \
+         "$ROOT_DIR/network-params" "$ROOT_DIR/keys"
+[ -f "$ROOT_DIR/keys/jwt.hex" ] || {
+    (umask 077 && openssl rand -hex 32 > "$ROOT_DIR/keys/jwt.hex")
+}
 log "probing the EL genesis hash for IGRA_LAUNCH_DAA_SCORE=$IGRA_LAUNCH_DAA_SCORE"
+trap 'COMPOSE_PROFILES=backend docker compose -f docker-compose.devnet.yml down >/dev/null 2>&1 || true' EXIT INT TERM
 COMPOSE_PROFILES=backend docker compose -f docker-compose.devnet.yml up -d execution-layer \
     > "$RUN_DIR/genesis-probe.log" 2>&1
 GENESIS_BLOCK_HASH=""
 for _ in $(seq 1 60); do
-    GENESIS_BLOCK_HASH="$(curl -s http://127.0.0.1:9545 -H 'content-type: application/json' \
+    GENESIS_BLOCK_HASH="$(curl -s "http://127.0.0.1:${EL_RPC_HOST_PORT}" -H 'content-type: application/json' \
         --data '{"jsonrpc":"2.0","id":1,"method":"eth_getBlockByNumber","params":["0x0",false]}' \
         | jq -r '.result.hash // empty' 2>/dev/null || true)"
     [ -n "$GENESIS_BLOCK_HASH" ] && break
@@ -53,6 +65,7 @@ for _ in $(seq 1 60); do
 done
 COMPOSE_PROFILES=backend docker compose -f docker-compose.devnet.yml down \
     >> "$RUN_DIR/genesis-probe.log" 2>&1
+trap - EXIT INT TERM
 case "$GENESIS_BLOCK_HASH" in
     0x*) ;;
     *) echo "could not probe the EL genesis hash (see $RUN_DIR/genesis-probe.log)" >&2; exit 8 ;;
@@ -67,14 +80,13 @@ printf '%s' "$SETUP_ANSWERS" \
     | IGRA_ENABLE=true RPC_READ_ONLY=false IGRA_SKIP_LOCK_SCRIPT_CHECK=true \
       FINALITY_PERIOD_SECONDS="$FINALITY_PERIOD_SECONDS" "$ROOT_DIR/scripts/setup-devnet.sh"
 
-setup_pw="$(awk -F= '$1 == "W0_KASWALLET_PASSWORD" { print $2; exit }' "$ROOT_DIR/.env" 2>/dev/null || true)"
-[ -z "$setup_pw" ] || {
-    echo "setup prompt answers desynced: W0_KASWALLET_PASSWORD is non-empty" >&2
+grep -q '^W0_KASWALLET_PASSWORD=$' "$ROOT_DIR/.env" || {
+    echo "setup prompt answers desynced: W0_KASWALLET_PASSWORD missing or non-empty" >&2
     exit 4
 }
 
 # --- 2. start the throttled miner -------------------------------------------
-resolve_kaswallet_container() { docker ps --format '{{.Names}}' | grep -m1 kaswallet-0 || true; }
+resolve_kaswallet_container() { docker ps --format '{{.Names}}' | grep -m1 -x kaswallet-0-devnet || true; }
 
 log "resolving kaswallet-0's mining address"
 MINING_ADDRESS=""
@@ -97,12 +109,23 @@ log "mining to kaswallet-0's address $MINING_ADDRESS"
 log "starting throttled CPU miner in background"
 "$SCRIPT_DIR/run-devnet-cpuminer.sh" > "$RUN_DIR/miner.log" 2>&1 &
 MINER_PID=$!
-trap 'kill "$MINER_PID" 2>/dev/null || true' EXIT
+trap 'kill "$MINER_PID" 2>/dev/null || true' EXIT INT TERM
+sleep 6
+kill -0 "$MINER_PID" 2>/dev/null || {
+    tail -n 20 "$RUN_DIR/miner.log" >&2
+    echo "miner exited early; see $RUN_DIR/miner.log" >&2
+    exit 6
+}
 
 # --- 3. wait for kaswallet-0 to hold matured, spendable KAS -----------------
 log "waiting for kaswallet-0 to accumulate spendable balance (coinbase maturity)"
 funded=false
 for _ in $(seq 1 120); do
+    kill -0 "$MINER_PID" 2>/dev/null || {
+        tail -n 20 "$RUN_DIR/miner.log" >&2
+        echo "miner died during funding wait; see $RUN_DIR/miner.log" >&2
+        exit 6
+    }
     kaswallet_container="$(resolve_kaswallet_container)"
     if [ -n "$kaswallet_container" ]; then
         bal="$(docker exec "$kaswallet_container" /app/kaswallet-cli address-balances 2>/dev/null \
@@ -140,14 +163,17 @@ done
 }
 
 # --- 4. generate an L2 keypair ----------------------------------------------
-cast wallet new --json > "$RUN_DIR/l2-key.json"
+(umask 077 && cast wallet new --json > "$RUN_DIR/l2-key.json")
 L2_ADDRESS="$(jq -r '.[0].address' "$RUN_DIR/l2-key.json")"
 FUNDED_PRIVATE_KEY="$(jq -r '.[0].private_key' "$RUN_DIR/l2-key.json")"
 log "generated L2 account $L2_ADDRESS"
 
 # --- 5. L1->L2 Entry deposit ------------------------------------------------
 log "depositing $DEPOSIT_KAS KAS -> iKAS to $L2_ADDRESS"
-docker exec "$(docker ps --format '{{.Names}}' | grep -m1 rpc-provider-0)" \
+rpc_provider="rpc-provider-0-devnet"
+docker ps --format '{{.Names}}' | grep -qx "$rpc_provider" \
+    || { echo "devnet container $rpc_provider not running; cannot send the Entry deposit" >&2; exit 5; }
+docker exec "$rpc_provider" \
     /app/entry_transaction_sender \
     --recipient "$W0_WALLET_TO_ADDRESS" \
     --amount "$DEPOSIT_KAS" \
@@ -170,18 +196,17 @@ cargo build --release --manifest-path "$IGRA_E2E_DIR/Cargo.toml" -p loadgen
 LOADGEN_BIN="$IGRA_E2E_DIR/target/release/loadgen"
 log "running loadgen: rate=$LOADGEN_RATE conc=$LOADGEN_CONCURRENCY dur=${LOADGEN_DURATION}s"
 mkdir -p "$RUN_DIR/loadgen"
+loadgen_rc=0
 FUNDED_PRIVATE_KEY="$FUNDED_PRIVATE_KEY" "$LOADGEN_BIN" \
     --rpc-url "http://127.0.0.1:${RPC_PORT}" \
     --rate "$LOADGEN_RATE" \
     --concurrency "$LOADGEN_CONCURRENCY" \
     --duration "$LOADGEN_DURATION" \
-    --run-dir "$RUN_DIR/loadgen" | tee "$RUN_DIR/loadgen.log"
-loadgen_rc="${PIPESTATUS[0]}"
+    --run-dir "$RUN_DIR/loadgen" | tee "$RUN_DIR/loadgen.log" || loadgen_rc=$?
 [ "$loadgen_rc" -eq 0 ] || {
     echo "loadgen exited $loadgen_rc; see $RUN_DIR/loadgen.log" >&2
     exit 9
 }
 
-# --- 8. hand off state to the validator -------------------------------------
-{ echo "RUN_DIR=$RUN_DIR"; echo "L2_ADDRESS=$L2_ADDRESS"; echo "FUNDED_PRIVATE_KEY=$FUNDED_PRIVATE_KEY"; } > "$RUN_DIR/env"
-log "load run complete. Validate with: RUN_DIR=$RUN_DIR $SCRIPT_DIR/validate-devnet-l2-lane.sh"
+# --- 8. done -----------------------------------------------------------------
+log "load run complete. Validate with: $SCRIPT_DIR/validate-devnet-l2-lane.sh"

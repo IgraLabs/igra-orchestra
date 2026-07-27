@@ -116,6 +116,8 @@ is_positive_int "$MINING_THREADS" || \
     die "MINING_THREADS must be a positive integer (got: '${MINING_THREADS:-<unset>}')"
 is_port "$KASPAD_GRPC_PORT" || \
     die "KASPAD_GRPC_PORT must be an integer in 1-65535 (got: '${KASPAD_GRPC_PORT:-<unset>}')"
+is_uint "$MINING_MIN_BLOCK_INTERVAL_MS" || \
+    die "MINING_MIN_BLOCK_INTERVAL_MS must be a non-negative integer in ms, 0 disables (got: '${MINING_MIN_BLOCK_INTERVAL_MS:-<unset>}')"
 
 # --- clone + build (unless SKIP_BUILD reuses an existing binary) ---
 build_miner() {
@@ -197,11 +199,13 @@ fi
 args=(-a "$MINING_ADDRESS" -s "$KASPAD_RPC_HOST" -p "$KASPAD_GRPC_PORT" -t "$MINING_THREADS")
 [ "$MINE_WHEN_NOT_SYNCED" = "true" ] && args+=(--mine-when-not-synced)
 # Throttle block production to stay under viaduct's per-window cap; 0 disables.
-case "$MINING_MIN_BLOCK_INTERVAL_MS" in
-    ''|*[!0-9]*) ;;                                   # non-numeric/empty: skip
-    0) ;;                                             # 0: disabled
-    *) args+=(--min-block-interval-ms "$MINING_MIN_BLOCK_INTERVAL_MS") ;;
-esac
+if [ "$MINING_MIN_BLOCK_INTERVAL_MS" -gt 0 ]; then
+    if "$BIN" --help 2>&1 | grep -q -- '--min-block-interval-ms'; then
+        args+=(--min-block-interval-ms "$MINING_MIN_BLOCK_INTERVAL_MS")
+    else
+        warn "$BIN predates the min-block-interval patch; running WITHOUT the rate cap. Rebuild (unset SKIP_BUILD) to apply it."
+    fi
+fi
 
 log "Starting cpuminer -> $KASPAD_RPC_HOST:$KASPAD_GRPC_PORT (address ${MINING_ADDRESS}, ${MINING_THREADS} threads)"
 log "Press Ctrl+C to stop."

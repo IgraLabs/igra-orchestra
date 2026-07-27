@@ -85,6 +85,8 @@ validate_devnet_env() {
         errors+=("MINING_ADDRESS must be a devnet address (kaspadev:...) (got: '${MINING_ADDRESS:-<unset>}')")
     is_positive_int "${MINING_THREADS:-}" || \
         errors+=("MINING_THREADS must be a positive integer (got: '${MINING_THREADS:-<unset>}')")
+    is_uint "${MINING_MIN_BLOCK_INTERVAL_MS:-150}" || \
+        errors+=("MINING_MIN_BLOCK_INTERVAL_MS must be a non-negative integer in ms (0 disables) (got: '${MINING_MIN_BLOCK_INTERVAL_MS:-<unset>}')")
 
     # Lock script pubkey (entry) hex when present
     if [ -n "${IGRA_LOCK_SCRIPT_PUBKEY:-}" ]; then
@@ -171,22 +173,15 @@ resolve_devnet_env() {
     fi
     export DEVNET_ENV_SOURCE="$source_path"
 
-    # Capture shell-provided tunables (set, even if empty) so the file cannot
-    # clobber a command-line override.
-    # Every tunable a caller may legitimately override on the command line must be
-    # listed here: `set -a; source` below overwrites the whole environment, so a
-    # variable missing from this list silently loses to the file even though
-    # docker compose would otherwise honour the shell value. That silent loss is
-    # how a harness can end up running with a genesis hash and launch DAA it never
-    # asked for (kaspad then halts on "Genesis hash mismatch", or the L2 collector
-    # panics on the genesis window).
+    # Snapshot every shell-set variable that the env source or versions file also
+    # assigns, so a command-line override always wins with no hand-maintained list
+    # to fall out of date (a `set -a; source` below would otherwise let the file
+    # clobber a shell value docker compose is meant to honour).
     local k saved=()
-    for k in FINALITY_PERIOD_SECONDS TOCCATA_ACTIVATION_DAA_SCORE IGRA_LANE_ID \
-             IGRA_ENABLE ATAN_ENABLE RPC_READ_ONLY IGRA_SKIP_LOCK_SCRIPT_CHECK \
-             IGRA_LAUNCH_DAA_SCORE L1_REFERENCE_DAA_SCORE L1_REFERENCE_TIMESTAMP \
-             GENESIS_BLOCK_HASH MINING_ADDRESS MINING_MIN_BLOCK_INTERVAL_MS; do
+    while IFS= read -r k; do
         [ -n "${!k+x}" ] && saved+=("$k=${!k}")
-    done
+    done < <(sed -nE 's/^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=.*/\2/p' \
+        "$source_path" "$project_dir/$versions_file" 2>/dev/null | sort -u)
 
     set -a
     # shellcheck source=/dev/null

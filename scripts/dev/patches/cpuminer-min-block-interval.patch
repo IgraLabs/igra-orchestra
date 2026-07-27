@@ -57,25 +57,26 @@ index 09e0176..070c9cf 100644
          Arc,
      },
 -    time::Duration,
-+    time::{Duration, SystemTime, UNIX_EPOCH},
++    time::{Duration, Instant},
  };
  use tokio::{
      sync::mpsc::Sender,
-@@ -47,14 +47,38 @@ pub fn get_num_cpus(n_cpus: Option<u16>) -> u16 {
+@@ -47,14 +47,40 @@ pub fn get_num_cpus(n_cpus: Option<u16>) -> u16 {
  
  const LOG_RATE: Duration = Duration::from_secs(10);
  
 +/// Global, cross-thread submission gate. Returns `true` and atomically claims
-+/// the slot (storing `now_ms`) iff at least `interval_ms` has elapsed since the
-+/// last claimed submission; otherwise returns `false` without mutating. A CAS
-+/// loop guarantees at most one thread wins the slot per interval.
++/// the monotonic `now_ms` slot iff at least `interval_ms` elapsed since the last
++/// claim; else `false` without mutating. Seed 0 = never-submitted (always wins);
++/// a claim never stores 0 so the seed cannot recur. CAS keeps one winner per slot.
 +fn try_claim_submit_slot(last_submit_ms: &AtomicU64, now_ms: u64, interval_ms: u64) -> bool {
 +    loop {
 +        let prev = last_submit_ms.load(Ordering::Relaxed);
-+        if now_ms.saturating_sub(prev) < interval_ms {
++        if prev != 0 && now_ms.saturating_sub(prev) < interval_ms {
 +            return false;
 +        }
-+        match last_submit_ms.compare_exchange_weak(prev, now_ms, Ordering::SeqCst, Ordering::Relaxed) {
++        let claim = now_ms.max(1);
++        match last_submit_ms.compare_exchange_weak(prev, claim, Ordering::SeqCst, Ordering::Relaxed) {
 +            Ok(_) => return true,
 +            Err(_) => continue,
 +        }
@@ -83,8 +84,9 @@ index 09e0176..070c9cf 100644
 +}
 +
 +#[inline]
-+fn now_epoch_ms() -> u64 {
-+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
++fn now_monotonic_ms() -> u64 {
++    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
++    START.get_or_init(Instant::now).elapsed().as_millis() as u64
 +}
 +
  impl MinerManager {
@@ -100,7 +102,7 @@ index 09e0176..070c9cf 100644
          let watch = WatchSwap::empty();
          let handles = Self::launch_cpu_threads(
              send_channel.clone(),
-@@ -63,6 +87,8 @@ impl MinerManager {
+@@ -63,6 +89,8 @@ impl MinerManager {
              shutdown,
              n_cpus,
              throttle,
@@ -109,7 +111,7 @@ index 09e0176..070c9cf 100644
          )
          .collect();
  
-@@ -84,6 +110,8 @@ impl MinerManager {
+@@ -84,6 +112,8 @@ impl MinerManager {
          shutdown: ShutdownHandler,
          n_cpus: Option<u16>,
          throttle: Option<Duration>,
@@ -118,7 +120,7 @@ index 09e0176..070c9cf 100644
      ) -> impl Iterator<Item = MinerHandler> {
          let n_cpus = get_num_cpus(n_cpus);
          info!("Launching: {} cpu miners", n_cpus);
-@@ -93,6 +121,8 @@ impl MinerManager {
+@@ -93,6 +123,8 @@ impl MinerManager {
                  work_channel.clone(),
                  hashes_tried.clone(),
                  throttle,
@@ -127,7 +129,7 @@ index 09e0176..070c9cf 100644
                  shutdown.clone(),
              )
          })
-@@ -122,6 +152,8 @@ impl MinerManager {
+@@ -122,6 +154,8 @@ impl MinerManager {
          mut block_channel: WatchSwap<pow::State>,
          hashes_tried: Arc<AtomicU64>,
          throttle: Option<Duration>,
@@ -136,13 +138,13 @@ index 09e0176..070c9cf 100644
          shutdown: ShutdownHandler,
      ) -> MinerHandler {
          // We mark it cold as the function is not called often, and it's not in the hot path
-@@ -146,7 +178,14 @@ impl MinerManager {
+@@ -146,7 +180,14 @@ impl MinerManager {
                  state_ref.nonce = nonce.0;
  
                  if let Some(block) = state_ref.generate_block_if_pow() {
 -                    found_block(&send_channel, block)?;
 +                    let allowed = if min_block_interval_ms > 0 {
-+                        try_claim_submit_slot(&last_submit_ms, now_epoch_ms(), min_block_interval_ms)
++                        try_claim_submit_slot(&last_submit_ms, now_monotonic_ms(), min_block_interval_ms)
 +                    } else {
 +                        true
 +                    };
@@ -152,7 +154,7 @@ index 09e0176..070c9cf 100644
                  }
                  nonce += Wrapping(1);
  
-@@ -241,3 +280,26 @@ mod benches {
+@@ -241,3 +282,34 @@ mod benches {
          });
      }
  }
@@ -177,5 +179,13 @@ index 09e0176..070c9cf 100644
 +    fn exactly_at_interval_boundary_allowed() {
 +        let last = AtomicU64::new(1000);
 +        assert!(try_claim_submit_slot(&last, 1150, 150), "elapsed == interval allowed");
++    }
++
++    #[test]
++    fn seed_never_recurs_and_first_block_always_wins() {
++        let last = AtomicU64::new(0);
++        assert!(try_claim_submit_slot(&last, 10, 150), "first block wins even below interval from start");
++        assert_ne!(last.load(Ordering::Relaxed), 0, "claim must not restore the never-submitted seed");
++        assert!(!try_claim_submit_slot(&last, 20, 150), "second block within interval is gated");
 +    }
 +}

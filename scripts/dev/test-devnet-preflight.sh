@@ -101,6 +101,8 @@ no "validate: lane uppercase"       bash -c "$(declare -f good_env validate_devn
 no "validate: lane all-zero"        bash -c "$(declare -f good_env validate_devnet_env is_uint is_positive_int is_hex is_hex_even is_port is_valid_mining_address); good_env; IGRA_LANE_ID=00000000; validate_devnet_env"
 no "validate: kaswallet port clash" bash -c "$(declare -f good_env validate_devnet_env is_uint is_positive_int is_hex is_hex_even is_port is_valid_mining_address); good_env; KASWALLET_HOST_PORT=8555; validate_devnet_env"
 no "validate: zero-padded launch"   bash -c "$(declare -f good_env validate_devnet_env is_uint is_positive_int is_hex is_hex_even is_port is_valid_mining_address); good_env; IGRA_LAUNCH_DAA_SCORE=08; validate_devnet_env"
+no "validate: bad min-block-interval" bash -c "$(declare -f good_env validate_devnet_env is_uint is_positive_int is_hex is_hex_even is_port is_valid_mining_address); good_env; MINING_MIN_BLOCK_INTERVAL_MS=-5; validate_devnet_env"
+ok "validate: min-block-interval 0"  bash -c "$(declare -f good_env validate_devnet_env is_uint is_positive_int is_hex is_hex_even is_port is_valid_mining_address); good_env; MINING_MIN_BLOCK_INTERVAL_MS=0; validate_devnet_env"
 
 # --- resolve_devnet_env ---
 RESOLVE_TMP="$(mktemp -d)"
@@ -110,6 +112,10 @@ NETWORK=devnet
 FINALITY_PERIOD_SECONDS=600
 RPC_PORT=8555
 IGRA_LANE_ID=97b10000
+GENESIS_BLOCK_HASH=0x1111111111111111111111111111111111111111111111111111111111111111
+IGRA_LAUNCH_DAA_SCORE=0
+RPC_READ_ONLY=true
+MINING_THREADS=1
 ENVEOF
 cat > "$RESOLVE_TMP/versions.devnet.env" <<'ENVEOF'
 KASPAD_VERSION=devnet
@@ -120,6 +126,10 @@ ok "resolve: shell override wins"         bash -c "$(declare -f resolve_devnet_e
 # A set-but-empty shell override must win over the file value (opt-out contract).
 ok "resolve: empty shell override wins"   bash -c "$(declare -f resolve_devnet_env); IGRA_LANE_ID= resolve_devnet_env '$RESOLVE_TMP' .env.devnet.example versions.devnet.env; [ -z \"\$IGRA_LANE_ID\" ]"
 ok "resolve: unset falls to file value"   bash -c "$(declare -f resolve_devnet_env); resolve_devnet_env '$RESOLVE_TMP' .env.devnet.example versions.devnet.env; [ \"\$IGRA_LANE_ID\" = 97b10000 ]"
+ok "resolve: GENESIS_BLOCK_HASH override wins" bash -c "$(declare -f resolve_devnet_env); GENESIS_BLOCK_HASH=0xdeadbeef resolve_devnet_env '$RESOLVE_TMP' .env.devnet.example versions.devnet.env; [ \"\$GENESIS_BLOCK_HASH\" = 0xdeadbeef ]"
+ok "resolve: IGRA_LAUNCH_DAA_SCORE override wins" bash -c "$(declare -f resolve_devnet_env); IGRA_LAUNCH_DAA_SCORE=42 resolve_devnet_env '$RESOLVE_TMP' .env.devnet.example versions.devnet.env; [ \"\$IGRA_LAUNCH_DAA_SCORE\" = 42 ]"
+ok "resolve: RPC_READ_ONLY override wins"  bash -c "$(declare -f resolve_devnet_env); RPC_READ_ONLY=false resolve_devnet_env '$RESOLVE_TMP' .env.devnet.example versions.devnet.env; [ \"\$RPC_READ_ONLY\" = false ]"
+ok "resolve: MINING_THREADS override wins" bash -c "$(declare -f resolve_devnet_env); MINING_THREADS=8 resolve_devnet_env '$RESOLVE_TMP' .env.devnet.example versions.devnet.env; [ \"\$MINING_THREADS\" = 8 ]"
 no "resolve: missing source fails"        bash -c "$(declare -f resolve_devnet_env); resolve_devnet_env '$RESOLVE_TMP' .nope.example versions.devnet.env"
 rm -rf "$RESOLVE_TMP"
 

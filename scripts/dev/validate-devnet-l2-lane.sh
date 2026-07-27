@@ -2,7 +2,7 @@
 # PASS/FAIL validator for the devnet L2 + lane-id run.
 #   1) stability : no viaduct panic / TooManyBlocks; containers healthy
 #   2) lane-id   : every non-native, non-coinbase L1 tx == configured lane
-#   3) Toccata   : lane txs present both below and at/above the activation DAA
+#   3) Toccata   : lane txs present at/above the activation DAA (below is a note)
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 set -a; [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; set +a
@@ -25,13 +25,16 @@ wrpc_call(){
 
 # ---- 1. stability ----------------------------------------------------------
 echo "== stability =="
-kaspad_name="$(docker ps --format '{{.Names}}' | grep -m1 kaspad || true)"
-[ -n "$kaspad_name" ] || fail "no running kaspad container found (docker ps | grep kaspad)"
-raw_logs="$(docker logs "$kaspad_name" 2>&1)" || fail "docker logs $kaspad_name failed; cannot verify absence of panics"
-logs="$(printf '%s' "$raw_logs" | tail -n 5000)"
-echo "$logs" | grep -qiE 'TooManyBlocks|Viaduct Collector error|panicked' && fail "viaduct panic / TooManyBlocks in kaspad logs"
-containers="$(docker ps --format '{{.Names}}' | grep -E 'kaspad|execution-layer|rpc-provider|kaswallet' || true)"
-[ -n "$containers" ] || fail "no kaspad/execution-layer/rpc-provider/kaswallet containers found; is the stack up?"
+kaspad_name="$(docker ps --format '{{.Names}}' | grep -m1 -x kaspad-devnet || true)"
+[ -n "$kaspad_name" ] || fail "no running kaspad-devnet container found; is the devnet stack up?"
+LOG_SCAN_LINES="${LOG_SCAN_LINES:-5000}"
+logs="$(docker logs --tail "$LOG_SCAN_LINES" "$kaspad_name" 2>&1)" \
+    || fail "docker logs $kaspad_name failed; cannot verify absence of panics"
+if grep -qiE 'TooManyBlocks|Viaduct Collector error|panicked' <<<"$logs"; then
+    fail "viaduct panic / TooManyBlocks in kaspad logs"
+fi
+containers="$(docker ps --format '{{.Names}}' | grep -E '^(kaspad|execution-layer|rpc-provider-[0-9]+|kaswallet-[0-9]+)-devnet$' || true)"
+[ -n "$containers" ] || fail "no devnet (*-devnet) containers found; is the devnet stack up?"
 while IFS= read -r c; do
     [ -n "$c" ] || continue
     status="$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null || echo missing)"
@@ -65,7 +68,8 @@ BLOCKS_JSON="$(printf '%s\n' "${block_jsons[@]}" | jq -cs '{"params":{"blocks":.
 
 # ---- 2. lane-id ------------------------------------------------------------
 echo "== lane-id =="
-mapfile -t SUBS < <(echo "$BLOCKS_JSON" | jq -r '.params.blocks[]?.transactions[]?.subnetworkId // empty' 2>/dev/null || true)
+SUBS=()
+while IFS= read -r s; do [ -n "$s" ] && SUBS+=("$s"); done < <(printf '%s' "$BLOCKS_JSON" | jq -r '.params.blocks[]?.transactions[]?.subnetworkId // empty' 2>/dev/null || true)
 [ "${#SUBS[@]}" -gt 0 ] || fail "no transactions found in recent blocks via getBlocks; is loadgen exercising the lane?"
 lane_seen=0
 for s in "${SUBS[@]}"; do
@@ -83,6 +87,7 @@ echo "  ok: $lane_seen ingress txs, all on lane $LANE_HEX"
 echo "== Toccata =="
 if [ -z "$TOCCATA_ACTIVATION_DAA_SCORE" ]; then
     echo "  skip: TOCCATA_ACTIVATION_DAA_SCORE unset"
+    toccata_result="Toccata check skipped (TOCCATA_ACTIVATION_DAA_SCORE unset)"
 else
     vdaa="$(wrpc_call getBlockDagInfo '{}' | jq -r '.params.virtualDaaScore // empty' 2>/dev/null || true)"
     [ -n "$vdaa" ] || fail "could not fetch virtual DAA score via wRPC"
@@ -94,6 +99,7 @@ else
     echo "  lane txs below Toccata: $below ; at/above: $aboveq (virtual DAA $vdaa)"
     [ "${aboveq:-0}" -ge 1 ] || fail "no lane txs at/above Toccata activation DAA"
     [ "${below:-0}" -ge 1 ] || echo "  note: no lane txs below activation in fetched window (run started post-activation?)"
+    toccata_result="Toccata crossed"
 fi
 
-echo "PASS: L2 stable under load, lane-id correct, Toccata crossed"
+echo "PASS: L2 stable under load, lane-id correct, $toccata_result"
