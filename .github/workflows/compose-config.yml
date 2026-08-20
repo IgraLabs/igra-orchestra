@@ -5,6 +5,7 @@ on:
     paths:
       - 'docker-compose.yml'
       - 'docker-compose.atan.yml'
+      - 'docker-compose.readonly-rpc.yml'
       - '.env.example'
       - '.env.*.example'
       - 'versions.*.env'
@@ -158,6 +159,297 @@ jobs:
           if "TX_ID_PREFIX must be set" not in kaspad_entrypoint:
               print("docker-compose.atan.yml kaspad is missing the TX_ID_PREFIX fail-fast guard", file=sys.stderr)
               sys.exit(1)
+          PY
+
+  readonly-rpc-config:
+    name: docker compose config (readonly-rpc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Render .env from the readonly-rpc example
+        run: |
+          set -e
+          cp .env.readonly-rpc.example .env
+          # The two release-gated image tags ship as TODO placeholders because
+          # no published tag carries the required capabilities yet. Substitute
+          # syntactic stand-ins so `config` exercises everything else; the real
+          # gate is the runbook's bring-up check, not this render.
+          sed -i 's/^READONLY_RPC_RETH_VERSION=.*/READONLY_RPC_RETH_VERSION=ci-placeholder/' .env
+          sed -i 's/^READONLY_RPC_PROXY_VERSION=.*/READONLY_RPC_PROXY_VERSION=ci-placeholder/' .env
+      - name: Assert every image is a placeholder or digest-pinned, never a bare tag
+        run: |
+          set -e
+          # A standing invariant, not a temporary scaffold. The obvious form of
+          # this check — "the gated tags must still be TODO placeholders" —
+          # deletes itself at exactly the moment the real risk appears: the PR
+          # that pins real tags removes the assertion, and the digest-pinning
+          # requirement survives only as prose, where it gets missed.
+          #
+          # So assert the property that holds in BOTH states. A bare tag is
+          # mutable: the same string can resolve to different bytes tomorrow,
+          # on a host that is deliberately co-located with something sensitive.
+          # Nothing downstream would catch it either — the host-side verifier
+          # inspects `.Image`, which is the image ID rather than
+          # `.Config.Image` or `RepoDigests`, so a bare tag passes its
+          # digest check.
+          fail=0
+          for var in READONLY_RPC_KASPAD_VERSION READONLY_RPC_RETH_VERSION READONLY_RPC_PROXY_VERSION; do
+            value="$(grep "^${var}=" .env.readonly-rpc.example | cut -d= -f2-)"
+            if [ -z "$value" ]; then
+              echo "FAIL: ${var} is missing from .env.readonly-rpc.example" >&2
+              fail=1
+            elif printf '%s' "$value" | grep -qE '^TODO_[A-Z0-9_]+_REPLACE_ME$'; then
+              echo "ok: ${var} is an unresolved placeholder"
+            elif printf '%s' "$value" | grep -qE '@sha256:[0-9a-f]{64}$'; then
+              echo "ok: ${var} is digest-pinned"
+            else
+              echo "FAIL: ${var}='${value}' is a bare tag." >&2
+              echo "      Pin it as <tag>@sha256:<64-hex>, or leave the TODO placeholder." >&2
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ]
+      - name: Render docker-compose.readonly-rpc config
+        run: docker compose -f docker-compose.readonly-rpc.yml config -q
+      - name: Assert every required variable fails the render when absent
+        run: |
+          set -e
+          # Each of these is required because omitting it degrades silently at
+          # runtime rather than failing: an unset prune distance runs archive
+          # mode, an unset data root writes to an unprovisioned path, an unset
+          # image tag resolves to a capability-less image.
+          # Chain-identity variables are in this list for the same reason as the
+          # storage and image ones: an empty value does not stop the stack, it
+          # points it at a different chain, and the consumer then acts on
+          # state that is not Igra. GENESIS_BLOCK_HASH is the sharpest case
+          # — kaspad is its only consumer, so unlike the reth-side parameters
+          # nothing downstream fail-fasts on it.
+          for var in \
+            NETWORK \
+            IGRA_LANE_ID \
+            TX_ID_PREFIX \
+            IGRA_CHAIN_ID \
+            GENESIS_BLOCK_HASH \
+            L1_REFERENCE_TIMESTAMP \
+            L1_REFERENCE_DAA_SCORE \
+            IGRA_LAUNCH_DAA_SCORE \
+            EL_ONE_TIME_ADDRESS \
+            MIN_PROTOCOL_FEE_PER_GAS_GWEI \
+            IGRA_ENTRY_MIN_AMOUNT \
+            BITCOIN_BLOCK_HASH \
+            ETHEREUM_BLOCK_HASH \
+            KASPA_BLOCK_HASH \
+            IGRA_LOCK_SCRIPT_PUBKEY \
+            IGRA_RETH_PRUNE_DISTANCE_BLOCKS \
+            KASPAD_RETENTION_PERIOD_DAYS \
+            IGRA_DATA_ROOT \
+            IGRA_JWT_PATH \
+            READONLY_RPC_KASPAD_VERSION \
+            READONLY_RPC_RETH_VERSION \
+            READONLY_RPC_PROXY_VERSION
+          do
+            grep -v "^${var}=" .env > "/tmp/no-${var}.env"
+            err=$(docker compose --env-file "/tmp/no-${var}.env" -f docker-compose.readonly-rpc.yml config -q 2>&1 || true)
+            if printf '%s' "$err" | grep -qF "${var} must be set"; then
+              echo "ok: readonly-rpc render rejected empty ${var}"
+            else
+              printf 'FAIL: readonly-rpc render did not reject empty %s; got:\n%s\n' "$var" "$err" >&2
+              exit 1
+            fi
+          done
+      - name: Assert the resolved topology is read-only and unpublished
+        run: |
+          docker compose -f docker-compose.readonly-rpc.yml config --format json > compose-readonly-rpc.json
+          python3 - <<'PY'
+          import json
+          import sys
+          from pathlib import PurePosixPath
+
+          with open("compose-readonly-rpc.json", encoding="utf-8") as fh:
+              config = json.load(fh)
+
+          services = config["services"]
+          networks = config.get("networks", {})
+          failures = []
+
+          # Exactly three services. The twenty rpc-provider/kaswallet worker
+          # pairs, traefik, wallet-balance-api and atan-uploader must never
+          # reach a signer host.
+          expected = ["execution-layer", "kaspad", "rpc-proxy"]
+          if sorted(services) != expected:
+              failures.append(f"expected services {expected}, got {sorted(services)}")
+
+          for name, service in services.items():
+              # No host publishes anywhere. On a signer host, a published RPC
+              # port is a write-capable endpoint on the host network.
+              if service.get("ports"):
+                  failures.append(f"{name} publishes host ports: {service['ports']}")
+              if service.get("expose"):
+                  failures.append(f"{name} declares expose: {service['expose']}")
+
+              # journald is the only route to container output for the
+              # unprivileged host operator, and the json-file rotation options
+              # the shared anchor carries are invalid for it.
+              logging = service.get("logging") or {}
+              if logging.get("driver") != "journald":
+                  failures.append(f"{name} logging driver is {logging.get('driver')!r}, expected 'journald'")
+              options = sorted((logging.get("options") or {}))
+              if options != ["tag"]:
+                  failures.append(f"{name} logging options are {options}, expected ['tag']")
+
+              # Aggregate limits are enforced by a host systemd slice; the
+              # containers must actually be placed under it.
+              if service.get("cgroup_parent") != "igra-rpc.slice":
+                  failures.append(f"{name} cgroup_parent is {service.get('cgroup_parent')!r}")
+
+              # There is no traefik in this stack; a router label would imply
+              # a route that does not exist.
+              traefik = [k for k in (service.get("labels") or {}) if k.startswith("traefik.")]
+              if traefik:
+                  failures.append(f"{name} carries traefik labels: {traefik}")
+
+          # The consumer's network must be internal, and only the read-only
+          # proxy may sit on it. If kaspad or the raw execution layer joined
+          # it, the consumer could reach an all-namespace write-capable RPC
+          # directly and proxy failure would stop being fail-closed.
+          consumer_net = networks.get("readonly-rpc") or {}
+          if not consumer_net.get("internal"):
+              failures.append("readonly-rpc network is not internal")
+          if consumer_net.get("name") != "igra-readonly-rpc":
+              failures.append(f"readonly-rpc network name is {consumer_net.get('name')!r}")
+
+          for name in ("kaspad", "execution-layer"):
+              if "readonly-rpc" in (services[name].get("networks") or {}):
+                  failures.append(f"{name} is attached to the readonly-rpc network")
+
+          proxy_nets = services["rpc-proxy"].get("networks") or {}
+          if "readonly-rpc" not in proxy_nets:
+              failures.append("rpc-proxy is not attached to the readonly-rpc network")
+          else:
+              aliases = (proxy_nets["readonly-rpc"] or {}).get("aliases") or []
+              if "igra-local-rpc" not in aliases:
+                  failures.append(f"rpc-proxy lacks the igra-local-rpc alias; got {aliases}")
+
+          # The whole write-path guard. These must be literals in the compose
+          # file, not interpolations: the image defaults read-only to false, so
+          # an env-file mistake would otherwise turn the consumer's only
+          # endpoint into a write path.
+          proxy_env = services["rpc-proxy"].get("environment") or {}
+          for key in ("READ_ONLY", "SECURITY_ENABLE_WHITELIST"):
+              if proxy_env.get(key) != "true":
+                  failures.append(f"rpc-proxy {key} is {proxy_env.get(key)!r}, expected 'true'")
+          if proxy_env.get("SERVER_PORT") != "8545":
+              failures.append(f"rpc-proxy SERVER_PORT is {proxy_env.get('SERVER_PORT')!r}, expected '8545'")
+
+          # Bounded history on both layers.
+          el_env = services["execution-layer"].get("environment") or {}
+          if not el_env.get("IGRA_RETH_PRUNE_DISTANCE_BLOCKS"):
+              failures.append("execution-layer does not receive IGRA_RETH_PRUNE_DISTANCE_BLOCKS")
+
+          # reth turns background file logging on by default and panics —
+          # create_dir_all(...).expect(...) — if it cannot create
+          # $XDG_CACHE_HOME/reth/logs. With read_only: true that directory must
+          # be inside a writable mount, and must NOT be the 64 MB /tmp tmpfs,
+          # because the rotation budget is 5 x 200 MB. Without this the whole
+          # stack fails at first bring-up: kaspad and the proxy both gate on
+          # execution-layer becoming healthy.
+          cache_home = el_env.get("XDG_CACHE_HOME")
+          if not cache_home:
+              failures.append(
+                  "execution-layer has no XDG_CACHE_HOME; with read_only:true reth panics "
+                  "creating its default log directory on the read-only root"
+              )
+          else:
+              # Compare path COMPONENTS, not a string prefix: "/app/database"
+              # startswith "/app/data" but is outside the bind, which would
+              # restore the startup panic this guard exists to prevent.
+              cache_parts = PurePosixPath(cache_home).parts
+              el_bind_targets = {
+                  v.get("target")
+                  for v in services["execution-layer"].get("volumes", [])
+                  if v.get("type") == "bind"
+              }
+              if not any(
+                  target and PurePosixPath(target).parts == cache_parts[: len(PurePosixPath(target).parts)]
+                  for target in el_bind_targets
+              ):
+                  failures.append(
+                      f"execution-layer XDG_CACHE_HOME is {cache_home!r}, which is not inside any of its "
+                      f"bind mounts {sorted(t for t in el_bind_targets if t)}; reth would panic creating "
+                      "its log directory on the read-only root"
+                  )
+              elif cache_parts[:2] == ("/", "tmp"):
+                  failures.append(
+                      f"execution-layer XDG_CACHE_HOME is {cache_home!r}; /tmp is a 64MB tmpfs and reth "
+                      "rotates 5x200MB, which trades the boot panic for silent ENOSPC"
+                  )
+
+          # Two separate failures to catch. First: a script the entrypoint calls
+          # but nothing mounts — deleting the mount would otherwise pass this
+          # check vacuously while the container still execs the path. Second: a
+          # mount that permits host-path creation, where Docker silently makes a
+          # root-owned DIRECTORY at a missing source and the container starts
+          # and crash-loops instead of failing at create.
+          for name, service in services.items():
+              entrypoint = "\n".join(service.get("entrypoint") or [])
+              mounted_scripts = {
+                  v.get("target")
+                  for v in service.get("volumes", [])
+                  if v.get("type") == "bind" and str(v.get("target", "")).endswith(".sh")
+              }
+              for script in ("/app/watch-dependencies.sh", "/app/parse-network-slug.sh"):
+                  if script in entrypoint and script not in mounted_scripts:
+                      failures.append(
+                          f"{name} entrypoint calls {script} but no bind mount provides it"
+                      )
+              for volume in service.get("volumes", []):
+                  if volume.get("type") != "bind":
+                      continue
+                  if str(volume.get("target", "")).endswith(".sh"):
+                      if (volume.get("bind") or {}).get("create_host_path") is not False:
+                          failures.append(
+                              f"{name} script mount {volume.get('target')} allows host path creation"
+                          )
+
+          kaspad = services["kaspad"]
+          kaspad_entrypoint = "\n".join(kaspad.get("entrypoint", []))
+
+          # kaspad writes rotating log files under its appdir unless told not
+          # to; without this the data volume grows regardless of the log driver.
+          if "--nologfiles" not in kaspad_entrypoint:
+              failures.append("kaspad entrypoint does not pass --nologfiles")
+          if "--logdir" in kaspad_entrypoint:
+              failures.append("kaspad entrypoint still passes --logdir")
+          if "--retention-period-days" not in kaspad_entrypoint:
+              failures.append("kaspad entrypoint does not pass --retention-period-days")
+
+          # Mirrored from the mainnet stack: an empty prefix or missing lane id
+          # silently degrades post-Toccata ATAN filtering.
+          for guard in ("IGRA_LANE_ID must be set", "TX_ID_PREFIX must be set"):
+              if guard not in kaspad_entrypoint:
+                  failures.append(f"kaspad entrypoint is missing the fail-fast guard: {guard}")
+          if "--igra-lane-id=$$IGRA_LANE_ID" not in kaspad_entrypoint:
+              failures.append("kaspad entrypoint does not forward IGRA_LANE_ID as --igra-lane-id")
+
+          # A typo in the data root must fail at container create, not create a
+          # root-owned directory and resync from genesis onto the wrong disk.
+          for name in ("kaspad", "execution-layer"):
+              for volume in services[name].get("volumes", []):
+                  if volume.get("type") != "bind":
+                      continue
+                  target = volume.get("target")
+                  if target in ("/app/data", "/app/jwt.hex"):
+                      if (volume.get("bind") or {}).get("create_host_path") is not False:
+                          failures.append(f"{name} bind {target} allows host path creation")
+
+          if failures:
+              for failure in failures:
+                  print(f"FAIL: {failure}", file=sys.stderr)
+              sys.exit(1)
+
+          print("ok: readonly-rpc topology assertions passed")
           PY
 
   slug-parser-tests:

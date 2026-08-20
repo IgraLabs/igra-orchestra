@@ -1,0 +1,477 @@
+# Minimal read-only Igra RPC stack for co-location on a hardened host.
+#
+# Serves eth_* reads to a local consumer as RPC_URL_1 = http://igra-local-rpc:8545.
+# See doc/node-operations/readonly-rpc-node.md before deploying.
+#
+# Source of truth for these service definitions is docker-compose.yml:
+#   kaspad           -> docker-compose.yml:211-366
+#   execution-layer  -> docker-compose.yml:368-427
+#   rpc-proxy        -> docker-compose.yml:40-92 (x-rpc-provider-* anchors)
+# Definitions are duplicated rather than inherited, so the mainnet stack can
+# evolve without silently changing what runs on a signer host. When the
+# entrypoint guards or chain parameters change there, mirror them here; CI
+# asserts the guards that must not disappear.
+#
+# Deliberate differences from the mainnet stack, each load-bearing:
+#   - three services only; the twenty rpc-provider/kaswallet worker pairs,
+#     traefik, wallet-balance-api and atan-uploader are all absent
+#   - no host port publishes anywhere, including kaspad's P2P and the stock
+#     127.0.0.1:9545/9546 execution-layer publishes
+#   - the consumer reaches only rpc-proxy, on an internal network that
+#     neither kaspad nor execution-layer joins
+#   - journald logging, because the host operator cannot read /var/lib/docker
+#   - bounded history on both layers (see IGRA_RETH_PRUNE_DISTANCE_BLOCKS and
+#     KASPAD_RETENTION_PERIOD_DAYS in .env.readonly-rpc.example)
+#
+# This stack CANNOT broadcast transactions. It has no kaswallet and its proxy
+# runs read-only. Anything that submits a transaction must use an external
+# funded endpoint.
+
+name: igra-readonly-rpc-${NETWORK:?NETWORK must be set to mainnet or testnet-10}
+
+volumes:
+  # Unix socket shared between reth and its own healthcheck. Kept as tmpfs so
+  # the socket never lands on the data volume. Copied from docker-compose.yml:7-12.
+  reth_ipc:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=10m
+
+networks:
+  # kaspad, execution-layer and rpc-proxy. kaspad needs outbound P2P and CDN
+  # access, so this is a normal bridge, not internal.
+  backend:
+
+  # The consumer's only route into this stack. `internal: true` means no
+  # gateway and no outbound route; the fixed `name:` lets a consuming compose
+  # project attach to it as an external network.
+  readonly-rpc:
+    name: igra-readonly-rpc
+    internal: true
+
+# The shared docker-compose.yml anchor cannot be reused: it passes max-size,
+# max-file and compress, which are json-file options the journald driver
+# rejects. Its values also allow ~500 GB of logs per container.
+x-default-logging: &default-logging
+  driver: journald
+  options:
+    tag: "igra-readonly-rpc-${NETWORK}/{{.Name}}/{{.ID}}"
+
+x-default-healthcheck: &default-healthcheck
+  interval: 10s
+  timeout: 2s
+  retries: 3
+  start_period: 5s
+
+# Long syntax with create_host_path: false. With the short form Docker creates
+# a root-owned DIRECTORY at a missing source path, so an incomplete checkout at
+# /opt/igra-orchestra would start the containers and crash-loop them on a
+# directory-instead-of-script, rather than failing at container create as the
+# runbook promises.
+x-dependency-watch-volume: &dependency-watch-volume
+  type: bind
+  source: ./scripts/lib/watch-dependencies.sh
+  target: /app/watch-dependencies.sh
+  read_only: true
+  bind:
+    create_host_path: false
+x-parse-network-slug-volume: &parse-network-slug-volume
+  type: bind
+  source: ./scripts/lib/parse-network-slug.sh
+  target: /app/parse-network-slug.sh
+  read_only: true
+  bind:
+    create_host_path: false
+
+# Aggregate resource control lives in a host-side systemd slice, not here.
+# MemoryHigh has no Compose equivalent, and per-service limits would grant the
+# stack several times the intended budget. The slice unit is installed by the
+# host runbook; this only places the containers under it.
+x-cgroup-parent: &cgroup-parent igra-rpc.slice
+
+services:
+  kaspad:
+    image: igranetwork/kaspad:${READONLY_RPC_KASPAD_VERSION:?READONLY_RPC_KASPAD_VERSION must be set to a released kaspad tag; see doc/node-operations/readonly-rpc-node.md}
+    restart: ${SERVICE_RESTART_POLICY:-unless-stopped}
+    container_name: kaspad-readonly-rpc
+    cgroup_parent: *cgroup-parent
+    logging: *default-logging
+    user: "1000:1000"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges=true","apparmor=docker-default"]
+    pids_limit: 512
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    depends_on:
+      execution-layer:
+        condition: service_healthy
+    # No `ports:`. The mainnet stack publishes gRPC, P2P, Borsh and JSON
+    # (docker-compose.yml:225-229), P2P on all interfaces. Outbound P2P still
+    # syncs through the bridge; only inbound peering is lost, which is
+    # acceptable for a leaf node and is stated in the runbook. Operator access
+    # to kaspad's RPC is `docker exec` only.
+    environment:
+      - KASPAD_ADD_PEER
+      - KASPAD_NONINTERACTIVE
+      - KASPAD_UA_RULE
+      # Bounds locally retained L1 block history. Required here, unlike the
+      # mainnet stack where it is optional, because an unbounded L1 footprint
+      # next to a pruned L2 does not meet the stack's storage requirement.
+      - KASPAD_RETENTION_PERIOD_DAYS=${KASPAD_RETENTION_PERIOD_DAYS:?KASPAD_RETENTION_PERIOD_DAYS must be set (bounds local L1 block history; see doc/node-operations/readonly-rpc-node.md)}
+      - ENABLE_PERF_DIAGNOSTICS
+      - ENABLE_EVENT_LOGGING
+      - WARM_START_BLOCK
+      - IGRA_SKIP_LOCK_SCRIPT_CHECK
+      - ATAN_IMPORT_URL
+      - CDN_BASE_URL
+      - NETWORK
+      - TX_ID_PREFIX
+      - IGRA_LANE_ID
+      - IGRA_ENABLE
+      - POST_FORK_LOCK_SCRIPT_PUBKEY
+      - LOCK_SCRIPT_FORK_DAA_SCORE
+      # docker-compose.yml:247 hard-codes trace on six targets, which no env
+      # file can override. Trace-level logging for the whole initial sync would
+      # churn the host journal.
+      - RUST_LOG=${RUST_LOG:-info}
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        # Sets KASPA_FAMILY and KASPA_NETSUFFIX from NETWORK.
+        . /app/parse-network-slug.sh
+
+        # --nologfiles: kaspad writes rotating log files under its appdir by
+        # default. Dropping the log-directory flag alone would only move them
+        # onto the data volume, not stop them. Stdout still reaches journald.
+        ARGS="--disable-upnp \
+          --rpclisten-borsh=0.0.0.0 \
+          --rpclisten=0.0.0.0 \
+          --rpclisten-json=0.0.0.0 \
+          --listen=0.0.0.0 \
+          --utxoindex \
+          --nologfiles \
+          --appdir=/app/data"
+
+        # DNS seeds stay enabled; KASPAD_ADD_PEER only pins an extra peer.
+        if [ "$$KASPA_FAMILY" != "mainnet" ]; then
+          ARGS="--$$KASPA_FAMILY $$ARGS"
+        fi
+        if [ -n "$$KASPA_NETSUFFIX" ]; then ARGS="$$ARGS --netsuffix=$$KASPA_NETSUFFIX"; fi
+
+        # Optional peer user-agent rule (e.g. reject;ver:kaspad<1.2.1).
+        if [ -n "$$KASPAD_UA_RULE" ]; then
+          ARGS="$$ARGS --ua-rule=$$KASPAD_UA_RULE"
+        fi
+
+        ARGS="$$ARGS --retention-period-days=$$KASPAD_RETENTION_PERIOD_DAYS"
+
+        IGRA_ENABLED="$${IGRA_ENABLE:-true}"
+        if [ "$$IGRA_ENABLED" = "true" ]; then
+          # Empty TX_ID_PREFIX would render as --atan-transaction-id-prefix=
+          # which kaspad accepts but treats as Box::new([]) — the empty prefix
+          # matches every transaction, silently degrading to lane-only ATAN
+          # filtering and defeating the post-Toccata "lane AND prefix" gate.
+          # Hard-fail rather than ship an unrestricted prefix.
+          if [ -z "$$TX_ID_PREFIX" ]; then
+            echo "Error: TX_ID_PREFIX must be set when IGRA_ENABLE=true; an empty --atan-transaction-id-prefix matches every tx and degrades post-Toccata filtering to lane-only mode" >&2
+            exit 1
+          fi
+          # Every chain parameter below carries its own `:?` guard, even though
+          # execution-layer guards the same names. Compose interpolation is
+          # file-wide, so one copy is enough *today* — but that makes the
+          # protection positional: an edit that removes or reorders that service
+          # would silently leave these flags rendering empty, and a node started
+          # with an empty --igra-genesis-hash or --viaduct-start-daa-score
+          # follows a different chain while answering reads confidently. Same
+          # reasoning as the repeated IGRA_DATA_ROOT/IGRA_JWT_PATH guards on the
+          # volume mounts: a correctness property should not depend on service
+          # order in a YAML file. The duplicated messages are deliberate — the
+          # error names the variable the operator actually forgot.
+          ARGS="$$ARGS \
+            --igra-enable \
+            --atan-listen \
+            --atan-transaction-id-prefix=${TX_ID_PREFIX:?TX_ID_PREFIX must be set (chain identity)} \
+            --viaduct-start-daa-score=${IGRA_LAUNCH_DAA_SCORE:?IGRA_LAUNCH_DAA_SCORE must be set (chain identity)} \
+            --igra-l1-reference-timestamp=${L1_REFERENCE_TIMESTAMP:?L1_REFERENCE_TIMESTAMP must be set (chain identity)} \
+            --igra-l1-reference-daa-score=${L1_REFERENCE_DAA_SCORE:?L1_REFERENCE_DAA_SCORE must be set (chain identity)} \
+            --igra-genesis-hash=${GENESIS_BLOCK_HASH:?GENESIS_BLOCK_HASH must be set (chain identity; kaspad is its only consumer, so nothing downstream fail-fasts on it)} \
+            --igra-min-fee-per-gas-gwei=${MIN_PROTOCOL_FEE_PER_GAS_GWEI:?MIN_PROTOCOL_FEE_PER_GAS_GWEI must be set (chain identity)} \
+            --igra-jwt-path=/app/jwt.hex \
+            --igra-lock-script-pubkey=${IGRA_LOCK_SCRIPT_PUBKEY:?IGRA_LOCK_SCRIPT_PUBKEY must be set (chain identity)} \
+            --igra-entry-min-amount=${IGRA_ENTRY_MIN_AMOUNT:?IGRA_ENTRY_MIN_AMOUNT must be set (chain identity)} \
+            --igra-el-host=http://execution-layer"
+
+          # Post-Toccata kaspad hard-exits at kaspad/src/daemon.rs:828 if
+          # --igra-lane-id is missing when ATAN is enabled on a
+          # Toccata-scheduled network. Mirror that here so the failure
+          # message comes from the entrypoint, not buried in kaspad logs.
+          if [ -z "$$IGRA_LANE_ID" ]; then
+            echo "Error: IGRA_LANE_ID must be set when IGRA_ENABLE=true; post-Toccata kaspad requires --igra-lane-id when ATAN is enabled (kaspad/src/daemon.rs:828)" >&2
+            exit 1
+          fi
+          ARGS="$$ARGS --igra-lane-id=$$IGRA_LANE_ID"
+          [ "$$ENABLE_PERF_DIAGNOSTICS" = "true" ] && ARGS="$$ARGS --igra-enable-perf-diagnostics"
+          [ "$$ENABLE_EVENT_LOGGING" = "true" ] && ARGS="$$ARGS --igra-enable-event-logging"
+          [ -n "$$WARM_START_BLOCK" ] && ARGS="$$ARGS --igra-warm-start-block=$$WARM_START_BLOCK"
+          [ "$$IGRA_SKIP_LOCK_SCRIPT_CHECK" = "true" ] && ARGS="$$ARGS --igra-skip-lock-script-check"
+          if [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && [ -z "$$LOCK_SCRIPT_FORK_DAA_SCORE" ]; then
+            echo "Error: LOCK_SCRIPT_FORK_DAA_SCORE must be set when POST_FORK_LOCK_SCRIPT_PUBKEY is set" >&2; exit 1
+          fi
+          if [ -z "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ]; then
+            echo "Error: POST_FORK_LOCK_SCRIPT_PUBKEY must be set when LOCK_SCRIPT_FORK_DAA_SCORE is set" >&2; exit 1
+          fi
+          [ -n "$$POST_FORK_LOCK_SCRIPT_PUBKEY" ] && ARGS="$$ARGS --igra-post-fork-lock-script-pubkey=$$POST_FORK_LOCK_SCRIPT_PUBKEY"
+          [ -n "$$LOCK_SCRIPT_FORK_DAA_SCORE" ] && ARGS="$$ARGS --igra-lock-script-fork-daa-score=$$LOCK_SCRIPT_FORK_DAA_SCORE"
+
+          # TX_ID_PREFIX is guaranteed non-empty by the guard above and is the
+          # ATAN import namespace: it is the network-specific CDN path segment
+          # (97b1 mainnet, 97b4 testnet-10). IGRA_LANE_ID is the canonical lane
+          # 97b10000 shared by every network, so it can't address per-network
+          # CDN objects and is not used in the import URL.
+          if [ -n "$$ATAN_IMPORT_URL" ]; then
+            ARGS="$$ARGS --atan-import-url=$$ATAN_IMPORT_URL"
+          elif [ -n "$$CDN_BASE_URL" ] && [ -n "$$NETWORK" ]; then
+            ARGS="$$ARGS --atan-import-url=$$CDN_BASE_URL/$$NETWORK/$$TX_ID_PREFIX/index.pb"
+          else
+            echo "Error: CDN_BASE_URL and NETWORK must be set for ATAN import (or set ATAN_IMPORT_URL explicitly)" >&2
+            exit 1
+          fi
+        fi
+
+        # Peer configuration
+        if [ -n "$$KASPAD_ADD_PEER" ]; then
+          ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
+        fi
+
+        exec sh /app/watch-dependencies.sh \
+          --tcp execution-layer execution-layer 8545 \
+          -- /app/kaspad $$ARGS
+    volumes:
+      # Long syntax with create_host_path: false, so a typo in IGRA_DATA_ROOT
+      # fails at container create instead of silently creating a root-owned
+      # directory and resyncing from genesis onto the wrong filesystem.
+      - type: bind
+        source: ${IGRA_DATA_ROOT:?IGRA_DATA_ROOT must be set to the provisioned data filesystem; see doc/node-operations/readonly-rpc-node.md}/kaspad
+        target: /app/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${IGRA_JWT_PATH:?IGRA_JWT_PATH must be set to the shared engine-API JWT file}
+        target: /app/jwt.hex
+        read_only: true
+        bind:
+          create_host_path: false
+      - *dependency-watch-volume
+      - *parse-network-slug-volume
+    networks:
+      # Not on readonly-rpc. The consumer has no reason to reach kaspad.
+      - backend
+    healthcheck:
+      <<: *default-healthcheck
+      test:
+        - CMD-SHELL
+        # Defaulted, not required: the port is internal to the container and
+        # never published, and an unset value would otherwise render as
+        # `/dev/tcp/127.0.0.1/` — a healthcheck that can never pass, behind a
+        # `config` render that still exits 0.
+        #
+        # 16110 is kaspad's MAINNET default. `--rpclisten=0.0.0.0` makes kaspad
+        # bind the per-network default, which is 16210 on testnet-10 — set
+        # KASPAD_GRPC_PORT explicitly there or this probe never succeeds.
+        - >
+          bash -lc ': > /dev/tcp/127.0.0.1/${KASPAD_GRPC_PORT:-16110}' &&
+          bash -lc ': > /dev/tcp/execution-layer/8545'
+
+  execution-layer:
+    # Must be a tag whose launcher supports IGRA_RETH_PRUNE_DISTANCE_BLOCKS.
+    # Deliberately not RETH_VERSION: the mainnet pin predates bounded-history
+    # pruning, and an older image ignores the variable and runs archive mode
+    # silently. A separate variable stops this file resolving against that pin
+    # by accident. See the release gate in the runbook.
+    image: igranetwork/reth:${READONLY_RPC_RETH_VERSION:?READONLY_RPC_RETH_VERSION must be set to a reth tag supporting IGRA_RETH_PRUNE_DISTANCE_BLOCKS; see doc/node-operations/readonly-rpc-node.md}
+    restart: ${SERVICE_RESTART_POLICY:-unless-stopped}
+    container_name: execution-layer-readonly-rpc
+    cgroup_parent: *cgroup-parent
+    logging: *default-logging
+    user: "1000:1000"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges=true","apparmor=docker-default"]
+    pids_limit: 512
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    entrypoint: /app/run-igra-el.sh
+    # No `ports:` and no `expose:`. The mainnet stack publishes 9545/9546 to
+    # loopback for blockscout (docker-compose.yml:382-384); on a signer host
+    # that is a write-capable all-namespace RPC. Container-to-container
+    # reachability on `backend` does not need `expose:`.
+    environment:
+      # Chain identity is guarded as strictly as storage and image tags. An
+      # empty value here is the same failure class the other guards prevent,
+      # arriving through configuration rather than a write: a node that syncs
+      # against wrong chain parameters answers reads confidently, and the
+      # consumer acts on state that is not Igra.
+      L1_REFERENCE_TIMESTAMP: ${L1_REFERENCE_TIMESTAMP:?L1_REFERENCE_TIMESTAMP must be set (chain identity)}
+      L1_REFERENCE_DAA_SCORE: ${L1_REFERENCE_DAA_SCORE:?L1_REFERENCE_DAA_SCORE must be set (chain identity)}
+      CHAIN_ID: ${IGRA_CHAIN_ID:?IGRA_CHAIN_ID must be set (chain identity)}
+      ONE_TIME_ADDRESS: ${EL_ONE_TIME_ADDRESS:?EL_ONE_TIME_ADDRESS must be set (chain identity)}
+      IGRA_LAUNCH_DAA_SCORE: ${IGRA_LAUNCH_DAA_SCORE:?IGRA_LAUNCH_DAA_SCORE must be set (chain identity)}
+      TX_ID_PREFIX: ${TX_ID_PREFIX:?TX_ID_PREFIX must be set (empty prefix degrades post-Toccata ATAN filtering to lane-only; see doc/node-operations/environment-reference.md)}
+      IGRA_LANE_ID: ${IGRA_LANE_ID:?IGRA_LANE_ID must be set (4-byte post-Toccata lane namespace; see doc/node-operations/environment-reference.md)}
+      MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI:?MIN_PROTOCOL_FEE_PER_GAS_GWEI must be set (chain identity)}
+      IGRA_LOCK_SCRIPT_PUBKEY: ${IGRA_LOCK_SCRIPT_PUBKEY:?IGRA_LOCK_SCRIPT_PUBKEY must be set (chain identity; the launcher lists it in validate_required_vars and it feeds the network-params hash that becomes EXTRA_DATA)}
+      IGRA_ENTRY_MIN_AMOUNT: ${IGRA_ENTRY_MIN_AMOUNT:?IGRA_ENTRY_MIN_AMOUNT must be set (chain identity)}
+      BITCOIN_BLOCK_HASH: ${BITCOIN_BLOCK_HASH:?BITCOIN_BLOCK_HASH must be set (extradata / network identity)}
+      ETHEREUM_BLOCK_HASH: ${ETHEREUM_BLOCK_HASH:?ETHEREUM_BLOCK_HASH must be set (extradata / network identity)}
+      KASPA_BLOCK_HASH: ${KASPA_BLOCK_HASH:?KASPA_BLOCK_HASH must be set (extradata / network identity)}
+      POST_FORK_LOCK_SCRIPT_PUBKEY: ${POST_FORK_LOCK_SCRIPT_PUBKEY:-}
+      LOCK_SCRIPT_FORK_DAA_SCORE: ${LOCK_SCRIPT_FORK_DAA_SCORE:-}
+      # Bounds four history segments (sender recovery, receipts, account
+      # history, storage history) at this many blocks behind the tip. Required,
+      # not optional: pruning is a creation-time choice persisted into the data
+      # directory's reth.toml, so it must be right before the first sync.
+      IGRA_RETH_PRUNE_DISTANCE_BLOCKS: ${IGRA_RETH_PRUNE_DISTANCE_BLOCKS:?IGRA_RETH_PRUNE_DISTANCE_BLOCKS must be set (bounds reth history; one-way per data directory; see doc/node-operations/readonly-rpc-node.md)}
+      # The launcher defaults these to /app/genesis.json and
+      # /app/network-params.md, on the container's writable layer — which a
+      # read-only root filesystem forbids. Redirected into the data bind, which
+      # is the only writable directory guaranteed to exist: the launcher does
+      # `mkdir -p` for its socket directory only, so any deeper path here would
+      # fail the first `sed > "$output"` and crash-loop the container.
+      GENESIS_JSON: /app/data/genesis.json
+      NETWORK_PARAMS_OUTPUT: /app/data/network-params.md
+      # REQUIRED with read_only: true — without it the container panics before
+      # doing anything. reth turns background file logging on by default
+      # (--log.file.max-files defaults to 5, and only 0 disables it), the
+      # launcher passes no --log.file.* flags, and the log directory resolves to
+      # $XDG_CACHE_HOME (or $HOME/.cache) + /reth/logs. Creating it is
+      # `create_dir_all(...).expect(...)` — a panic, not a recoverable error.
+      # The image is FROM ubuntu with no USER and no HOME, so uid 1000 resolves
+      # to /home/ubuntu on the read-only root and every variant fails: no passwd
+      # entry gives HOME=/, and an unset HOME panics in clap's default-path
+      # construction instead.
+      #
+      # Pointing the cache at the data bind is the only fix available from
+      # compose. Do NOT point it at /tmp: the rotation budget is 5 x 200 MB and
+      # the tmpfs below is 64 MB, which trades a boot panic for silent ENOSPC.
+      #
+      # This is a mitigation, not a good outcome. It leaves the file logger ON,
+      # and --log.file.filter defaults to "debug" — so reth writes a sustained
+      # debug-volume stream into the same filesystem, and the same I/O path, as
+      # its own database, on a host whose entire co-location concern is I/O
+      # contention with the co-tenant. Budget ~1 GB of disk for it in the
+      # capacity guard, and expect write amplification the guard cannot see.
+      #
+      # The real fix is `--log.file.max-files 0` in the launcher: stdout already
+      # reaches journald, so the file logger buys nothing here. It rides the
+      # same P1 reth release this stack is already gated on — take it then, and
+      # this variable can go.
+      XDG_CACHE_HOME: /app/data/.cache
+    volumes:
+      # Guards repeated rather than relying on kaspad's copy firing first:
+      # interpolation reports whichever it reaches, so a future edit that
+      # removes or reorders that service would silently leave these binds
+      # resolving to a bare `/reth` at the filesystem root.
+      - type: bind
+        source: ${IGRA_DATA_ROOT:?IGRA_DATA_ROOT must be set to the provisioned data filesystem; see doc/node-operations/readonly-rpc-node.md}/reth
+        target: /app/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${IGRA_JWT_PATH:?IGRA_JWT_PATH must be set to the shared engine-API JWT file}
+        target: /app/jwt.hex
+        read_only: true
+        bind:
+          create_host_path: false
+      - reth_ipc:/app/socket
+    networks:
+      # Not on readonly-rpc. The consumer reaches reth only through
+      # rpc-proxy; putting the raw execution layer on the consumer's network
+      # would expose an all-namespace, write-capable endpoint and would make
+      # proxy failure irrelevant instead of fail-closed.
+      - backend
+    # No traefik labels. The mainnet stack routes port 9001 metrics through
+    # traefik (docker-compose.yml:412-421); there is no traefik here.
+    healthcheck:
+      <<: *default-healthcheck
+      test:
+        - CMD-SHELL
+        - >
+          test -S /app/socket/auth.ipc &&
+          bash -lc ': > /dev/tcp/127.0.0.1/8545'
+
+  # The consumer's only endpoint. Enforces a positive method allowlist and
+  # rejects writes before routing, so a co-located node cannot accept a
+  # transaction, diverge from canonical state, and then answer reads
+  # confidently. On proxy death nothing listens at igra-local-rpc:8545 and the
+  # agent falls back to RPC_URL_2; there is no raw-execution-layer route on
+  # this network to fail open to.
+  rpc-proxy:
+    # Must be a tag that starts without a wallet. The mainnet image builds its
+    # wallet client before binding the listener and requires KASWALLET_PASSWORD,
+    # so it cannot serve a single request in a stack that deliberately has no
+    # kaswallet. Deliberately not RPC_PROVIDER_VERSION. See the release gate.
+    image: igranetwork/rpc-provider:${READONLY_RPC_PROXY_VERSION:?READONLY_RPC_PROXY_VERSION must be set to an rpc-provider tag supporting walletless read-only mode; see doc/node-operations/readonly-rpc-node.md}
+    restart: ${SERVICE_RESTART_POLICY:-unless-stopped}
+    container_name: rpc-proxy-readonly-rpc
+    cgroup_parent: *cgroup-parent
+    logging: *default-logging
+    user: "1000:1000"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges=true","apparmor=docker-default"]
+    pids_limit: 256
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    environment:
+      SERVER_HOST: "0.0.0.0"
+      # 8545 so RPC_URL_1 keeps the http://igra-local-rpc:8545 form. The
+      # mainnet workers use 8535 because traefik fronts them.
+      SERVER_PORT: 8545
+      EL_URL: http://execution-layer:8545
+      EL_WS_URL: ws://execution-layer:8546
+      # Literals, not ${...}. These two are the whole write-path guard: the
+      # image defaults read-only to false, so an interpolated value would let
+      # an env-file mistake turn the consumer's endpoint into a write path.
+      READ_ONLY: "true"
+      SECURITY_ENABLE_WHITELIST: "true"
+      MIN_PROTOCOL_FEE_PER_GAS_GWEI: ${MIN_PROTOCOL_FEE_PER_GAS_GWEI}
+      TX_ID_PREFIX: ${TX_ID_PREFIX:?TX_ID_PREFIX must be set (empty prefix degrades post-Toccata ATAN filtering to lane-only; see doc/node-operations/environment-reference.md)}
+      IGRA_LANE_ID: ${IGRA_LANE_ID:?IGRA_LANE_ID must be set (4-byte post-Toccata lane namespace; see doc/node-operations/environment-reference.md)}
+      # The proxy logs every request at info; consumers poll continuously.
+      RUST_LOG: ${RPC_PROXY_RUST_LOG:-warn}
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        exec sh /app/watch-dependencies.sh \
+          --tcp execution-layer execution-layer 8545 \
+          -- /app/igra-rpc-provider
+    volumes:
+      - *dependency-watch-volume
+    networks:
+      backend:
+      readonly-rpc:
+        # RPC_URL_1 = http://igra-local-rpc:8545. The alias belongs to the
+        # proxy, not the execution layer, so it resolves to nothing when the
+        # proxy is down.
+        aliases:
+          - igra-local-rpc
+    depends_on:
+      execution-layer:
+        condition: service_healthy
+    healthcheck:
+      <<: *default-healthcheck
+      test:
+        - CMD-SHELL
+        - >
+          bash -lc '
+            exec 3<>/dev/tcp/127.0.0.1/8545;
+            printf "GET /health HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3;
+            IFS= read -r line <&3;
+            [[ "$$line" == *" 200 "* ]]
+          ' &&
+          bash -lc ': > /dev/tcp/execution-layer/8545'
