@@ -50,8 +50,11 @@ production-disruption path.
 ## Release Gates — Read Before Deploying
 
 Three capabilities this stack depends on are not in any published image yet. Each fails **silently or expensively**
-if you use an older tag, which is why `.env.readonly-rpc.example` ships them as `TODO_..._REPLACE_ME` placeholders
-and the compose file requires them under names distinct from the mainnet pins.
+if you use an older tag, which is why the compose file requires them under names distinct from the mainnet pins.
+
+**The tags in `.env.readonly-rpc.example` are current published ones and do not carry these capabilities.** They
+are there so the file renders and so the tags sit in one obvious place — not because it is deployable. Replace
+them before deploying, and confirm with the bring-up checks below rather than trusting the tag.
 
 | Gate | What is needed | Failure if ignored | Recoverable? |
 |---|---|---|---|
@@ -95,32 +98,39 @@ sudo docker exec rpc-proxy-readonly-rpc \
 If the first command prints nothing, the execution layer is running archive mode. Stop, destroy the reth data
 directory, and start over with a correct image — do not "enable it later".
 
-## Building From Source, And Why You Currently Have To
+## Building From Source
 
-All three gates above are waiting on capabilities that exist **on branches** but in no published tag. Until they
-ship, building from source is the only way to run this stack at all.
+The `build:` blocks point at `build/repos/`, the same layout the main stack uses, so this file can be built rather
+than pulled.
 
-Set `USE_PREBUILT_IMAGES=false` and name the branches, exactly as the main stack does:
+**The branch variables are deliberately not in `.env.readonly-rpc.example`** — they are a developer's choice, not
+part of the shipped contract. Set them in your own `.env`:
 
 ```bash
-RETH_BRANCH=<branch carrying the pruning and log-file work>
+USE_PREBUILT_IMAGES=false
+RETH_BRANCH=<branch>
 KASPAD_BRANCH=master
-IGRA_RPC_PROVIDER_BRANCH=<branch carrying walletless read-only mode>
+IGRA_RPC_PROVIDER_BRANCH=<branch>
 ```
-
-Then clone and build:
 
 ```bash
 ./scripts/dev/setup-repos.sh
 docker compose -f docker-compose.readonly-rpc.yml build
 ```
 
-`setup-repos.sh` clones into `build/repos/` and checks out the branch named for each repository; the `build:`
-blocks in the compose file point at those paths. This needs SSH access to the private repositories.
+`setup-repos.sh` clones into `build/repos/` and checks out the branch named for each repository. This needs SSH
+access to the private repositories.
+
+**What building actually gets you today, stated honestly:** of the three release gates above, only the pruning
+capability exists on a branch — `ENG-1197/pycckuu/optional-pruning-profile` in the reth repository. There is **no**
+branch anywhere that disables reth's file logger, and **no** branch of `igra-rpc-provider` with a walletless
+read-only mode. So a source build produces kaspad plus a pruned execution layer **with no runnable proxy**, which
+is not a working stack. It is useful for exercising the execution layer and the sync procedure; it is not a way
+around the gates.
 
 **This is a development and staging path, not a deployment one.** A hardened host has no build credentials and no
 reason to gain them, and the operator helper scripts pass `--no-build` precisely so a stale context can never be
-built there by accident. Build elsewhere, publish, pin by digest, then deploy.
+built there by accident. Build elsewhere, publish, pin, then deploy.
 
 ## Storage: What Is And Is Not Bounded
 
@@ -551,14 +561,12 @@ connection where HTTP used two pooled clients.
   ```
 
   That file is owned by whoever operates the consumer; this stack cannot be reached until the change lands.
-- **Images must be digest-pinned, and CI now enforces it.** All three image variables must be either an unresolved
-  `TODO_..._REPLACE_ME` placeholder or a `<tag>@sha256:<64-hex>` pin — a bare tag fails the build. This replaced an
-  earlier check that merely asserted the gated tags were still placeholders, which would have deleted itself in the
-  very PR that introduced the risk it guarded against.
+- **Prefer a digest over a bare tag when you pin a real image.** A tag is mutable: the same string can resolve to
+  different bytes tomorrow, on a host deliberately co-located with something sensitive. Resolve one with
+  `docker buildx imagetools inspect igranetwork/<image>:<tag>` and pin as `<tag>@sha256:<64-hex>`. CI does not
+  enforce this — the example ships bare tags — so it is on whoever does the deployment.
 
-  Resolve a digest with `docker buildx imagetools inspect igranetwork/<image>:<tag>`.
-
-  Enforcing it here matters because nothing downstream will: the host-side verifier's digest check reads `.Image`,
+  It matters because nothing downstream will catch a bare tag either: the host-side verifier's digest check reads `.Image`,
   which is the image **ID** rather than `.Config.Image` or `RepoDigests`, so a container built from a mutable bare
   tag passes it.
 - **Duplicated service definitions.** This file copies trimmed `kaspad` and `execution-layer` definitions from

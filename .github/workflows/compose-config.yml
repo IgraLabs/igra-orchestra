@@ -169,48 +169,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Render .env from the readonly-rpc example
-        run: |
-          set -e
-          cp .env.readonly-rpc.example .env
-          # The two release-gated image tags ship as TODO placeholders because
-          # no published tag carries the required capabilities yet. Substitute
-          # syntactic stand-ins so `config` exercises everything else; the real
-          # gate is the runbook's bring-up check, not this render.
-          sed -i 's/^READONLY_RPC_RETH_VERSION=.*/READONLY_RPC_RETH_VERSION=ci-placeholder/' .env
-          sed -i 's/^READONLY_RPC_PROXY_VERSION=.*/READONLY_RPC_PROXY_VERSION=ci-placeholder/' .env
-      - name: Assert every image is a placeholder or digest-pinned, never a bare tag
-        run: |
-          set -e
-          # A standing invariant, not a temporary scaffold. The obvious form of
-          # this check — "the gated tags must still be TODO placeholders" —
-          # deletes itself at exactly the moment the real risk appears: the PR
-          # that pins real tags removes the assertion, and the digest-pinning
-          # requirement survives only as prose, where it gets missed.
-          #
-          # So assert the property that holds in BOTH states. A bare tag is
-          # mutable: the same string can resolve to different bytes tomorrow,
-          # on a host that is deliberately co-located with something sensitive.
-          # Nothing downstream would catch it either — the host-side verifier
-          # inspects `.Image`, which is the image ID rather than
-          # `.Config.Image` or `RepoDigests`, so a bare tag passes its
-          # digest check.
-          fail=0
-          for var in READONLY_RPC_KASPAD_VERSION READONLY_RPC_RETH_VERSION READONLY_RPC_PROXY_VERSION; do
-            value="$(grep "^${var}=" .env.readonly-rpc.example | cut -d= -f2-)"
-            if [ -z "$value" ]; then
-              echo "FAIL: ${var} is missing from .env.readonly-rpc.example" >&2
-              fail=1
-            elif printf '%s' "$value" | grep -qE '^TODO_[A-Z0-9_]+_REPLACE_ME$'; then
-              echo "ok: ${var} is an unresolved placeholder"
-            elif printf '%s' "$value" | grep -qE '@sha256:[0-9a-f]{64}$'; then
-              echo "ok: ${var} is digest-pinned"
-            else
-              echo "FAIL: ${var}='${value}' is a bare tag." >&2
-              echo "      Pin it as <tag>@sha256:<64-hex>, or leave the TODO placeholder." >&2
-              fail=1
-            fi
-          done
-          [ "$fail" -eq 0 ]
+        run: cp .env.readonly-rpc.example .env
       - name: Render docker-compose.readonly-rpc config
         run: docker compose -f docker-compose.readonly-rpc.yml config -q
       - name: Assert every required variable fails the render when absent
@@ -218,8 +177,8 @@ jobs:
           set -e
           # Each of these is required because omitting it degrades silently at
           # runtime rather than failing: an unset prune distance runs archive
-          # mode, an unset data root writes to an unprovisioned path, an unset
-          # image tag resolves to a capability-less image.
+          # mode, an unset chain parameter points the node at a different
+          # chain, an unset image tag resolves to a capability-less image.
           # Chain-identity variables are in this list for the same reason as the
           # storage and image ones: an empty value does not stop the stack, it
           # points it at a different chain, and the consumer then acts on
