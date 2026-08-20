@@ -92,9 +92,55 @@ Check for `-32000` specifically.
 
 ## Notes
 
-- **Open blocker.** `reth_data` initializes root-owned, so the uid-1000 execution layer cannot write and the stack
-  does not start. Fix in the reth image (`mkdir -p /app/data && chown 1000:1000 /app/data`, as `Dockerfile.kaspad`
-  already does), or `chown` the volume as root before first start.
+- **Open blocker 1 — `reth_data` is root-owned; `execution-layer` crash-loops.** Confirmed on first bring-up:
+
+  ```
+  /app/run-igra-el.sh: 129: cannot create /app/data/network-params.md: Permission denied
+  FATAL: Failed to generate network-params.md from template
+  ```
+
+  Docker seeds a named volume's ownership from the image directory at the mount target, and the reth image never
+  creates `/app/data`, so the volume comes up `root:root` while the service runs as uid 1000. `kaspad_data` is
+  unaffected — kaspad's image does `mkdir -p /app/data` and `chown -R kaspa:kaspa /app`. `reth_ipc` is unaffected
+  too; a tmpfs volume comes up `1777`.
+
+  Unblock an existing volume:
+
+  ```bash
+  docker compose -f docker-compose.readonly-rpc.yml --profile backend stop
+  docker run --rm -u 0 -v igra-readonly-rpc-mainnet_reth_data:/d busybox chown 1000:1000 /d
+  docker compose -f docker-compose.readonly-rpc.yml --profile backend up -d
+  ```
+
+  Fix it properly in the reth image, mirroring `Dockerfile.kaspad`, so new volumes inherit the ownership and no
+  manual step is ever needed:
+
+  ```dockerfile
+  RUN mkdir -p /app/data /app/socket && chown 1000:1000 /app/data /app/socket
+  ```
+
+- **Open blocker 2 — `rpc-provider` cannot start without a wallet; `rpc-proxy` crash-loops.** Confirmed:
+
+  ```
+  rpc-proxy   Restarting (0)
+  ERROR igra_rpc_provider: Failed to create WalletCaller: Failed to connect to wallet daemon: transport error
+  ```
+
+  `main.rs` builds a `WalletCaller` before the router and the listener bind, and on failure returns `Ok(())` — so
+  it **exits 0**. Supervision keyed on a non-zero exit sees a clean shutdown while it loops forever; check
+  `docker ps` status, not just exit codes. This stack has no kaswallet by design, so no published tag works:
+  `http://igra-local-rpc:8545` refuses connections until an `rpc-provider` skips the wallet path under
+  `READ_ONLY=true`.
+
+  While it is blocked, the execution layer can still be exercised directly on the backend network — this bypasses
+  the read-only guard, so it is a bring-up check and not a substitute for the probes above:
+
+  ```bash
+  docker run --rm --network igra-readonly-rpc-mainnet_backend curlimages/curl -sS \
+    -H 'content-type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
+    http://execution-layer:8545
+  ```
 - **Storage.** `IGRA_RETH_PRUNE_DISTANCE_BLOCKS=600000` (~7.3 days) bounds four reth history segments;
   `KASPAD_RETENTION_PERIOD_DAYS=7` bounds L1. **Neither bounds total disk**, and pruning is one-way per volume.
   `eth_getLogs` older than the window is unavailable, so `RPC_URL_2` must be archive-capable.
