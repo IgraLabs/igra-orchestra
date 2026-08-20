@@ -47,6 +47,11 @@ x-parse-network-slug-volume: &parse-network-slug-volume ./scripts/lib/parse-netw
 services:
   kaspad:
     <<: *default-service
+    build:
+      context: build/repos/rusty-kaspa-private
+      dockerfile: build/Dockerfile.kaspad
+      ssh:
+        - default
     image: igranetwork/kaspad:${READONLY_RPC_KASPAD_VERSION:?READONLY_RPC_KASPAD_VERSION must be set to a released kaspad tag; see doc/node-operations/readonly-rpc-node.md}
     restart: *service-restart-policy
     container_name: kaspad-readonly-rpc
@@ -197,6 +202,13 @@ services:
 
   execution-layer:
     <<: *default-service
+    build:
+      context: build/repos/reth-private
+      dockerfile: Dockerfile
+      ssh:
+        - default
+      args:
+        BUILD_PROFILE: release
     image: igranetwork/reth:${READONLY_RPC_RETH_VERSION:?READONLY_RPC_RETH_VERSION must be set to a reth tag supporting IGRA_RETH_PRUNE_DISTANCE_BLOCKS; see doc/node-operations/readonly-rpc-node.md}
     restart: *service-restart-policy
     container_name: execution-layer-readonly-rpc
@@ -239,6 +251,11 @@ services:
 
   rpc-proxy:
     <<: *default-service
+    build:
+      context: build/repos/igra-rpc-provider
+      dockerfile: Dockerfile
+      ssh:
+        - default
     image: igranetwork/rpc-provider:${READONLY_RPC_PROXY_VERSION:?READONLY_RPC_PROXY_VERSION must be set to an rpc-provider tag supporting walletless read-only mode; see doc/node-operations/readonly-rpc-node.md}
     restart: *service-restart-policy
     container_name: rpc-proxy-readonly-rpc

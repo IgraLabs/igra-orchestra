@@ -95,6 +95,33 @@ sudo docker exec rpc-proxy-readonly-rpc \
 If the first command prints nothing, the execution layer is running archive mode. Stop, destroy the reth data
 directory, and start over with a correct image — do not "enable it later".
 
+## Building From Source, And Why You Currently Have To
+
+All three gates above are waiting on capabilities that exist **on branches** but in no published tag. Until they
+ship, building from source is the only way to run this stack at all.
+
+Set `USE_PREBUILT_IMAGES=false` and name the branches, exactly as the main stack does:
+
+```bash
+RETH_BRANCH=<branch carrying the pruning and log-file work>
+KASPAD_BRANCH=master
+IGRA_RPC_PROVIDER_BRANCH=<branch carrying walletless read-only mode>
+```
+
+Then clone and build:
+
+```bash
+./scripts/dev/setup-repos.sh
+docker compose -f docker-compose.readonly-rpc.yml build
+```
+
+`setup-repos.sh` clones into `build/repos/` and checks out the branch named for each repository; the `build:`
+blocks in the compose file point at those paths. This needs SSH access to the private repositories.
+
+**This is a development and staging path, not a deployment one.** A hardened host has no build credentials and no
+reason to gain them, and the operator helper scripts pass `--no-build` precisely so a stale context can never be
+built there by accident. Build elsewhere, publish, pin by digest, then deploy.
+
 ## Storage: What Is And Is Not Bounded
 
 Two variables bound history, one per layer.
