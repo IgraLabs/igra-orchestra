@@ -171,7 +171,7 @@ jobs:
       - name: Render .env from the readonly-rpc example
         run: cp .env.readonly-rpc.example .env
       - name: Render docker-compose.readonly-rpc config
-        run: docker compose -f docker-compose.readonly-rpc.yml config -q
+        run: docker compose -f docker-compose.readonly-rpc.yml --profile backend config -q
       - name: Assert every required variable fails the render when absent
         run: |
           set -e
@@ -208,7 +208,7 @@ jobs:
             READONLY_RPC_PROXY_VERSION
           do
             grep -v "^${var}=" .env > "/tmp/no-${var}.env"
-            err=$(docker compose --env-file "/tmp/no-${var}.env" -f docker-compose.readonly-rpc.yml config -q 2>&1 || true)
+            err=$(docker compose --env-file "/tmp/no-${var}.env" -f docker-compose.readonly-rpc.yml --profile backend config -q 2>&1 || true)
             if printf '%s' "$err" | grep -qF "${var} must be set"; then
               echo "ok: readonly-rpc render rejected empty ${var}"
             else
@@ -218,7 +218,7 @@ jobs:
           done
       - name: Assert the resolved topology is read-only and unpublished
         run: |
-          docker compose -f docker-compose.readonly-rpc.yml config --format json > compose-readonly-rpc.json
+          docker compose -f docker-compose.readonly-rpc.yml --profile backend config --format json > compose-readonly-rpc.json
           python3 - <<'PY'
           import json
           import sys

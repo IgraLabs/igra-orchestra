@@ -47,6 +47,7 @@ x-parse-network-slug-volume: &parse-network-slug-volume ./scripts/lib/parse-netw
 services:
   kaspad:
     <<: *default-service
+    profiles: ["kaspad", "backend"]
     build:
       context: build/repos/rusty-kaspa-private
       dockerfile: build/Dockerfile.kaspad
@@ -202,6 +203,7 @@ services:
 
   execution-layer:
     <<: *default-service
+    profiles: ["execution-layer", "kaspad", "backend"]
     build:
       context: build/repos/reth-private
       dockerfile: Dockerfile
@@ -254,13 +256,17 @@ services:
   # sync without shelling onto the host.
   node-health-check-client:
     <<: *default-service
+    profiles: ["node-health-check-client", "backend"]
     image: igranetwork/node-health-check-client:${READONLY_RPC_HEALTH_CHECK_VERSION:?READONLY_RPC_HEALTH_CHECK_VERSION must be set}
     restart: *service-restart-policy
     container_name: node-health-check-client-readonly-rpc
     pids_limit: 128
+    # required:false keeps the standalone node-health-check-client profile
+    # renderable, matching docker-compose.yml.
     depends_on:
       execution-layer:
         condition: service_healthy
+        required: false
     environment:
       NODE_RPC_URL: http://execution-layer:8545
       MONITOR_URL: http://${NODE_HEALTH_CHECK_URL:?NODE_HEALTH_CHECK_URL must be set (the monitoring endpoint this node reports to)}:8081
@@ -284,6 +290,7 @@ services:
 
   rpc-proxy:
     <<: *default-service
+    profiles: ["rpc-proxy", "backend"]
     build:
       context: build/repos/igra-rpc-provider
       dockerfile: Dockerfile
@@ -322,9 +329,12 @@ services:
       readonly-rpc:
         aliases:
           - igra-local-rpc
+    # required:false keeps the standalone rpc-proxy profile renderable, matching
+    # how docker-compose.yml declares the same dependency on its workers.
     depends_on:
       execution-layer:
         condition: service_healthy
+        required: false
     healthcheck:
       <<: *default-healthcheck
       test:
