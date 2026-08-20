@@ -231,10 +231,11 @@ jobs:
           networks = config.get("networks", {})
           failures = []
 
-          # Exactly three services. The twenty rpc-provider/kaswallet worker
-          # pairs, traefik, wallet-balance-api and atan-uploader must never
-          # reach a signer host.
-          expected = ["execution-layer", "kaspad", "rpc-proxy"]
+          # Exactly four services: the two node processes, the read-only proxy,
+          # and the sync-status reporter. The twenty rpc-provider/kaswallet
+          # worker pairs, traefik, wallet-balance-api and atan-uploader must
+          # never reach a hardened host.
+          expected = ["execution-layer", "kaspad", "node-health-check-client", "rpc-proxy"]
           if sorted(services) != expected:
               failures.append(f"expected services {expected}, got {sorted(services)}")
 
@@ -277,9 +278,18 @@ jobs:
           if consumer_net.get("name") != "igra-readonly-rpc":
               failures.append(f"readonly-rpc network name is {consumer_net.get('name')!r}")
 
-          for name in ("kaspad", "execution-layer"):
-              if "readonly-rpc" in (services[name].get("networks") or {}):
-                  failures.append(f"{name} is attached to the readonly-rpc network")
+          # Assert only the proxy is on it, rather than naming services to
+          # exclude: a hardcoded exclusion list silently lets a NEW service onto
+          # the consumer network, which is the one boundary this file exists to
+          # hold.
+          on_consumer_net = sorted(
+              name for name, svc in services.items()
+              if "readonly-rpc" in (svc.get("networks") or {})
+          )
+          if on_consumer_net != ["rpc-proxy"]:
+              failures.append(
+                  f"only rpc-proxy may join the readonly-rpc network; found {on_consumer_net}"
+              )
 
           proxy_nets = services["rpc-proxy"].get("networks") or {}
           if "readonly-rpc" not in proxy_nets:

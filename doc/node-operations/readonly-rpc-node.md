@@ -1,7 +1,7 @@
 # Read-Only RPC Node
 
-A minimal, read-only Igra node for co-location on a hardened host. It runs `kaspad` and
-`execution-layer` and serves `eth_*` reads to a local consumer through a fail-closed proxy, as
+A minimal, read-only Igra node for co-location on a hardened host. It runs `kaspad`, `execution-layer` and a
+sync-status reporter, and serves `eth_*` reads to a local consumer through a fail-closed proxy, as
 `RPC_URL_1 = http://igra-local-rpc:8545`.
 
 Entry point: `docker-compose.readonly-rpc.yml`. Environment: `.env.readonly-rpc.example`.
@@ -131,6 +131,32 @@ around the gates.
 **This is a development and staging path, not a deployment one.** A hardened host has no build credentials and no
 reason to gain them, and the operator helper scripts pass `--no-build` precisely so a stale context can never be
 built there by accident. Build elsewhere, publish, pin, then deploy.
+
+## Sync Status
+
+`node-health-check-client` polls the execution layer every 8 seconds and pushes status to the monitor. It is the
+practical answer to "is this node actually in sync" — the alternative is the manual `RPC_URL_1`/`RPC_URL_2` parity
+comparison in Divergence Monitoring, which tells you the same thing but only when you run it.
+
+It sits on the `backend` network only. It reads the execution layer directly rather than through the proxy, and
+CI asserts it never joins the consumer-facing network.
+
+**Two things it adds to a hardened host, worth deciding deliberately:**
+
+- **An outbound dependency.** It connects to `${NODE_HEALTH_CHECK_URL}:8081` over **plaintext HTTP**. That is
+  egress from a machine whose design point is minimal surface, and the status it reports — chain head, versions,
+  node id — travels unencrypted.
+- **A shared credential.** `HEALTH_CHECK_API_KEY` is a monitoring key shared across nodes, now present in this
+  host's environment file.
+
+Neither is a reason not to run it; both are reasons to know it is running. If the trade is not worth it on a
+particular host, delete the service — nothing else depends on it, and the four required variables
+(`READONLY_RPC_HEALTH_CHECK_VERSION`, `NODE_ID`, `HEALTH_CHECK_API_KEY`, `NODE_HEALTH_CHECK_URL`) go with it.
+
+**Untested against this stack's hardening.** Like the other three services it inherits `user: "1000:1000"`,
+`read_only: true` and `cap_drop: ALL`. It mounts no volumes, so it avoids the ownership problem that affects
+`reth_data` — but whether the image tolerates a read-only root has not been exercised. Check it starts and stays
+up at first bring-up rather than assuming.
 
 ## Storage: What Is And Is Not Bounded
 
