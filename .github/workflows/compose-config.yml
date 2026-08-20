@@ -203,9 +203,10 @@ jobs:
             IGRA_LOCK_SCRIPT_PUBKEY \
             IGRA_RETH_PRUNE_DISTANCE_BLOCKS \
             KASPAD_RETENTION_PERIOD_DAYS \
-            READONLY_RPC_KASPAD_VERSION \
-            READONLY_RPC_RETH_VERSION \
-            READONLY_RPC_PROXY_VERSION
+            KASPAD_VERSION \
+            RETH_VERSION \
+            RPC_PROVIDER_VERSION \
+            NODE_HEALTH_CHECK_VERSION
           do
             grep -v "^${var}=" .env > "/tmp/no-${var}.env"
             err=$(docker compose --env-file "/tmp/no-${var}.env" -f docker-compose.readonly-rpc.yml --profile backend config -q 2>&1 || true)

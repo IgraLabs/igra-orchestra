@@ -53,7 +53,7 @@ services:
       dockerfile: build/Dockerfile.kaspad
       ssh:
         - default
-    image: igranetwork/kaspad:${READONLY_RPC_KASPAD_VERSION:?READONLY_RPC_KASPAD_VERSION must be set to a released kaspad tag; see doc/node-operations/readonly-rpc-node.md}
+    image: igranetwork/kaspad:${KASPAD_VERSION:?KASPAD_VERSION must be set to a released kaspad tag; see doc/node-operations/readonly-rpc-node.md}
     restart: *service-restart-policy
     container_name: kaspad-readonly-rpc
     pids_limit: 512
@@ -211,7 +211,7 @@ services:
         - default
       args:
         BUILD_PROFILE: release
-    image: igranetwork/reth:${READONLY_RPC_RETH_VERSION:?READONLY_RPC_RETH_VERSION must be set to a reth tag supporting IGRA_RETH_PRUNE_DISTANCE_BLOCKS; see doc/node-operations/readonly-rpc-node.md}
+    image: igranetwork/reth:${RETH_VERSION:?RETH_VERSION must be set to a reth tag supporting IGRA_RETH_PRUNE_DISTANCE_BLOCKS; see doc/node-operations/readonly-rpc-node.md}
     restart: *service-restart-policy
     container_name: execution-layer-readonly-rpc
     pids_limit: 512
@@ -257,7 +257,7 @@ services:
   node-health-check-client:
     <<: *default-service
     profiles: ["node-health-check-client", "backend"]
-    image: igranetwork/node-health-check-client:${READONLY_RPC_HEALTH_CHECK_VERSION:?READONLY_RPC_HEALTH_CHECK_VERSION must be set}
+    image: igranetwork/node-health-check-client:${NODE_HEALTH_CHECK_VERSION:?NODE_HEALTH_CHECK_VERSION must be set}
     restart: *service-restart-policy
     container_name: node-health-check-client-readonly-rpc
     pids_limit: 128
@@ -275,13 +275,13 @@ services:
       POLL_INTERVAL: 8
       NETWORK: ${NETWORK}
       GENESIS_BLOCK_HASH: ${GENESIS_BLOCK_HASH}
-      KASPAD_VERSION: ${READONLY_RPC_KASPAD_VERSION}
-      RETH_VERSION: ${READONLY_RPC_RETH_VERSION}
-      NODE_HEALTH_CHECK_VERSION: ${READONLY_RPC_HEALTH_CHECK_VERSION}
-      # Reported as version metadata by the client. This stack runs none of
-      # these services, so they are explicitly empty rather than undefined.
+      KASPAD_VERSION: ${KASPAD_VERSION}
+      RETH_VERSION: ${RETH_VERSION}
+      NODE_HEALTH_CHECK_VERSION: ${NODE_HEALTH_CHECK_VERSION}
+      RPC_PROVIDER_VERSION: ${RPC_PROVIDER_VERSION}
+      # Reported as version metadata by the client. This stack runs neither
+      # service, so they are explicitly empty rather than undefined.
       KASWALLET_VERSION: ""
-      RPC_PROVIDER_VERSION: ""
       ATAN_UPLOADER_VERSION: ""
     # The image has no ps/pgrep, so its baked-in HEALTHCHECK always fails.
     healthcheck:
@@ -296,7 +296,7 @@ services:
       dockerfile: Dockerfile
       ssh:
         - default
-    image: igranetwork/rpc-provider:${READONLY_RPC_PROXY_VERSION:?READONLY_RPC_PROXY_VERSION must be set to an rpc-provider tag supporting walletless read-only mode; see doc/node-operations/readonly-rpc-node.md}
+    image: igranetwork/rpc-provider:${RPC_PROVIDER_VERSION:?RPC_PROVIDER_VERSION must be set to an rpc-provider tag supporting walletless read-only mode; see doc/node-operations/readonly-rpc-node.md}
     restart: *service-restart-policy
     container_name: rpc-proxy-readonly-rpc
     pids_limit: 256
