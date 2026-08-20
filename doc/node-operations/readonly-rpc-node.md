@@ -14,7 +14,12 @@ Entry point: `docker-compose.readonly-rpc.yml` · Environment: `.env.readonly-rp
 | `rpc-proxy` | `rpc-proxy`, `backend` | fail-closed read-only allowlist; the only thing the consumer reaches |
 | `node-health-check-client` | `node-health-check-client`, `backend` | pushes sync status to the monitor |
 
-Profile names match `docker-compose.yml`. **A profile is required** — with none set, nothing starts.
+Profile and container names match `docker-compose.yml`. **A profile is required** — with none set, nothing starts.
+
+Because the container names match, this stack and the full orchestra stack **cannot run on the same Docker
+daemon** — `container_name` is global, so the second one to start fails with a name conflict. That is fine for the
+intended deployment, where this is the only Igra stack on the host, but it does mean you cannot bring both up on
+one development machine.
 
 ## Start
 
@@ -48,7 +53,7 @@ Config changes need `up -d`, never `restart` — `restart` reuses the environmen
 ```bash
 # Stage 1: IGRA_ENABLE=false in .env (the shipped default), sync L1 first
 docker compose -f docker-compose.readonly-rpc.yml --profile kaspad up -d
-journalctl --no-pager -u docker CONTAINER_NAME=kaspad-readonly-rpc -n 50
+journalctl --no-pager -u docker CONTAINER_NAME=kaspad -n 50
 
 # Stage 2: set IGRA_ENABLE=true, then
 docker compose -f docker-compose.readonly-rpc.yml --profile backend up -d
@@ -75,11 +80,11 @@ docker run --rm --network igra-readonly-rpc curlimages/curl -sS \
 docker run --rm --network igra-readonly-rpc busybox nslookup kaspad     # must fail
 
 # pruning actually active
-journalctl --no-pager -u docker CONTAINER_NAME=execution-layer-readonly-rpc \
+journalctl --no-pager -u docker CONTAINER_NAME=execution-layer \
   | grep 'Pruning: enabled; distance=600000'
 
 # logs
-journalctl --no-pager -u docker CONTAINER_NAME=kaspad-readonly-rpc -n 50
+journalctl --no-pager -u docker CONTAINER_NAME=kaspad -n 50
 ```
 
 An error alone does not prove the write guard works — `eth_sendRawTransaction` fails on a malformed payload too.

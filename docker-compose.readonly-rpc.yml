@@ -55,7 +55,7 @@ services:
         - default
     image: igranetwork/kaspad:${KASPAD_VERSION:?KASPAD_VERSION must be set to a released kaspad tag; see doc/node-operations/readonly-rpc-node.md}
     restart: *service-restart-policy
-    container_name: kaspad-readonly-rpc
+    container_name: kaspad
     pids_limit: 512
     depends_on:
       execution-layer:
@@ -213,7 +213,7 @@ services:
         BUILD_PROFILE: release
     image: igranetwork/reth:${RETH_VERSION:?RETH_VERSION must be set to a reth tag supporting IGRA_RETH_PRUNE_DISTANCE_BLOCKS; see doc/node-operations/readonly-rpc-node.md}
     restart: *service-restart-policy
-    container_name: execution-layer-readonly-rpc
+    container_name: execution-layer
     pids_limit: 512
     entrypoint: /app/run-igra-el.sh
     environment:
@@ -259,7 +259,7 @@ services:
     profiles: ["node-health-check-client", "backend"]
     image: igranetwork/node-health-check-client:${NODE_HEALTH_CHECK_VERSION:?NODE_HEALTH_CHECK_VERSION must be set}
     restart: *service-restart-policy
-    container_name: node-health-check-client-readonly-rpc
+    container_name: node-health-check-client
     pids_limit: 128
     # required:false keeps the standalone node-health-check-client profile
     # renderable, matching docker-compose.yml.
@@ -298,7 +298,7 @@ services:
         - default
     image: igranetwork/rpc-provider:${RPC_PROVIDER_VERSION:?RPC_PROVIDER_VERSION must be set to an rpc-provider tag supporting walletless read-only mode; see doc/node-operations/readonly-rpc-node.md}
     restart: *service-restart-policy
-    container_name: rpc-proxy-readonly-rpc
+    container_name: rpc-proxy
     pids_limit: 256
     environment:
       SERVER_HOST: "0.0.0.0"
