@@ -85,23 +85,11 @@ journalctl --no-pager -u docker CONTAINER_NAME=kaspad-readonly-rpc -n 50
 An error alone does not prove the write guard works — `eth_sendRawTransaction` fails on a malformed payload too.
 Check for `-32000` specifically.
 
-## Before deploying
-
-**The image tags in the example are current published ones and do not carry what this stack needs.** Replace them,
-then confirm with the checks above rather than trusting the tag.
-
-| Variable | Needs | If ignored |
-|---|---|---|
-| `READONLY_RPC_RETH_VERSION` | launcher supports `IGRA_RETH_PRUNE_DISTANCE_BLOCKS` | runs **archive mode** silently — one-way per volume, only a full resync fixes it |
-| `READONLY_RPC_RETH_VERSION` | launcher passes `--log.file.max-files 0` | ~1 GB of debug logs on the database's own I/O path |
-| `READONLY_RPC_PROXY_VERSION` | starts **without a wallet** | exits before binding a listener; no endpoint at all |
-
-**Known blocker:** `reth_data` initializes root-owned, so the uid-1000 execution layer cannot write and the stack
-does not start. Fix in the reth image (`mkdir -p /app/data && chown 1000:1000 /app/data`, as `Dockerfile.kaspad`
-already does), or `chown` the volume as root before first start.
-
 ## Notes
 
+- **Open blocker.** `reth_data` initializes root-owned, so the uid-1000 execution layer cannot write and the stack
+  does not start. Fix in the reth image (`mkdir -p /app/data && chown 1000:1000 /app/data`, as `Dockerfile.kaspad`
+  already does), or `chown` the volume as root before first start.
 - **Storage.** `IGRA_RETH_PRUNE_DISTANCE_BLOCKS=600000` (~7.3 days) bounds four reth history segments;
   `KASPAD_RETENTION_PERIOD_DAYS=7` bounds L1. **Neither bounds total disk**, and pruning is one-way per volume.
   `eth_getLogs` older than the window is unavailable, so `RPC_URL_2` must be archive-capable.
