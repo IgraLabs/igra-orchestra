@@ -57,7 +57,7 @@ and the compose file requires them under names distinct from the mainnet pins.
 |---|---|---|---|
 | `READONLY_RPC_RETH_VERSION` (pruning) | A reth tag whose launcher supports `IGRA_RETH_PRUNE_DISTANCE_BLOCKS` | The variable is ignored and the node runs **archive mode**. | **No.** Pruning is one-way per data directory; correcting it later costs a full resync. |
 | `READONLY_RPC_PROXY_VERSION` | An `rpc-provider` tag that starts **without a wallet** | The image builds its wallet client and requires `KASWALLET_PASSWORD` before binding a listener. With no kaswallet it exits before serving a request, and the consumer has no `RPC_URL_1` at all. | Yes — it fails loudly at bring-up. |
-| `READONLY_RPC_RETH_VERSION` (file logging) | The **same** reth tag, with the launcher passing `--log.file.max-files 0` | reth's background file logger stays on at its default `debug` filter, writing a sustained ~1 GB rotating stream into `${IGRA_DATA_ROOT}/reth/.cache` — the same filesystem and I/O path as its own database. | Yes — add the flag and delete the logs; no resync. |
+| `READONLY_RPC_RETH_VERSION` (file logging) | The **same** reth tag, with the launcher passing `--log.file.max-files 0` | reth's background file logger stays on at its default `debug` filter, writing a sustained ~1 GB rotating stream into the `reth_data` volume — the same filesystem and I/O path as its own database. | Yes — add the flag and delete the logs; no resync. |
 
 **On the third gate.** It rides the *same* reth release as the first: `--log.file.max-files` is an existing upstream
 flag, so the only change is the launcher passing it. That makes the cost of including it approximately zero, and
@@ -129,7 +129,7 @@ window has to bootstrap from `RPC_URL_2`.
 
 **Pruning is one-way.** reth persists the configuration into the data directory's `reth.toml`. Removing the variable
 does not restore archive behaviour, and raising the distance does not bring deleted history back. Rollback is
-destroying `${IGRA_DATA_ROOT}/reth` and resyncing. Set it correctly before the first sync.
+removing the `reth_data` volume and resyncing. Set it correctly before the first sync.
 
 ## Host Prerequisites
 
@@ -139,13 +139,12 @@ Provisioned by the host's own setup procedure, not by this repository:
   kaspad and the proxy bind-mount `./scripts/lib/watch-dependencies.sh`, and kaspad also mounts
   `./scripts/lib/parse-network-slug.sh`; those paths resolve relative to the compose file's directory. Copying the
   compose file alone leaves the mounts dangling and the containers fail at create.
-- `${IGRA_DATA_ROOT}` with `kaspad/` and `reth/` subdirectories, **owned `1000:1000`** — which on this host is
-  the host's operator account. All three services set `user: "1000:1000"` explicitly,
-  which bypasses the images' own root-then-drop entrypoint setup, so ownership must be right *before* first start
-  or the containers cannot write their data directories. The compose file uses `create_host_path: false`, so a typo
-  fails at container create rather than silently creating a root-owned directory and resyncing onto the wrong
-  filesystem.
-- `${IGRA_JWT_PATH}` — the shared engine-API JWT, readable by uid 1000 in both containers, not writable by them.
+- **Docker's volume root on the intended filesystem.** Chain data lives in the named volumes `kaspad_data` and
+  `reth_data`, which Docker places under `/var/lib/docker/volumes`. This stack does not choose that location, so
+  the host must: point `/var/lib/docker` at the filesystem sized for chain data before first start, or the volumes
+  land on the root filesystem and fill it.
+- **`./keys/jwt.hex`** — the shared engine-API JWT, relative to the compose file, readable by uid 1000 in both
+  containers. Same convention as the other stacks in this repository.
 - `igra-rpc.slice`, a systemd slice carrying the aggregate resource limits. The compose file places all three
   containers under it via `cgroup_parent`; the numbers live in the slice because `MemoryHigh` has no Compose
   equivalent and per-service limits would grant the stack several times the intended budget.

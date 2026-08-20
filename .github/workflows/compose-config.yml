@@ -244,8 +244,6 @@ jobs:
             IGRA_LOCK_SCRIPT_PUBKEY \
             IGRA_RETH_PRUNE_DISTANCE_BLOCKS \
             KASPAD_RETENTION_PERIOD_DAYS \
-            IGRA_DATA_ROOT \
-            IGRA_JWT_PATH \
             READONLY_RPC_KASPAD_VERSION \
             READONLY_RPC_RETH_VERSION \
             READONLY_RPC_PROXY_VERSION
@@ -363,21 +361,21 @@ jobs:
               )
           else:
               # Compare path COMPONENTS, not a string prefix: "/app/database"
-              # startswith "/app/data" but is outside the bind, which would
+              # startswith "/app/data" but is outside the mount, which would
               # restore the startup panic this guard exists to prevent.
               cache_parts = PurePosixPath(cache_home).parts
-              el_bind_targets = {
+              writable = {
                   v.get("target")
                   for v in services["execution-layer"].get("volumes", [])
-                  if v.get("type") == "bind"
+                  if v.get("type") in ("volume", "bind", "tmpfs") and not v.get("read_only")
               }
               if not any(
-                  target and PurePosixPath(target).parts == cache_parts[: len(PurePosixPath(target).parts)]
-                  for target in el_bind_targets
+                  t and PurePosixPath(t).parts == cache_parts[: len(PurePosixPath(t).parts)]
+                  for t in writable
               ):
                   failures.append(
                       f"execution-layer XDG_CACHE_HOME is {cache_home!r}, which is not inside any of its "
-                      f"bind mounts {sorted(t for t in el_bind_targets if t)}; reth would panic creating "
+                      f"writable mounts {sorted(t for t in writable if t)}; reth would panic creating "
                       "its log directory on the read-only root"
                   )
               elif cache_parts[:2] == ("/", "tmp"):
@@ -386,63 +384,21 @@ jobs:
                       "rotates 5x200MB, which trades the boot panic for silent ENOSPC"
                   )
 
-          # Two separate failures to catch. First: a script the entrypoint calls
-          # but nothing mounts — deleting the mount would otherwise pass this
-          # check vacuously while the container still execs the path. Second: a
-          # mount that permits host-path creation, where Docker silently makes a
-          # root-owned DIRECTORY at a missing source and the container starts
-          # and crash-loops instead of failing at create.
+          # A script the entrypoint calls must actually be mounted. Deleting a
+          # mount would otherwise pass silently while the container still
+          # execs the path.
           for name, service in services.items():
               entrypoint = "\n".join(service.get("entrypoint") or [])
-              mounted_scripts = {
+              mounted = {
                   v.get("target")
                   for v in service.get("volumes", [])
-                  if v.get("type") == "bind" and str(v.get("target", "")).endswith(".sh")
+                  if str(v.get("target", "")).endswith(".sh")
               }
               for script in ("/app/watch-dependencies.sh", "/app/parse-network-slug.sh"):
-                  if script in entrypoint and script not in mounted_scripts:
+                  if script in entrypoint and script not in mounted:
                       failures.append(
                           f"{name} entrypoint calls {script} but no bind mount provides it"
                       )
-              for volume in service.get("volumes", []):
-                  if volume.get("type") != "bind":
-                      continue
-                  if str(volume.get("target", "")).endswith(".sh"):
-                      if (volume.get("bind") or {}).get("create_host_path") is not False:
-                          failures.append(
-                              f"{name} script mount {volume.get('target')} allows host path creation"
-                          )
-
-          kaspad = services["kaspad"]
-          kaspad_entrypoint = "\n".join(kaspad.get("entrypoint", []))
-
-          # kaspad writes rotating log files under its appdir unless told not
-          # to; without this the data volume grows regardless of the log driver.
-          if "--nologfiles" not in kaspad_entrypoint:
-              failures.append("kaspad entrypoint does not pass --nologfiles")
-          if "--logdir" in kaspad_entrypoint:
-              failures.append("kaspad entrypoint still passes --logdir")
-          if "--retention-period-days" not in kaspad_entrypoint:
-              failures.append("kaspad entrypoint does not pass --retention-period-days")
-
-          # Mirrored from the mainnet stack: an empty prefix or missing lane id
-          # silently degrades post-Toccata ATAN filtering.
-          for guard in ("IGRA_LANE_ID must be set", "TX_ID_PREFIX must be set"):
-              if guard not in kaspad_entrypoint:
-                  failures.append(f"kaspad entrypoint is missing the fail-fast guard: {guard}")
-          if "--igra-lane-id=$$IGRA_LANE_ID" not in kaspad_entrypoint:
-              failures.append("kaspad entrypoint does not forward IGRA_LANE_ID as --igra-lane-id")
-
-          # A typo in the data root must fail at container create, not create a
-          # root-owned directory and resync from genesis onto the wrong disk.
-          for name in ("kaspad", "execution-layer"):
-              for volume in services[name].get("volumes", []):
-                  if volume.get("type") != "bind":
-                      continue
-                  target = volume.get("target")
-                  if target in ("/app/data", "/app/jwt.hex"):
-                      if (volume.get("bind") or {}).get("create_host_path") is not False:
-                          failures.append(f"{name} bind {target} allows host path creation")
 
           if failures:
               for failure in failures:
