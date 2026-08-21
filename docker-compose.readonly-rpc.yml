@@ -78,6 +78,12 @@ services:
       - POST_FORK_LOCK_SCRIPT_PUBKEY
       - LOCK_SCRIPT_FORK_DAA_SCORE
       - RUST_LOG=${RUST_LOG:-info}
+      # Pruning-proof validation builds a full temporary RocksDB under
+      # $TMPDIR/rusty-kaspa (database/src/utils.rs:44-49, via
+      # std::env::temp_dir()). The shared /tmp tmpfs is 64 MB of RAM and it
+      # fills, panicking the node with "No space left on device". Point it at
+      # the data volume, which is on disk and sized for chain data.
+      - TMPDIR=/app/data/tmp
     entrypoint:
       - sh
       - -ec
@@ -203,7 +209,7 @@ services:
 
   execution-layer:
     <<: *default-service
-    profiles: ["execution-layer", "kaspad", "backend"]
+    profiles: ["execution-layer", "backend"]
     build:
       context: build/repos/reth-private
       dockerfile: Dockerfile
@@ -290,7 +296,7 @@ services:
 
   rpc-proxy:
     <<: *default-service
-    profiles: ["rpc-proxy", "backend"]
+    profiles: ["rpc-proxy", "frontend"]
     build:
       context: build/repos/igra-rpc-provider
       dockerfile: Dockerfile

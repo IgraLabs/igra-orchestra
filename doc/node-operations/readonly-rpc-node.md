@@ -141,6 +141,17 @@ Check for `-32000` specifically.
     -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
     http://execution-layer:8545
   ```
+- **kaspad's temp store is on the data volume, not `/tmp`.** Pruning-proof validation builds a full temporary
+  RocksDB under `$TMPDIR/rusty-kaspa`. The shared `/tmp` is a 64 MB tmpfs — RAM — and it fills, panicking the node:
+
+  ```
+  panicked at consensus/src/processes/pruning_proof/validate.rs:248:
+  StoreError(DbError(... No space left on device: /tmp/rusty-kaspa/.tmpXXXX/000029.log))
+  ```
+
+  `TMPDIR=/app/data/tmp` puts it on disk instead. Budget for it alongside chain data: it is transient but not
+  small.
+
 - **Storage.** `IGRA_RETH_PRUNE_DISTANCE_BLOCKS=600000` (~7.3 days) bounds four reth history segments;
   `KASPAD_RETENTION_PERIOD_DAYS=7` bounds L1. **Neither bounds total disk**, and pruning is one-way per volume.
   `eth_getLogs` older than the window is unavailable, so `RPC_URL_2` must be archive-capable.
