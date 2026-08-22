@@ -5,6 +5,8 @@ on:
     paths:
       - 'docker-compose.yml'
       - 'docker-compose.atan.yml'
+      - 'docker-compose.readonly-rpc.yml'
+      - 'docker-compose.devnet.yml'
       - '.env.example'
       - '.env.*.example'
       - 'versions.*.env'
@@ -110,6 +112,19 @@ jobs:
               print("kaswallet entrypoint is missing the IGRA_LANE_ID fail-fast guard", file=sys.stderr)
               sys.exit(1)
 
+          # A variable present in .env is only an interpolation source; Compose
+          # does not inject it into any container. IGRA_RETH_PRUNE_DISTANCE_BLOCKS
+          # sat in a live node's .env unforwarded, so reth ran unpruned while the
+          # .env said otherwise and nothing failed to signal it.
+          el_env = services["execution-layer"].get("environment") or {}
+          if "IGRA_RETH_PRUNE_DISTANCE_BLOCKS" not in el_env:
+              print(
+                  "execution-layer does not forward IGRA_RETH_PRUNE_DISTANCE_BLOCKS; setting it in "
+                  ".env would silently do nothing",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
           kaspad_entrypoint = "\n".join(services["kaspad"].get("entrypoint", []))
           if "--igra-lane-id=$$IGRA_LANE_ID" not in kaspad_entrypoint:
               print("kaspad entrypoint does not forward IGRA_LANE_ID as --igra-lane-id", file=sys.stderr)
@@ -158,6 +173,263 @@ jobs:
           if "TX_ID_PREFIX must be set" not in kaspad_entrypoint:
               print("docker-compose.atan.yml kaspad is missing the TX_ID_PREFIX fail-fast guard", file=sys.stderr)
               sys.exit(1)
+          PY
+
+  readonly-rpc-config:
+    name: docker compose config (readonly-rpc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Render .env from the readonly-rpc example
+        run: cp .env.readonly-rpc.example .env
+      - name: Render docker-compose.readonly-rpc config
+        run: docker compose -f docker-compose.readonly-rpc.yml --profile backend config -q
+      - name: Assert every required variable fails the render when absent
+        run: |
+          set -e
+          # Each of these is required because omitting it degrades silently at
+          # runtime rather than failing: an unset prune distance runs archive
+          # mode, an unset chain parameter points the node at a different
+          # chain, an unset image tag resolves to a capability-less image.
+          # Chain-identity variables are in this list for the same reason as the
+          # storage and image ones: an empty value does not stop the stack, it
+          # points it at a different chain, and the consumer then acts on
+          # state that is not Igra. GENESIS_BLOCK_HASH is the sharpest case
+          # — kaspad is its only consumer, so unlike the reth-side parameters
+          # nothing downstream fail-fasts on it.
+          for var in \
+            NETWORK \
+            IGRA_LANE_ID \
+            TX_ID_PREFIX \
+            IGRA_CHAIN_ID \
+            GENESIS_BLOCK_HASH \
+            L1_REFERENCE_TIMESTAMP \
+            L1_REFERENCE_DAA_SCORE \
+            IGRA_LAUNCH_DAA_SCORE \
+            EL_ONE_TIME_ADDRESS \
+            MIN_PROTOCOL_FEE_PER_GAS_GWEI \
+            IGRA_ENTRY_MIN_AMOUNT \
+            BITCOIN_BLOCK_HASH \
+            ETHEREUM_BLOCK_HASH \
+            KASPA_BLOCK_HASH \
+            IGRA_LOCK_SCRIPT_PUBKEY \
+            IGRA_RETH_PRUNE_DISTANCE_BLOCKS \
+            KASPAD_RETENTION_PERIOD_DAYS \
+            KASPAD_VERSION \
+            RETH_VERSION \
+            RPC_PROVIDER_VERSION \
+            NODE_HEALTH_CHECK_VERSION
+          do
+            grep -v "^${var}=" .env > "/tmp/no-${var}.env"
+            err=$(docker compose --env-file "/tmp/no-${var}.env" -f docker-compose.readonly-rpc.yml --profile backend config -q 2>&1 || true)
+            if printf '%s' "$err" | grep -qF "${var} must be set"; then
+              echo "ok: readonly-rpc render rejected empty ${var}"
+            else
+              printf 'FAIL: readonly-rpc render did not reject empty %s; got:\n%s\n' "$var" "$err" >&2
+              exit 1
+            fi
+          done
+      - name: Assert the resolved topology is read-only and unpublished
+        run: |
+          docker compose -f docker-compose.readonly-rpc.yml --profile backend config --format json > compose-readonly-rpc.json
+          python3 - <<'PY'
+          import json
+          import sys
+          from pathlib import PurePosixPath
+
+          with open("compose-readonly-rpc.json", encoding="utf-8") as fh:
+              config = json.load(fh)
+
+          services = config["services"]
+          networks = config.get("networks", {})
+          failures = []
+
+          # Exactly four services: the two node processes, the read-only proxy,
+          # and the sync-status reporter. The twenty rpc-provider/kaswallet
+          # worker pairs, traefik, wallet-balance-api and atan-uploader must
+          # never reach a hardened host.
+          expected = ["execution-layer", "kaspad", "node-health-check-client", "rpc-proxy"]
+          if sorted(services) != expected:
+              failures.append(f"expected services {expected}, got {sorted(services)}")
+
+          for name, service in services.items():
+              # No host publishes anywhere. On a signer host, a published RPC
+              # port is a write-capable endpoint on the host network.
+              if service.get("ports"):
+                  failures.append(f"{name} publishes host ports: {service['ports']}")
+              if service.get("expose"):
+                  failures.append(f"{name} declares expose: {service['expose']}")
+
+              # journald is the only route to container output for the
+              # unprivileged host operator, and the json-file rotation options
+              # the shared anchor carries are invalid for it.
+              logging = service.get("logging") or {}
+              if logging.get("driver") != "journald":
+                  failures.append(f"{name} logging driver is {logging.get('driver')!r}, expected 'journald'")
+              options = sorted((logging.get("options") or {}))
+              if options != ["tag"]:
+                  failures.append(f"{name} logging options are {options}, expected ['tag']")
+
+              # Aggregate limits are enforced by a host systemd slice; the
+              # containers must actually be placed under it.
+              if service.get("cgroup_parent") != "igra-rpc.slice":
+                  failures.append(f"{name} cgroup_parent is {service.get('cgroup_parent')!r}")
+
+              # There is no traefik in this stack; a router label would imply
+              # a route that does not exist.
+              traefik = [k for k in (service.get("labels") or {}) if k.startswith("traefik.")]
+              if traefik:
+                  failures.append(f"{name} carries traefik labels: {traefik}")
+
+          # The consumer's network must be internal, and only the read-only
+          # proxy may sit on it. If kaspad or the raw execution layer joined
+          # it, the consumer could reach an all-namespace write-capable RPC
+          # directly and proxy failure would stop being fail-closed.
+          consumer_net = networks.get("readonly-rpc") or {}
+          if not consumer_net.get("internal"):
+              failures.append("readonly-rpc network is not internal")
+          if consumer_net.get("name") != "igra-readonly-rpc":
+              failures.append(f"readonly-rpc network name is {consumer_net.get('name')!r}")
+
+          # Assert only the proxy is on it, rather than naming services to
+          # exclude: a hardcoded exclusion list silently lets a NEW service onto
+          # the consumer network, which is the one boundary this file exists to
+          # hold.
+          on_consumer_net = sorted(
+              name for name, svc in services.items()
+              if "readonly-rpc" in (svc.get("networks") or {})
+          )
+          if on_consumer_net != ["rpc-proxy"]:
+              failures.append(
+                  f"only rpc-proxy may join the readonly-rpc network; found {on_consumer_net}"
+              )
+
+          proxy_nets = services["rpc-proxy"].get("networks") or {}
+          if "readonly-rpc" not in proxy_nets:
+              failures.append("rpc-proxy is not attached to the readonly-rpc network")
+          else:
+              aliases = (proxy_nets["readonly-rpc"] or {}).get("aliases") or []
+              if "igra-local-rpc" not in aliases:
+                  failures.append(f"rpc-proxy lacks the igra-local-rpc alias; got {aliases}")
+
+          # The whole write-path guard. These must be literals in the compose
+          # file, not interpolations: the image defaults read-only to false, so
+          # an env-file mistake would otherwise turn the consumer's only
+          # endpoint into a write path.
+          proxy_env = services["rpc-proxy"].get("environment") or {}
+          for key in ("READ_ONLY", "SECURITY_ENABLE_WHITELIST"):
+              if proxy_env.get(key) != "true":
+                  failures.append(f"rpc-proxy {key} is {proxy_env.get(key)!r}, expected 'true'")
+          if proxy_env.get("SERVER_PORT") != "8545":
+              failures.append(f"rpc-proxy SERVER_PORT is {proxy_env.get('SERVER_PORT')!r}, expected '8545'")
+
+          # Bounded history on both layers.
+          el_env = services["execution-layer"].get("environment") or {}
+          if not el_env.get("IGRA_RETH_PRUNE_DISTANCE_BLOCKS"):
+              failures.append("execution-layer does not receive IGRA_RETH_PRUNE_DISTANCE_BLOCKS")
+
+          # reth turns background file logging on by default and panics —
+          # create_dir_all(...).expect(...) — if it cannot create
+          # $XDG_CACHE_HOME/reth/logs. With read_only: true that directory must
+          # be inside a writable mount, and must NOT be the 64 MB /tmp tmpfs,
+          # because the rotation budget is 5 x 200 MB. Without this the whole
+          # stack fails at first bring-up: kaspad and the proxy both gate on
+          # execution-layer becoming healthy.
+          cache_home = el_env.get("XDG_CACHE_HOME")
+          if not cache_home:
+              failures.append(
+                  "execution-layer has no XDG_CACHE_HOME; with read_only:true reth panics "
+                  "creating its default log directory on the read-only root"
+              )
+          else:
+              # Compare path COMPONENTS, not a string prefix: "/app/database"
+              # startswith "/app/data" but is outside the mount, which would
+              # restore the startup panic this guard exists to prevent.
+              cache_parts = PurePosixPath(cache_home).parts
+              writable = {
+                  v.get("target")
+                  for v in services["execution-layer"].get("volumes", [])
+                  if v.get("type") in ("volume", "bind", "tmpfs") and not v.get("read_only")
+              }
+              if not any(
+                  t and PurePosixPath(t).parts == cache_parts[: len(PurePosixPath(t).parts)]
+                  for t in writable
+              ):
+                  failures.append(
+                      f"execution-layer XDG_CACHE_HOME is {cache_home!r}, which is not inside any of its "
+                      f"writable mounts {sorted(t for t in writable if t)}; reth would panic creating "
+                      "its log directory on the read-only root"
+                  )
+              elif cache_parts[:2] == ("/", "tmp"):
+                  failures.append(
+                      f"execution-layer XDG_CACHE_HOME is {cache_home!r}; /tmp is a 64MB tmpfs and reth "
+                      "rotates 5x200MB, which trades the boot panic for silent ENOSPC"
+                  )
+
+          # A script the entrypoint calls must actually be mounted. Deleting a
+          # mount would otherwise pass silently while the container still
+          # execs the path.
+          for name, service in services.items():
+              entrypoint = "\n".join(service.get("entrypoint") or [])
+              mounted = {
+                  v.get("target")
+                  for v in service.get("volumes", [])
+                  if str(v.get("target", "")).endswith(".sh")
+              }
+              for script in ("/app/watch-dependencies.sh", "/app/parse-network-slug.sh"):
+                  if script in entrypoint and script not in mounted:
+                      failures.append(
+                          f"{name} entrypoint calls {script} but no bind mount provides it"
+                      )
+
+          if failures:
+              for failure in failures:
+                  print(f"FAIL: {failure}", file=sys.stderr)
+              sys.exit(1)
+
+          print("ok: readonly-rpc topology assertions passed")
+          PY
+
+  devnet-config:
+    name: docker compose config (devnet)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Render .env from example + versions
+        run: |
+          cp .env.devnet.example .env
+          cat versions.devnet.env >> .env
+      - name: Render docker-compose.devnet config
+        run: docker compose -f docker-compose.devnet.yml --profile backend --profile frontend-w1 config -q
+      - name: Assert the execution layer forwards the prune distance
+        run: |
+          docker compose -f docker-compose.devnet.yml --profile backend --profile frontend-w1 \
+            config --format json > compose-devnet.json
+          python3 - <<'PY'
+          import json
+          import sys
+
+          with open("compose-devnet.json", encoding="utf-8") as fh:
+              services = json.load(fh)["services"]
+
+          # A variable present in .env is only an interpolation source; Compose
+          # does not inject it into any container. Asserted here for the same
+          # reason as in the full-stack job: setting it in .env and having it do
+          # nothing is silent, and only shows up as an oversized data directory.
+          if "IGRA_RETH_PRUNE_DISTANCE_BLOCKS" not in (
+              services["execution-layer"].get("environment") or {}
+          ):
+              print(
+                  "devnet execution-layer does not forward IGRA_RETH_PRUNE_DISTANCE_BLOCKS; "
+                  "setting it in .env would silently do nothing",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          print("ok: devnet forwards IGRA_RETH_PRUNE_DISTANCE_BLOCKS")
           PY
 
   slug-parser-tests:

@@ -51,6 +51,7 @@ nav:
       - Wallet Management: node-operations/wallet-management.md
       - Health Check: node-operations/health-check.md
       - ATAN-Only Mode: node-operations/atan-only.md
+      - Read-Only RPC Node: node-operations/readonly-rpc-node.md
       - ATAN Verification: node-operations/atan-verification.md
       - Environment Reference: node-operations/environment-reference.md
       - Running a CPU Miner: node-operations/running-a-cpu-miner.md
