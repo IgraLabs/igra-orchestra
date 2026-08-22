@@ -1,7 +1,8 @@
-name: igra-readonly-rpc-${NETWORK:?NETWORK must be set to mainnet or testnet-10}
+name: igra-orchestra-${NETWORK:?NETWORK must be set to mainnet or testnet-10}
 
 volumes:
   kaspad_data:
+  traefik_certs:
   reth_data:
   reth_ipc:
     driver: local
@@ -9,7 +10,6 @@ volumes:
       type: tmpfs
       device: tmpfs
       o: size=10m
-
 networks:
   backend:
   readonly-rpc:

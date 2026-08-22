@@ -259,6 +259,15 @@ services:
       KASPA_BLOCK_HASH: ${KASPA_BLOCK_HASH}
       POST_FORK_LOCK_SCRIPT_PUBKEY: ${POST_FORK_LOCK_SCRIPT_PUBKEY:-}
       LOCK_SCRIPT_FORK_DAA_SCORE: ${LOCK_SCRIPT_FORK_DAA_SCORE:-}
+      # Opt-in, one-way per data directory, empty = archive mode (today's
+      # behaviour). Without this line the variable in .env is interpolation-only
+      # -- Compose never injects it, run-igra-el.sh sees nothing, and reth runs
+      # unpruned while .env suggests otherwise.
+      #
+      # Bounds four history segments only; Merkle changesets are pinned at 1e9
+      # blocks and dominate the volume. On devnet the reth data directory is a
+      # bind mount (./data/reth), so `rm -rf` is the usual reset, not pruning.
+      IGRA_RETH_PRUNE_DISTANCE_BLOCKS: ${IGRA_RETH_PRUNE_DISTANCE_BLOCKS:-}
       NETWORK_PARAMS_OUTPUT: /app/network-params/network-params.md
     # Bind mounts (not a named volume) so data/reth can be inspected or reset directly.
     volumes:

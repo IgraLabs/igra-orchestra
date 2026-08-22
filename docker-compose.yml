@@ -403,6 +403,19 @@ services:
       KASPA_BLOCK_HASH: ${KASPA_BLOCK_HASH}
       POST_FORK_LOCK_SCRIPT_PUBKEY: ${POST_FORK_LOCK_SCRIPT_PUBKEY:-}
       LOCK_SCRIPT_FORK_DAA_SCORE: ${LOCK_SCRIPT_FORK_DAA_SCORE:-}
+      # Opt-in and one-way per data directory. Optional (`:-`) on purpose: every
+      # existing .env predates it, and a required guard would break their
+      # render. Empty means archive mode, which is the behaviour before this
+      # line existed, so adding it changes nothing until an operator sets it.
+      #
+      # Without this line the variable in .env is interpolation-only -- Compose
+      # never injects it into the container, run-igra-el.sh sees nothing, and
+      # reth silently runs unpruned while .env suggests otherwise.
+      #
+      # Bounds four history segments (sender recovery, receipts, account
+      # history, storage history). It does NOT bound total disk: Merkle trie
+      # changesets are retained by ENG-620 and dominate the volume.
+      IGRA_RETH_PRUNE_DISTANCE_BLOCKS: ${IGRA_RETH_PRUNE_DISTANCE_BLOCKS:-}
       NETWORK_PARAMS_OUTPUT: /app/network-params/network-params.md
     volumes:
       - reth_data:/app/data/

@@ -6,6 +6,7 @@ on:
       - 'docker-compose.yml'
       - 'docker-compose.atan.yml'
       - 'docker-compose.readonly-rpc.yml'
+      - 'docker-compose.devnet.yml'
       - '.env.example'
       - '.env.*.example'
       - 'versions.*.env'
@@ -109,6 +110,19 @@ jobs:
               sys.exit(1)
           if "IGRA_LANE_ID must be set" not in kaswallet_entrypoint:
               print("kaswallet entrypoint is missing the IGRA_LANE_ID fail-fast guard", file=sys.stderr)
+              sys.exit(1)
+
+          # A variable present in .env is only an interpolation source; Compose
+          # does not inject it into any container. IGRA_RETH_PRUNE_DISTANCE_BLOCKS
+          # sat in a live node's .env unforwarded, so reth ran unpruned while the
+          # .env said otherwise and nothing failed to signal it.
+          el_env = services["execution-layer"].get("environment") or {}
+          if "IGRA_RETH_PRUNE_DISTANCE_BLOCKS" not in el_env:
+              print(
+                  "execution-layer does not forward IGRA_RETH_PRUNE_DISTANCE_BLOCKS; setting it in "
+                  ".env would silently do nothing",
+                  file=sys.stderr,
+              )
               sys.exit(1)
 
           kaspad_entrypoint = "\n".join(services["kaspad"].get("entrypoint", []))
@@ -376,6 +390,46 @@ jobs:
               sys.exit(1)
 
           print("ok: readonly-rpc topology assertions passed")
+          PY
+
+  devnet-config:
+    name: docker compose config (devnet)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Render .env from example + versions
+        run: |
+          cp .env.devnet.example .env
+          cat versions.devnet.env >> .env
+      - name: Render docker-compose.devnet config
+        run: docker compose -f docker-compose.devnet.yml --profile backend --profile frontend-w1 config -q
+      - name: Assert the execution layer forwards the prune distance
+        run: |
+          docker compose -f docker-compose.devnet.yml --profile backend --profile frontend-w1 \
+            config --format json > compose-devnet.json
+          python3 - <<'PY'
+          import json
+          import sys
+
+          with open("compose-devnet.json", encoding="utf-8") as fh:
+              services = json.load(fh)["services"]
+
+          # A variable present in .env is only an interpolation source; Compose
+          # does not inject it into any container. Asserted here for the same
+          # reason as in the full-stack job: setting it in .env and having it do
+          # nothing is silent, and only shows up as an oversized data directory.
+          if "IGRA_RETH_PRUNE_DISTANCE_BLOCKS" not in (
+              services["execution-layer"].get("environment") or {}
+          ):
+              print(
+                  "devnet execution-layer does not forward IGRA_RETH_PRUNE_DISTANCE_BLOCKS; "
+                  "setting it in .env would silently do nothing",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          print("ok: devnet forwards IGRA_RETH_PRUNE_DISTANCE_BLOCKS")
           PY
 
   slug-parser-tests:
