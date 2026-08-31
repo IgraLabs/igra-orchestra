@@ -16,6 +16,10 @@ All operational variables across the stack.
 
 | Variable | Where | Description |
 |----------|-------|-------------|
+| `NODE_ID` | `.env` | Unique node name reported to the monitor (`MN-…` on mainnet, `GTN-…` on Galleon testnet) |
+| `HEALTH_CHECK_API_KEY` | `.env` | Push API key, shared per network |
+| `NODE_HEALTH_CHECK_URL` | `.env` | Monitor host; compose builds `MONITOR_URL=http://<host>:8081` from it |
+| `NODE_HEALTH_CHECK_VERSION` | `versions.*.env` | Image tag for `igranetwork/node-health-check-client` |
 | `RPC_WALLET_AUTH_{i}` | health-check `.env` | BasicAuth user:pass to query node's wallet API |
 | `RPC_MIN_BALANCE_KAS_{i}` | health-check `.env` | Min wallet balance threshold in KAS (default: 1.0) |
 | `SLACK_WEBHOOK_URL` | health-check `.env` | Slack webhook for alerts including low-balance warnings |
