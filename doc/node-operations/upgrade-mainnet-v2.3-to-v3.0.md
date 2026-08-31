@@ -70,7 +70,8 @@ image-version pins. The real upgrade work is reconciling `.env`:
   Traefik and friends self-heal after a boot-time race.
 - **Bumps kaspad and reth to 3.0** — `KASPAD_VERSION` and `RETH_VERSION` go
   `2.3 → 3.0`. **`RPC_PROVIDER_VERSION` and `KASWALLET_VERSION` stay at `2.3`**
-  for now (`NODE_HEALTH_CHECK_VERSION` / `ATAN_UPLOADER_VERSION` stay `2.1`).
+  for now. `NODE_HEALTH_CHECK_VERSION` and `ATAN_UPLOADER_VERSION` are not part
+  of this cutover at all — they track whatever `versions.mainnet.env` pins.
   kaspad 3.0 is Toccata-aware but the fork is **not yet active** on mainnet, so
   the network still uses native (v0) transactions. The rpc-provider/kaswallet
   bump is deferred to [Part Two: after the Toccata switch](#part-two-after-the-toccata-switch) — the
@@ -150,7 +151,7 @@ Set these in `.env` (the values are mainnet canonical):
 | `RETH_VERSION` | `3.0` |
 | `KASWALLET_VERSION` | `2.3` (unchanged until after Toccata) |
 | `RPC_PROVIDER_VERSION` | `2.3` (unchanged until after Toccata) |
-| `NODE_HEALTH_CHECK_VERSION` | `2.1` |
+| `NODE_HEALTH_CHECK_VERSION` | `2.4` |
 | `ATAN_UPLOADER_VERSION` | `2.1` |
 
 </details>
