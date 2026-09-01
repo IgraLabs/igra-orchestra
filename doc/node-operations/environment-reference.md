@@ -50,6 +50,48 @@ nothing hardcodes a tag in compose.
     also that kaspad currently dual-publishes the same commit as both `2.0.1-igra.1` and
     `3.1.0`, so a live 3.x channel still exists on that side during the migration.
 
+## Execution Layer
+
+| Variable | Where | Description |
+|----------|-------|-------------|
+| `IGRA_RETH_PRUNE_DISTANCE_BLOCKS` | `.env` | Optional. Opt-in bounded-history (pruned) execution layer; omit or leave empty for archive mode, the default. Recommended `600000` (~7 days); minimum `10064`. Plain decimal digits only — no `_` separators, no leading zeros, no surrounding whitespace; a malformed value stops the container before it writes anything. Needs a reth image that supports the profile, first released as `2.5.1-igra.2` |
+
+!!! warning "No published image supports this yet"
+
+    Both networks currently pin `RETH_VERSION=2.5.1-igra.1`, which ignores this variable and
+    stays archive **silently**. Setting it today does nothing.
+
+    Do **not** pre-set it on a running archive node in anticipation of the upgrade. It is inert
+    now, but the first start on an image that does support it will find a populated volume,
+    refuse it, and restart-loop. Set it only together with a fresh volume.
+
+    The devnet and dev stacks build reth from source rather than pulling a tag, so what gates
+    them is the branch they build (`RETH_VERSION=devnet`, `RETH_BRANCH`), not a version number.
+
+!!! danger "The pruning distance is fixed when the data volume is created"
+
+    The value is stamped into the reth data volume on first start. Enabling it on a node that
+    already has chain data, or later changing or removing it, is **refused** — the launcher exits
+    and the container restart-loops. The only way to change it is a fresh volume and a full
+    resync. There is no force flag and no rollback.
+
+    A pruned node also cannot serve bodies, receipts, or existence for anything older than the
+    boundary, and that limit reaches end users through its public RPC. Do not put one behind an
+    endpoint that advertises full history, and do not use one as a Blockscout backend.
+
+    To move a node onto or off this profile, wipe the reth volume with the procedure in
+    [Reth Upgrade 1.9.3 → 2.5.1](upgrade-reth-1.9-to-2.5.md#3-remove-only-the-reth-volume) — same
+    wipe, same 12+ hours with the L2 RPC offline. **Never `docker compose down -v`**, on any
+    network: it also destroys `kaspad_data` (the L1 chain and ATAN data) and, on production,
+    `traefik_certs`. On devnet `down -v` is worse than useless — it destroys the L1 chain and does
+    *not* touch the reth bind mount. Clear that by hand instead:
+    `sudo rm -rf data/reth && mkdir -p data/reth` (reth writes it as root; re-creating it yourself
+    stops Docker from re-making it root-owned, which would block reth from writing).
+
+    Full operator detail ships inside the reth image at `/app/igra-README.md`. Read it without a
+    running container — which is the case during a restart loop — with
+    `docker run --rm --entrypoint cat igranetwork/reth:$RETH_VERSION /app/igra-README.md`.
+
 ## Health Check
 
 | Variable | Where | Description |

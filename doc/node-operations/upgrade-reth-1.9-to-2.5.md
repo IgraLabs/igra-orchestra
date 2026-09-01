@@ -64,9 +64,15 @@ drifted since the node first synced, you will silently resync onto a **different
 grep -E '^(IGRA_CHAIN_ID|IGRA_LAUNCH_DAA_SCORE|L1_REFERENCE_TIMESTAMP|L1_REFERENCE_DAA_SCORE|EL_ONE_TIME_ADDRESS|BITCOIN_BLOCK_HASH|ETHEREUM_BLOCK_HASH|KASPA_BLOCK_HASH|GENESIS_BLOCK_HASH|TX_ID_PREFIX|IGRA_LANE_ID|MIN_PROTOCOL_FEE_PER_GAS_GWEI|IGRA_ENTRY_MIN_AMOUNT|IGRA_LOCK_SCRIPT_PUBKEY|POST_FORK_LOCK_SCRIPT_PUBKEY|LOCK_SCRIPT_FORK_DAA_SCORE)=' .env
 ```
 
-That is the full set the `execution-layer` service consumes. Because the resync replays the
-entire chain rather than resuming it, a value that was wrong-but-harmless on a synced node
-will now be baked into every block it rebuilds.
+That is the full set of chain parameters the `execution-layer` service consumes. Because the
+resync replays the entire chain rather than resuming it, a value that was wrong-but-harmless on
+a synced node will now be baked into every block it rebuilds.
+
+Also check `IGRA_RETH_PRUNE_DISTANCE_BLOCKS`. It is not a chain parameter, but a fresh volume is
+exactly when the bounded-history profile gets stamped, so leaving it set here silently resyncs a
+**pruned** node that cannot serve history older than the boundary. It must be empty unless you
+are deliberately building a pruned node — see
+[Environment Reference](environment-reference.md#execution-layer).
 
 Compare against the canonical template for your network (`.env.mainnet.example` or
 `.env.galleon-testnet.example`) and resolve any difference **before** removing the volume.

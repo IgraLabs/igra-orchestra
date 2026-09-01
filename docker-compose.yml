@@ -387,6 +387,7 @@ services:
       KASPA_BLOCK_HASH: ${KASPA_BLOCK_HASH}
       POST_FORK_LOCK_SCRIPT_PUBKEY: ${POST_FORK_LOCK_SCRIPT_PUBKEY:-}
       LOCK_SCRIPT_FORK_DAA_SCORE: ${LOCK_SCRIPT_FORK_DAA_SCORE:-}
+      IGRA_RETH_PRUNE_DISTANCE_BLOCKS: ${IGRA_RETH_PRUNE_DISTANCE_BLOCKS:-}
       NETWORK_PARAMS_OUTPUT: /app/network-params/network-params.md
     volumes:
       - reth_data:/app/data/
