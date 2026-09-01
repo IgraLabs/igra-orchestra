@@ -2,17 +2,30 @@
 
 !!! note "A two-part upgrade"
     The mainnet move to v3.0 is split by the **Toccata (KIP-21) hardfork**.
-    **Part One (this guide)** brings the backend (kaspad/reth) to v3.0 now, while the fork is
-    still inactive — the workers stay on 2.3 and keep emitting native (v0) transactions.
+    **Part One (this guide)** brings the backend (kaspad/reth) to the current pins now, while the
+    fork is still inactive — the workers stay on 2.3 and keep emitting native (v0) transactions.
     **Part Two** brings the `rpc-provider`/`kaswallet` workers to v3.0 once Toccata activates;
     see [Part Two: after the Toccata switch](#part-two-after-the-toccata-switch).
 
+!!! danger "Moving reth to the 2.5 line requires an execution-layer resync"
+    This guide reconciles `.env` only — it never touches Docker volumes. But once
+    `RETH_VERSION` points at the `2.5.1-igra.1` line, reth cannot open a database written
+    by the old 1.9.3 (`3.0`) image: the backend comes up with
+    `container execution-layer is unhealthy` and kaspad never starts.
+
+    You must additionally drop the reth volume and resync — budget 12+ hours. See
+    [Reth Upgrade: 1.9.3 → 2.5.1](upgrade-reth-1.9-to-2.5.md). Your kaspad data is
+    unaffected.
+
 ## TL;DR
 
-Existing **mainnet** v2.3 node → v3.0, keeping synced kaspad/reth data. The whole
-upgrade is an `.env` reconcile — **no re-sync, no volume rename**. Backend
-(kaspad/reth) moves to 3.0 now; the frontend workers (`rpc-provider`/`kaswallet`)
-**stay on 2.3 until the Toccata/KIP-21 fork activates** on mainnet.
+Existing **mainnet** v2.3 node → v3.0, keeping your synced **kaspad** data. This guide
+itself is an `.env` reconcile — **no volume rename**, and the script never touches volumes
+— but if the reth pin moves to the `2.5.1-igra.1` line you must also
+[drop the reth volume and resync](upgrade-reth-1.9-to-2.5.md) (12+ hours). Backend
+(kaspad/reth) moves to the pins in `versions.mainnet.env` now; the frontend
+workers (`rpc-provider`/`kaswallet`) **stay on 2.3 until the Toccata/KIP-21 fork
+activates** on mainnet.
 
 ```bash
 # 1. Pull v3.0 code (ships on main)
@@ -43,12 +56,12 @@ Full rationale, prerequisites, verification, rollback, and troubleshooting follo
 ## Who this is for
 
 If you run an existing IGRA Orchestra **mainnet** deployment (`NETWORK=mainnet`)
-on the v2.3 line and want to move it to v3.0 **without losing your synced
-kaspad/reth data**, run this once.
+on the v2.3 line and want to move it to v3.0 **without re-syncing kaspad**, run this once.
+(The reth database is a separate matter — see the resync note above.)
 
 If you're starting fresh and don't have a synced node, skip this guide and use
-`./scripts/setup-mainnet.sh` directly — the template already ships the v3.0
-values.
+`./scripts/setup-mainnet.sh` directly — it already applies the current
+`versions.mainnet.env` pins.
 
 ## What the upgrade does
 
@@ -68,11 +81,16 @@ image-version pins. The real upgrade work is reconciling `.env`:
   A mainnet v2.3 `.env` normally already has it; it is added only if missing.
 - **Ensures `SERVICE_RESTART_POLICY=unless-stopped`** — added if missing so
   Traefik and friends self-heal after a boot-time race.
-- **Bumps kaspad and reth to 3.0** — `KASPAD_VERSION` and `RETH_VERSION` go
-  `2.3 → 3.0`. **`RPC_PROVIDER_VERSION` and `KASWALLET_VERSION` stay at `2.3`**
+- **Bumps kaspad and reth to the current backend pins** — `KASPAD_VERSION` goes
+  `2.3 → 2.0.1-igra.1` and `RETH_VERSION` goes `2.3 → 2.5.1-igra.1`. These
+  numbers look like a downgrade but are not: kaspad/reth moved to the
+  `v<upstream>-igra.<n>` scheme (ENG-1243), where the version tracks the
+  upstream rusty-kaspa/reth base and `.<n>` is the IGRA revision on it. They
+  supersede the 3.0 line this guide originally shipped.
+  **`RPC_PROVIDER_VERSION` and `KASWALLET_VERSION` stay at `2.3`**
   for now. `NODE_HEALTH_CHECK_VERSION` and `ATAN_UPLOADER_VERSION` are not part
   of this cutover at all — they track whatever `versions.mainnet.env` pins.
-  kaspad 3.0 is Toccata-aware but the fork is **not yet active** on mainnet, so
+  kaspad is Toccata-aware but the fork is **not yet active** on mainnet, so
   the network still uses native (v0) transactions. The rpc-provider/kaswallet
   bump is deferred to [Part Two: after the Toccata switch](#part-two-after-the-toccata-switch) — the
   v3.0 frontend emits lane/subnetwork (v1) transactions that mainnet rejects
@@ -147,8 +165,8 @@ Set these in `.env` (the values are mainnet canonical):
 | `IGRA_LANE_ID` | `97b10000` |
 | `TX_ID_PREFIX` | `97b1` (if not already set) |
 | `SERVICE_RESTART_POLICY` | `unless-stopped` (if not already set) |
-| `KASPAD_VERSION` | `3.0` |
-| `RETH_VERSION` | `3.0` |
+| `KASPAD_VERSION` | `2.0.1-igra.1` |
+| `RETH_VERSION` | `2.5.1-igra.1` |
 | `KASWALLET_VERSION` | `2.3` (unchanged until after Toccata) |
 | `RPC_PROVIDER_VERSION` | `2.3` (unchanged until after Toccata) |
 | `NODE_HEALTH_CHECK_VERSION` | `2.4` |
@@ -201,9 +219,11 @@ for detail.
 
 ```bash
 grep '^IGRA_LANE_ID=' .env                        # IGRA_LANE_ID=97b10000
-grep -E '^(KASPAD|RETH)_VERSION=' .env            # both 3.0
+grep -E '^(KASPAD|RETH)_VERSION=' .env            # must match versions.mainnet.env
 grep -E '^(RPC_PROVIDER|KASWALLET)_VERSION=' .env  # both 2.3 (until Toccata)
 docker compose config -q && echo "compose OK"     # required vars present
+docker compose ps --format 'table {{.Service}}\t{{.Image}}\t{{.State}}' \
+  kaspad execution-layer                          # image AND state, not just the pin
 ```
 
 In the running stack, confirm:
@@ -211,10 +231,10 @@ In the running stack, confirm:
 - **kaspad** logs its startup banner and **IBD resumes from your previous
   height** (not a fresh sync from 0).
 - `docker compose ps` shows `kaspad` and `execution-layer` **running / healthy**
-  on the new 3.0 images; your existing `rpc-provider-*` / `kaswallet-*` /
+  on the new images; your existing `rpc-provider-*` / `kaswallet-*` /
   `traefik` workers keep running on 2.3 (they are not recreated in this phase).
-- The **health-check client** reports `KASPAD_VERSION=3.0` to the monitoring
-  server.
+- The **health-check client** reports the pinned `KASPAD_VERSION` to the
+  monitoring server.
 
 ## Part Two: after the Toccata switch
 

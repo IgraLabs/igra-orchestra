@@ -12,7 +12,8 @@ Choose your deployment guide:
 ## Operations
 
 - **[Node Operations](node-operations/index.md)** - Worker config, wallet API, balance monitoring, health checks, ATAN-only mode, and external CPU mining
-- **[Toccata Upgrade — Part One: Mainnet v2.3 → v3.0](node-operations/upgrade-mainnet-v2.3-to-v3.0.md)** - Part one of the Toccata (KIP-21) upgrade: bring the backend (kaspad/reth) to v3.0 before the fork while workers stay on 2.3 (reconcile `.env`, preserve volumes)
+- **[Toccata Upgrade — Part One: Mainnet v2.3 → v3.0](node-operations/upgrade-mainnet-v2.3-to-v3.0.md)** - Part one of the Toccata (KIP-21) upgrade: bring the backend (kaspad/reth) to the current `versions.mainnet.env` pins before the fork while workers stay on 2.3 (reconcile `.env`, preserve volumes)
+- **[Reth Upgrade: 1.9.3 → 2.5.1](node-operations/upgrade-reth-1.9-to-2.5.md)** - Drop the execution-layer database and resync when `RETH_VERSION` moves to the `2.5.1-igra.1` line; kaspad data is preserved (12+ hours, L2 RPC offline)
 - **[Kaspa Wallet Guide](kaspa-wallet.md)** - Wallet setup and management for all networks
 - **[Log Management](log-management.md)** - Automated log cleanup for servers
 

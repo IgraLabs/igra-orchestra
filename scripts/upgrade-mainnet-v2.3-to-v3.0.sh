@@ -6,16 +6,22 @@
 # The v3.0 docker-compose.yml refuses to render without IGRA_LANE_ID and
 # TX_ID_PREFIX (both guarded by ${VAR:?...}), and its kaspad/kaswallet
 # entrypoints pass the post-Toccata flags --igra-lane-id / --subnetwork-id
-# unconditionally, so mainnet must run 3.0 images. This script edits .env only;
-# it does NOT touch Docker volumes — mainnet keeps NETWORK=mainnet and reuses
-# its existing kaspad/reth data. It is idempotent: safe to re-run.
+# unconditionally, so mainnet must run Toccata-aware images. This script edits
+# .env only; it does NOT touch Docker volumes — mainnet keeps NETWORK=mainnet
+# and reuses its existing kaspad data. It is idempotent: safe to re-run.
+#
+# NOTE: reth on the 2.5.1-igra.1 line cannot open a database written by the old
+# 1.9.3 (3.0) image. After running this you must also drop the reth volume and
+# resync (12+ hours) — see doc/node-operations/upgrade-reth-1.9-to-2.5.md. This
+# script does not and will not do that for you.
 #
 # What it changes in .env:
 #   - adds IGRA_LANE_ID=97b10000                     (new required lane namespace)
 #   - ensures TX_ID_PREFIX=97b1                      (now required; set only if unset)
 #   - ensures SERVICE_RESTART_POLICY=unless-stopped  (set only if unset)
-#   - syncs image-version pins from versions.mainnet.env (kaspad/reth -> 3.0;
-#     rpc-provider/kaswallet stay 2.3 until the mainnet Toccata switch)
+#   - syncs image-version pins from versions.mainnet.env verbatim. kaspad/reth
+#     now use the v<upstream>-igra.<n> scheme (ENG-1243), whose numbers are
+#     lower than the retired 3.0 line but newer -- do not "correct" them.
 # A timestamped mode-600 backup (.env.backup.pre-v3.0.*) is written first.
 #
 # Usage: scripts/upgrade-mainnet-v2.3-to-v3.0.sh [-y|--yes]
