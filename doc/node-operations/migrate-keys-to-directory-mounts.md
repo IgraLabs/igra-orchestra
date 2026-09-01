@@ -157,3 +157,11 @@ previous `docker-compose.yml`, move each `keys/kaswallet-N/keys.json` back to
 `keys/keys.kaswallet-N.json`, pin `KASWALLET_VERSION` to the pre-atomic image in
 `.env`, and `docker compose … up -d`. Reverting the mount **without** reverting
 the image reintroduces the `EBUSY` crash-loop.
+
+!!! warning "The pre-atomic (2.x) image is no longer usable"
+    This rollback path is historical. The compose entrypoint now passes
+    `--subnetwork-id` unconditionally, which a 2.x kaswallet rejects
+    (`unexpected argument`) — it will crash-loop rather than start. A 2.x wallet
+    would also emit v0 transactions that post-Toccata kaspad rejects, so the
+    rollback only works together with the older `docker-compose.yml` you check
+    out in the same step.

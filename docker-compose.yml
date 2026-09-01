@@ -132,16 +132,10 @@ x-kaswallet-runtime: &kaswallet-runtime
     - NETWORK
     - KASPAD_HOST
     - KASPAD_GRPC_PORT
-    # Pinned kaswallet image tag (e.g. 2.3, 3.0, or devnet). The entrypoint
-    # reads its major version to decide whether to forward --subnetwork-id:
-    # only kaswallet v3+ understands that flag; v2.x rejects it and crash-loops.
-    - KASWALLET_VERSION
-    # Operator-facing 4-byte lane namespace (e.g. 97b10000). For kaswallet v3+
-    # the entrypoint forwards it to kaswallet-daemon as --subnetwork-id (and
-    # hard-fails if unset), mirroring the kaspad --igra-lane-id pattern below so
-    # all lane-id wiring lives at the entrypoint layer. On pre-Toccata v2.x the
-    # flag is skipped and the daemon defaults to SUBNETWORK_ID_NATIVE / v0
-    # transactions, which is correct pre-Toccata. (The daemon also accepts
+    # Operator-facing 4-byte lane namespace (e.g. 97b10000). The entrypoint
+    # forwards it to kaswallet-daemon as --subnetwork-id (and hard-fails if
+    # unset), mirroring the kaspad --igra-lane-id pattern below so all lane-id
+    # wiring lives at the entrypoint layer. (The daemon also accepts
     # KASWALLET_SUBNETWORK_ID via clap env=; we deliberately do not use that path.)
     - IGRA_LANE_ID
   extra_hosts:
@@ -166,24 +160,14 @@ x-kaswallet-runtime: &kaswallet-runtime
           ARGS="$$ARGS --testnet-suffix=$$KASPA_NETSUFFIX"
         fi
       fi
-      # kaswallet only learned --subnetwork-id in v3 (post-Toccata). v2.x
-      # rejects it ("unexpected argument") and crash-loops, so gate the flag on
-      # the pinned KASWALLET_VERSION: pass it for v3+ (and source tags like
-      # devnet/latest), skip it for any numeric major < 3 (e.g. 2.3), where the
-      # daemon correctly defaults to SUBNETWORK_ID_NATIVE / pre-Toccata (v0)
-      # transactions.
-      KASWALLET_MAJOR="$${KASWALLET_VERSION%%.*}"
-      case "$$KASWALLET_MAJOR" in
-        ''|*[!0-9]*) PASS_SUBNETWORK=1 ;;
-        *) if [ "$$KASWALLET_MAJOR" -ge 3 ]; then PASS_SUBNETWORK=1; else PASS_SUBNETWORK=0; fi ;;
-      esac
-      if [ "$$PASS_SUBNETWORK" = "1" ]; then
-        if [ -z "$$IGRA_LANE_ID" ]; then
-          echo "Error: IGRA_LANE_ID must be set for kaswallet v3+; without it the daemon defaults to SUBNETWORK_ID_NATIVE and emits pre-Toccata (v0) transactions that post-Toccata kaspad rejects" >&2
-          exit 1
-        fi
-        ARGS="$$ARGS --subnetwork-id=$$IGRA_LANE_ID"
+      # --subnetwork-id is mandatory: without it the daemon defaults to
+      # SUBNETWORK_ID_NATIVE and emits v0 transactions that kaspad rejects.
+      # Requires a kaswallet 3.x image; older majors reject the flag outright.
+      if [ -z "$$IGRA_LANE_ID" ]; then
+        echo "Error: IGRA_LANE_ID must be set; without it the kaswallet daemon defaults to SUBNETWORK_ID_NATIVE and emits v0 transactions that kaspad rejects" >&2
+        exit 1
       fi
+      ARGS="$$ARGS --subnetwork-id=$$IGRA_LANE_ID"
       exec sh /app/watch-dependencies.sh \
         --tcp kaspad "$$KASPAD_HOST" "$$KASPAD_GRPC_PORT" \
         -- /app/kaswallet-daemon $$ARGS

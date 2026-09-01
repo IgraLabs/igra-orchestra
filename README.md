@@ -475,7 +475,6 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork
 - [Mainnet Deployment Guide](doc/quick-setup-mainnet.md) - Public mainnet deployment with pre-built images
 - [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md) - Public Galleon testnet (testnet-10) deployment with pre-built images
 - [Galleon → testnet-10 Migration Guide](doc/node-operations/migrate-galleon-to-testnet-10.md) - One-shot upgrade for existing Galleon operators on `NETWORK=testnet`
-- [Toccata Upgrade — Part One: Mainnet v2.3 → v3.0](doc/node-operations/upgrade-mainnet-v2.3-to-v3.0.md) - Part one of the Toccata (KIP-21) upgrade: bring the backend (kaspad/reth) to the current `versions.mainnet.env` pins before the fork while workers stay on 2.3
 - [Reth Upgrade: 1.9.3 → 2.5.1](doc/node-operations/upgrade-reth-1.9-to-2.5.md) - Drop the execution-layer database and resync when `RETH_VERSION` moves to the `2.5.1-igra.1` line (12+ hours, L2 RPC offline; kaspad data preserved)
 - [Kaspa Wallet Guide](doc/kaspa-wallet.md) - Wallet setup for all networks
 - [Log Management](doc/log-management.md) - Automated log cleanup for servers

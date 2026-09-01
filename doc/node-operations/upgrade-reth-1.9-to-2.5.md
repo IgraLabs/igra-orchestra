@@ -196,11 +196,3 @@ Only `reth_data` is removed. Everything else survives and must **not** be recrea
 | `keys/jwt.hex` | host bind mount | Shared engine-API secret. kaspad reads the same file; regenerating it desyncs the pair |
 | `traefik_certs` | named volume | Let's Encrypt `acme.json`; re-issuing risks rate limits |
 | `network-params/` | host bind mount | Rewritten by the EL at boot |
-
-## Related
-
-- [Toccata Upgrade — Part One: Mainnet v2.3 → v3.0](upgrade-mainnet-v2.3-to-v3.0.md) — the
-  `.env` reconcile that sets the version pins. Run this resync alongside it when the reth
-  pin moves to the 2.5 line.
-- [Environment Reference](environment-reference.md#image-versions) — why
-  `2.5.1-igra.1` is newer than `3.0` despite the lower number.
