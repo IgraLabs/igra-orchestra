@@ -55,6 +55,7 @@ nothing hardcodes a tag in compose.
 | Variable | Where | Description |
 |----------|-------|-------------|
 | `IGRA_RETH_PRUNE_DISTANCE_BLOCKS` | `.env` | Optional. Opt-in bounded-history (pruned) execution layer; omit or leave empty for archive mode, the default. Recommended `600000` (~7 days); minimum `10064`. Plain decimal digits only — no `_` separators, no leading zeros, no surrounding whitespace; a malformed value stops the container before it writes anything. Needs a reth image that supports the profile, first released as `2.5.1-igra.2` |
+| `IGRA_RETH_ADOPT_EXISTING_VOLUME` | `.env` | Optional, `1` or unset. Opts into enabling the profile on a volume that **already holds a chain**, pruning it in place instead of forcing a resync. Consulted only when pruning is requested against a populated, unmarked data directory — inert on a fresh volume and in archive mode. Any other value is rejected |
 
 !!! warning "No published image supports this yet"
 
@@ -63,23 +64,30 @@ nothing hardcodes a tag in compose.
 
     Do **not** pre-set it on a running archive node in anticipation of the upgrade. It is inert
     now, but the first start on an image that does support it will find a populated volume,
-    refuse it, and restart-loop. Set it only together with a fresh volume.
+    refuse it, and restart-loop — unless you have also opted into adoption.
 
     The devnet and dev stacks build reth from source rather than pulling a tag, so what gates
     them is the branch they build (`RETH_VERSION=devnet`, `RETH_BRANCH`), not a version number.
 
 !!! danger "The pruning distance is fixed when the data volume is created"
 
-    The value is stamped into the reth data volume on first start. Enabling it on a node that
-    already has chain data, or later changing or removing it, is **refused** — the launcher exits
-    and the container restart-loops. The only way to change it is a fresh volume and a full
-    resync. There is no force flag and no rollback.
+    The value is stamped into the reth data volume on first start. Once stamped, changing or
+    removing it is **refused** — the launcher exits and the container restart-loops. Unsetting the
+    variable is not a rollback, because reth keeps pruning from its persisted `reth.toml`. Going
+    back to archive means a fresh volume and a full resync.
 
-    A pruned node also cannot serve bodies, receipts, or existence for anything older than the
+    Turning the profile *on* for a node that already has chain data is refused by default, but
+    `IGRA_RETH_ADOPT_EXISTING_VOLUME=1` opts into pruning that volume in place. Adoption is
+    irreversible — the first prune pass deletes everything below the boundary — the volume must
+    already be storage v2 (a v1 volume needs `reth db migrate-v2` first, and the launcher cannot
+    tell them apart), and retention stays coarser than the configured distance until the volume's
+    pre-existing static files age out. Snapshot first if the history matters.
+
+    A pruned node cannot serve bodies, receipts, or existence for anything older than the
     boundary, and that limit reaches end users through its public RPC. Do not put one behind an
     endpoint that advertises full history, and do not use one as a Blockscout backend.
 
-    To move a node onto or off this profile, wipe the reth volume with the procedure in
+    To move a node off this profile, wipe the reth volume with the procedure in
     [Reth Upgrade 1.9.3 → 2.5.1](upgrade-reth-1.9-to-2.5.md#3-remove-only-the-reth-volume) — same
     wipe, same 12+ hours with the L2 RPC offline. **Never `docker compose down -v`**, on any
     network: it also destroys `kaspad_data` (the L1 chain and ATAN data) and, on production,
