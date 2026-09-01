@@ -12,6 +12,44 @@ All operational variables across the stack.
 | `WALLET_API_BASICAUTH` | `.env` | BasicAuth credentials for wallet balance API (htpasswd format, `$$`-escaped) |
 | `RPC_READ_ONLY` | `.env` | Transaction submission enabled by default (`false`); set to `true` for read-only RPC |
 
+## Image Versions
+
+Every image tag is pinned centrally in the per-network version files
+(`versions.mainnet.env`, `versions.galleon-testnet.env`). Setup appends them into `.env`;
+nothing hardcodes a tag in compose.
+
+| Variable | Where | Description |
+|----------|-------|-------------|
+| `KASPAD_VERSION` | `versions.*.env` | Image tag for `igranetwork/kaspad`. Tracks the upstream rusty-kaspa release — see the note below |
+| `RETH_VERSION` | `versions.*.env` | Image tag for `igranetwork/reth`. Tracks the upstream reth release — see the note below |
+| `KASWALLET_VERSION` | `versions.*.env` | Image tag for `igranetwork/kaswallet` |
+| `RPC_PROVIDER_VERSION` | `versions.*.env` | Image tag for `igranetwork/rpc-provider` |
+| `NODE_HEALTH_CHECK_VERSION` | `versions.*.env` | Image tag for `igranetwork/node-health-check-client` |
+| `ATAN_UPLOADER_VERSION` | `versions.*.env` | Image tag for `igranetwork/atan-uploader` |
+
+!!! note "kaspad and reth version numbers track the upstream client"
+
+    `KASPAD_VERSION` and `RETH_VERSION` use the `<upstream>-igra.<n>` scheme: the version
+    **is** the upstream rusty-kaspa / reth release the image is built from, and `.<n>` is
+    the IGRA revision on that base. IGRA no longer maintains a separate version line for
+    these two — the old independent numbering (`2.3`, `3.0`) collided with upstream
+    version numbers, which is why it was retired.
+
+    Three consequences:
+
+    - **A lower number can be newer.** `2.0.1-igra.1` supersedes the retired `3.0` line.
+      Do not "correct" a pin back to `3.0`.
+    - **Never shorten the tag.** Bare `2.0.1` is a different, far older image — pinning it
+      is a real downgrade of several months.
+    - **There is no floating minor alias.** These are semver *pre-release* versions, so
+      `docker/metadata-action` publishes no `2.0` or `2.5` tag to follow. Pin the full
+      string.
+
+    This applies to **kaspad and reth only**. `kaswallet`, `rpc-provider`,
+    `node-health-check-client`, and `atan-uploader` still use IGRA's own numbering. Note
+    also that kaspad currently dual-publishes the same commit as both `2.0.1-igra.1` and
+    `3.1.0`, so a live 3.x channel still exists on that side during the migration.
+
 ## Health Check
 
 | Variable | Where | Description |
@@ -19,7 +57,6 @@ All operational variables across the stack.
 | `NODE_ID` | `.env` | Unique node name reported to the monitor (`MN-…` on mainnet, `GTN-…` on Galleon testnet) |
 | `HEALTH_CHECK_API_KEY` | `.env` | Push API key, shared per network |
 | `NODE_HEALTH_CHECK_URL` | `.env` | Monitor host; compose builds `MONITOR_URL=http://<host>:8081` from it |
-| `NODE_HEALTH_CHECK_VERSION` | `versions.*.env` | Image tag for `igranetwork/node-health-check-client` |
 | `RPC_WALLET_AUTH_{i}` | health-check `.env` | BasicAuth user:pass to query node's wallet API |
 | `RPC_MIN_BALANCE_KAS_{i}` | health-check `.env` | Min wallet balance threshold in KAS (default: 1.0) |
 | `SLACK_WEBHOOK_URL` | health-check `.env` | Slack webhook for alerts including low-balance warnings |

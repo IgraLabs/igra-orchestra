@@ -325,6 +325,8 @@ Docker Compose will automatically pick up this variable when you run `docker com
 
 Docker image versions are centrally pinned in per-network version files: `versions.mainnet.env` and `versions.galleon-testnet.env`. These files are used by `docker-compose.yml`, setup scripts, and deployment tools. Update versions there when upgrading services.
 
+`KASPAD_VERSION` and `RETH_VERSION` use the `<upstream>-igra.<n>` scheme: the version **is** the upstream rusty-kaspa / reth release the image is built from, and `.<n>` is the IGRA revision on that base. IGRA no longer maintains a separate version line for these two — the old independent numbering (`2.3`, `3.0`) collided with upstream version numbers. So **a lower number can be newer**: `2.0.1-igra.1` supersedes the retired `3.0` line, and bare `2.0.1` is a different, far older image. These are semver pre-release versions, so no floating `2.0`/`2.5` alias is published — pin the full string. The other services (`kaswallet`, `rpc-provider`, `node-health-check-client`, `atan-uploader`) still use IGRA's own numbering. See [Environment Reference](doc/node-operations/environment-reference.md#image-versions).
+
 ## Running the Stack
 
 The recommended way to run the IGRA Orchestra stack is:
@@ -473,7 +475,7 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork
 - [Mainnet Deployment Guide](doc/quick-setup-mainnet.md) - Public mainnet deployment with pre-built images
 - [Galleon Testnet Deployment Guide](doc/quick-setup-galleon-testnet.md) - Public Galleon testnet (testnet-10) deployment with pre-built images
 - [Galleon → testnet-10 Migration Guide](doc/node-operations/migrate-galleon-to-testnet-10.md) - One-shot upgrade for existing Galleon operators on `NETWORK=testnet`
-- [Toccata Upgrade — Part One: Mainnet v2.3 → v3.0](doc/node-operations/upgrade-mainnet-v2.3-to-v3.0.md) - Part one of the Toccata (KIP-21) upgrade: bring the backend (kaspad/reth) to v3.0 before the fork while workers stay on 2.3
+- [Reth Upgrade: 1.9.3 → 2.5.1](doc/node-operations/upgrade-reth-1.9-to-2.5.md) - Drop the execution-layer database and resync when `RETH_VERSION` moves to the `2.5.1-igra.1` line (12+ hours, L2 RPC offline; kaspad data preserved)
 - [Kaspa Wallet Guide](doc/kaspa-wallet.md) - Wallet setup for all networks
 - [Log Management](doc/log-management.md) - Automated log cleanup for servers
 - [Docker Volume Permissions](doc/troubleshooting/docker-volume-permissions.md) - Fix permission denied errors
