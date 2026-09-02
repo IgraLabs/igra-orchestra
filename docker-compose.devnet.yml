@@ -260,7 +260,6 @@ services:
       POST_FORK_LOCK_SCRIPT_PUBKEY: ${POST_FORK_LOCK_SCRIPT_PUBKEY:-}
       LOCK_SCRIPT_FORK_DAA_SCORE: ${LOCK_SCRIPT_FORK_DAA_SCORE:-}
       IGRA_RETH_PRUNE_DISTANCE_BLOCKS: ${IGRA_RETH_PRUNE_DISTANCE_BLOCKS:-}
-      IGRA_RETH_ADOPT_EXISTING_VOLUME: ${IGRA_RETH_ADOPT_EXISTING_VOLUME:-}
       NETWORK_PARAMS_OUTPUT: /app/network-params/network-params.md
     # Bind mounts (not a named volume) so data/reth can be inspected or reset directly.
     volumes:

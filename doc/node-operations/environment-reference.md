@@ -55,13 +55,12 @@ nothing hardcodes a tag in compose.
 | Variable | Where | Description |
 |----------|-------|-------------|
 | `IGRA_RETH_PRUNE_DISTANCE_BLOCKS` | `.env` | Optional. Opt-in bounded-history (pruned) execution layer; omit or leave empty for archive mode, the default. Recommended `600000` (~7 days); minimum `10064`. Plain decimal digits only — no `_` separators, no leading zeros, no surrounding whitespace; a malformed value stops the container before it writes anything. Needs a reth image that supports the profile, first released as `2.5.1-igra.2` |
-| `IGRA_RETH_ADOPT_EXISTING_VOLUME` | `.env` | Optional, `1` or unset. Opts into enabling the profile on a volume that **already holds a chain**, pruning it in place instead of forcing a resync. Consulted only when pruning is requested against a populated, unmarked data directory — inert on a fresh volume and in archive mode. Any other value is rejected |
 
 !!! note "Requires reth `2.5.1-igra.2`"
 
-    Both networks pin `2.5.1-igra.2`, which is the first release to read these variables. Any
-    older image ignores them and stays archive **silently** — it does not warn, so a node left on
-    an earlier pin looks configured for pruning while behaving as an archive node.
+    Both networks pin `2.5.1-igra.2`, the first release with the bounded-history profile. Any
+    older image ignores this variable and stays archive **silently** — it does not warn, so a node
+    left on an earlier pin looks configured for pruning while behaving as an archive node.
 
     The devnet and dev stacks build reth from source rather than pulling a tag, so what gates
     them is the branch they build (`RETH_VERSION=devnet`, `RETH_BRANCH`), not a version number.
@@ -73,12 +72,8 @@ nothing hardcodes a tag in compose.
     variable is not a rollback, because reth keeps pruning from its persisted `reth.toml`. Going
     back to archive means a fresh volume and a full resync.
 
-    Turning the profile *on* for a node that already has chain data is refused by default, but
-    `IGRA_RETH_ADOPT_EXISTING_VOLUME=1` opts into pruning that volume in place. Adoption is
-    irreversible — the first prune pass deletes everything below the boundary — the volume must
-    already be storage v2 (a v1 volume needs `reth db migrate-v2` first, and the launcher cannot
-    tell them apart), and retention stays coarser than the configured distance until the volume's
-    pre-existing static files age out. Snapshot first if the history matters.
+    Turning the profile *on* for a node that already has chain data is refused by default. There is
+    **no environment variable** for it — see "Adopting a volume that already has a chain" below.
 
     A pruned node cannot serve bodies, receipts, or existence for anything older than the
     boundary, and that limit reaches end users through its public RPC. Do not put one behind an
@@ -96,6 +91,49 @@ nothing hardcodes a tag in compose.
     Full operator detail ships inside the reth image at `/app/igra-README.md`. Read it without a
     running container — which is the case during a restart loop — with
     `docker run --rm --entrypoint cat igranetwork/reth:$RETH_VERSION /app/igra-README.md`.
+
+### Adopting a volume that already has a chain
+
+By default the launcher refuses to enable the profile on a populated data directory. To authorize
+one specific volume, create the sentinel file `.igra-adopt-this-volume` inside it and start again
+with `IGRA_RETH_PRUNE_DISTANCE_BLOCKS` set as usual.
+
+The authorization is a file rather than a variable on purpose: it lives inside the volume, so it
+cannot authorize a different one, and the launcher **deletes it once used**, so it cannot authorize
+a later one. A variable left in `.env` would do neither — `DATA_DIR` is a fixed path whose contents
+change.
+
+The file is at `/app/data/.igra-adopt-this-volume` **as the container sees it**. That path does not
+exist on the host, so create it through the volume.
+
+Production stacks use a network-derived named volume, so derive the name rather than typing it:
+
+```bash
+PROJECT="$(docker compose config --format json | jq -r '.name')"
+# no jq? PROJECT="igra-orchestra-$(grep -E '^NETWORK=' .env | cut -d= -f2)"
+
+docker run --rm -v "${PROJECT}_reth_data:/d" alpine touch /d/.igra-adopt-this-volume
+docker compose --profile backend up -d execution-layer
+```
+
+The devnet stack bind-mounts `./data/reth`, so the file is an ordinary host file:
+
+```bash
+touch data/reth/.igra-adopt-this-volume
+```
+
+!!! danger "Adoption deletes history irreversibly"
+
+    The first prune pass removes everything below the retention boundary. Unsetting the distance
+    afterwards is not a rollback — reth keeps pruning from its persisted `reth.toml`. Snapshot the
+    volume first if the history matters.
+
+    The volume **must already be storage v2**. A v1 volume needs `reth db migrate-v2` first; the
+    launcher cannot tell the two apart, because `rocksdb/` exists on both, so this is your
+    assertion rather than a check it performs.
+
+    Retention stays coarser than the configured distance until the volume's pre-existing static
+    files age out — they were written at a larger size than a fresh pruned volume uses.
 
 ## Health Check
 
