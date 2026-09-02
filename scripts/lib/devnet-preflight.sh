@@ -85,6 +85,8 @@ validate_devnet_env() {
         errors+=("MINING_ADDRESS must be a devnet address (kaspadev:...) (got: '${MINING_ADDRESS:-<unset>}')")
     is_positive_int "${MINING_THREADS:-}" || \
         errors+=("MINING_THREADS must be a positive integer (got: '${MINING_THREADS:-<unset>}')")
+    is_uint "${MINING_MIN_BLOCK_INTERVAL_MS:-150}" || \
+        errors+=("MINING_MIN_BLOCK_INTERVAL_MS must be a non-negative integer in ms (0 disables) (got: '${MINING_MIN_BLOCK_INTERVAL_MS:-<unset>}')")
 
     # Lock script pubkey (entry) hex when present
     if [ -n "${IGRA_LOCK_SCRIPT_PUBKEY:-}" ]; then
@@ -171,12 +173,15 @@ resolve_devnet_env() {
     fi
     export DEVNET_ENV_SOURCE="$source_path"
 
-    # Capture shell-provided tunables (set, even if empty) so the file cannot
-    # clobber a command-line override.
+    # Snapshot every shell-set variable that the env source or versions file also
+    # assigns, so a command-line override always wins with no hand-maintained list
+    # to fall out of date (a `set -a; source` below would otherwise let the file
+    # clobber a shell value docker compose is meant to honour).
     local k saved=()
-    for k in FINALITY_PERIOD_SECONDS TOCCATA_ACTIVATION_DAA_SCORE IGRA_LANE_ID; do
+    while IFS= read -r k; do
         [ -n "${!k+x}" ] && saved+=("$k=${!k}")
-    done
+    done < <(sed -nE 's/^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=.*/\2/p' \
+        "$source_path" "$project_dir/$versions_file" 2>/dev/null | sort -u)
 
     set -a
     # shellcheck source=/dev/null
@@ -194,9 +199,10 @@ resolve_devnet_env() {
     fi
 }
 
-# mining_preflight - validate MINING_ADDRESS/MINING_THREADS and remind the operator
-# to start an external miner. Called when Toccata is scheduled, because the KIP-21
-# rehearsal cannot reach the activation DAA score without mined blocks.
+# mining_preflight - validate MINING_ADDRESS/MINING_THREADS/MINING_MIN_BLOCK_INTERVAL_MS
+# and remind the operator to start an external miner. Called when Toccata is
+# scheduled, because the KIP-21 rehearsal cannot reach the activation DAA score
+# without mined blocks.
 mining_preflight() {
     local errors=()
 
@@ -204,6 +210,8 @@ mining_preflight() {
         errors+=("MINING_ADDRESS must be a devnet address (kaspadev:...) (got: '${MINING_ADDRESS:-<unset>}')")
     is_positive_int "${MINING_THREADS:-}" || \
         errors+=("MINING_THREADS must be a positive integer (got: '${MINING_THREADS:-<unset>}')")
+    is_uint "${MINING_MIN_BLOCK_INTERVAL_MS:-150}" || \
+        errors+=("MINING_MIN_BLOCK_INTERVAL_MS must be a non-negative integer in ms (0 disables) (got: '${MINING_MIN_BLOCK_INTERVAL_MS:-<unset>}')")
 
     if (( ${#errors[@]} > 0 )); then
         echo "Mining preflight failed (required for the Toccata/KIP-21 rehearsal):" >&2
