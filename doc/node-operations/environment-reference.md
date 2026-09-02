@@ -57,14 +57,11 @@ nothing hardcodes a tag in compose.
 | `IGRA_RETH_PRUNE_DISTANCE_BLOCKS` | `.env` | Optional. Opt-in bounded-history (pruned) execution layer; omit or leave empty for archive mode, the default. Recommended `600000` (~7 days); minimum `10064`. Plain decimal digits only — no `_` separators, no leading zeros, no surrounding whitespace; a malformed value stops the container before it writes anything. Needs a reth image that supports the profile, first released as `2.5.1-igra.2` |
 | `IGRA_RETH_ADOPT_EXISTING_VOLUME` | `.env` | Optional, `1` or unset. Opts into enabling the profile on a volume that **already holds a chain**, pruning it in place instead of forcing a resync. Consulted only when pruning is requested against a populated, unmarked data directory — inert on a fresh volume and in archive mode. Any other value is rejected |
 
-!!! warning "No published image supports this yet"
+!!! note "Requires reth `2.5.1-igra.2`"
 
-    Both networks currently pin `RETH_VERSION=2.5.1-igra.1`, which ignores this variable and
-    stays archive **silently**. Setting it today does nothing.
-
-    Do **not** pre-set it on a running archive node in anticipation of the upgrade. It is inert
-    now, but the first start on an image that does support it will find a populated volume,
-    refuse it, and restart-loop — unless you have also opted into adoption.
+    Both networks pin `2.5.1-igra.2`, which is the first release to read these variables. Any
+    older image ignores them and stays archive **silently** — it does not warn, so a node left on
+    an earlier pin looks configured for pruning while behaving as an archive node.
 
     The devnet and dev stacks build reth from source rather than pulling a tag, so what gates
     them is the branch they build (`RETH_VERSION=devnet`, `RETH_BRANCH`), not a version number.
