@@ -54,13 +54,18 @@ nothing hardcodes a tag in compose.
 
 | Variable | Where | Description |
 |----------|-------|-------------|
-| `IGRA_RETH_PRUNE_DISTANCE_BLOCKS` | `.env` | Optional. Opt-in bounded-history (pruned) execution layer; omit or leave empty for archive mode, the default. Recommended `600000` (~7 days); minimum `10064`. Plain decimal digits only — no `_` separators, no leading zeros, no surrounding whitespace; a malformed value stops the container before it writes anything. Needs a reth image that supports the profile, first released as `2.5.1-igra.2` |
+| `IGRA_RETH_PRUNE_DISTANCE_BLOCKS` | `.env` | Optional. Opt-in bounded-history (pruned) execution layer; omit or leave empty for archive mode, the default. Recommended `600000` (~7 days); minimum `10064`, maximum `9223372036854775807`. Plain decimal digits only — no `_` separators, no leading zeros, no surrounding whitespace; a malformed value stops the container before it writes anything. Needs a reth image that supports the profile, first released as `2.5.1-igra.2` |
 
 !!! note "Requires reth `2.5.1-igra.2`"
 
     Both networks pin `2.5.1-igra.2`, the first release with the bounded-history profile. Any
     older image ignores this variable and stays archive **silently** — it does not warn, so a node
     left on an earlier pin looks configured for pruning while behaving as an archive node.
+
+    That silence has a delayed cost. If you uncomment the variable while still pinned to an older
+    image, nothing happens and it looks inert — but your next `RETH_VERSION` bump is the moment the
+    launcher first reads it, finds a populated volume with no sentinel, and refuses to start. Set
+    the variable and move to a supporting image in the same step, on a volume you intend to prune.
 
     The devnet and dev stacks build reth from source rather than pulling a tag, so what gates
     them is the branch they build (`RETH_VERSION=devnet`, `RETH_BRANCH`), not a version number.
@@ -89,8 +94,14 @@ nothing hardcodes a tag in compose.
     stops Docker from re-making it root-owned, which would block reth from writing).
 
     Full operator detail ships inside the reth image at `/app/igra-README.md`. Read it without a
-    running container — which is the case during a restart loop — with
-    `docker run --rm --entrypoint cat igranetwork/reth:$RETH_VERSION /app/igra-README.md`.
+    running container — which is the case during a restart loop. `RETH_VERSION` is not exported to
+    your shell, so resolve the tag from the version file the way the rest of the repo does:
+
+    ```bash
+    docker run --rm --entrypoint cat \
+      igranetwork/reth:$(grep '^RETH_VERSION=' .env | cut -d= -f2) \
+      /app/igra-README.md
+    ```
 
 ### Adopting a volume that already has a chain
 
@@ -111,6 +122,10 @@ Production stacks use a network-derived named volume, so derive the name rather 
 ```bash
 PROJECT="$(docker compose config --format json | jq -r '.name')"
 # no jq? PROJECT="igra-orchestra-$(grep -E '^NETWORK=' .env | cut -d= -f2)"
+
+# Fail loudly on a wrong name: `docker run -v` CREATES a missing named volume,
+# so without this a mistargeted adoption silently succeeds against an empty one.
+docker volume inspect "${PROJECT}_reth_data" >/dev/null
 
 docker run --rm -v "${PROJECT}_reth_data:/d" alpine touch /d/.igra-adopt-this-volume
 docker compose --profile backend up -d execution-layer

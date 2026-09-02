@@ -1,7 +1,8 @@
 # Reth Upgrade: 1.9.3 → 2.5.1 (execution-layer resync)
 
 !!! danger "This deletes the execution-layer database"
-    Moving `RETH_VERSION` to the `2.5.1-igra.<n>` line is **not** a drop-in image swap. The
+    Moving `RETH_VERSION` **from 1.9.3** to the `2.5.1-igra.<n>` line is **not** a drop-in image
+    swap. Upgrades between `2.5.1-igra` revisions do not need this runbook. The
     reth database format changed between 1.9.3 (shipped as `3.0`) and 2.5.1, so the
     execution layer must be wiped and resynced from scratch.
 
