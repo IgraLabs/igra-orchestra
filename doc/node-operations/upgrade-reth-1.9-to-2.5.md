@@ -6,7 +6,7 @@
     reth database format changed between 1.9.3 (shipped as `3.0`) and 2.5.1, so the
     execution layer must be wiped and resynced from scratch.
 
-    Budget **12+ hours**, during which the **L2 RPC is offline**. Your kaspad (L1) data is
+    Budget **24+ hours**, during which the **L2 RPC is offline**. Your kaspad (L1) data is
     preserved — only the reth volume is removed.
 
 ## TL;DR
@@ -25,11 +25,18 @@ echo "$PROJECT"                                   # igra-orchestra-mainnet | igr
 docker ps -a --filter "volume=${PROJECT}_reth_data" --format '{{.Names}}'   # must print nothing
 docker volume rm "${PROJECT}_reth_data"
 
-# 4. Bring the backend up and let it resync (12+ hours)
-docker compose --profile backend up -d
+# 4. Refresh the checkout and sync the image pins into .env, then pull.
+#    WITHOUT THIS the old image is still pinned and `up -d` silently reuses it.
+git fetch origin && git checkout main && git pull --ff-only
+diff <(grep -E '^[A-Z_]+_VERSION=' versions.mainnet.env | sort) \
+     <(grep -E '^[A-Z_]+_VERSION=' .env | sort)      # edit .env until this prints nothing
+docker compose config -q && docker compose --profile backend pull
 
-# 5. Only once the EL has caught up, bring the workers back (same N as before)
-docker compose --profile frontend-w${NUM_WORKERS} up -d
+# 5. Bring the backend up and let it resync (24+ hours)
+docker compose --profile backend up -d --no-build
+
+# 6. Only once the EL has caught up, bring the workers back (same N as before)
+docker compose --profile frontend-w${NUM_WORKERS} up -d --no-build
 ```
 
 ## Symptom: what happens if you skip the wipe
@@ -142,10 +149,44 @@ volume is in use. Then:
 docker volume rm "${PROJECT}_reth_data"
 ```
 
-### 4. Start the backend and resync
+### 4. Sync the image version pins into `.env`
+
+**Do not skip this.** `.env` holds a *copy* of the pins, appended from
+`versions.<network>.env` when the node was first set up. Nothing re-syncs it afterwards, so a
+`git pull` updates the repo's version file while your `.env` keeps the old tag. Compose reads
+`.env` — never `versions.<network>.env` — so step 5 would find the old image already present
+locally, start it, and resync the whole chain onto the image you were trying to replace. reth
+opens the empty volume it just created without complaint, so **there is no error to notice**.
+
+First make sure you actually have the new pins:
 
 ```bash
-docker compose --profile backend up -d
+git fetch origin && git checkout main && git pull --ff-only
+```
+
+Then compare the repo's pins against yours — substitute your network's file:
+
+```bash
+diff <(grep -E '^[A-Z_]+_VERSION=' versions.mainnet.env | sort) \
+     <(grep -E '^[A-Z_]+_VERSION=' .env | sort)
+```
+
+Every line it prints is a pin your node is not running. Edit `.env` and set each one to the
+value from `versions.<network>.env` — copy the full string, and do not "correct" a number that
+looks like a downgrade (see [Image Versions](environment-reference.md#image-versions)). Re-run
+the `diff` until it prints nothing.
+
+Validate and fetch the new images before starting anything:
+
+```bash
+docker compose config -q                      # renders cleanly
+docker compose --profile backend pull         # fetch the new tags now, not mid-resync
+```
+
+### 5. Start the backend and resync
+
+```bash
+docker compose --profile backend up -d --no-build
 docker compose logs -f execution-layer
 ```
 
@@ -154,18 +195,18 @@ Leave the frontend down for the whole resync.
 !!! note "\"healthy\" does not mean \"synced\""
     The execution-layer healthcheck only probes its IPC socket and TCP 8545 — it says
     nothing about sync progress. The EL therefore reports **healthy within about a minute**
-    of a wipe, and kaspad starts feeding it, while the resync still has 12+ hours to run.
+    of a wipe, and kaspad starts feeding it, while the resync still has 24+ hours to run.
     Judge progress from the logs and block height, not from `docker compose ps`.
 
     A brief `unhealthy` flap in the first ~35 seconds after the wipe is expected and
     self-heals.
 
-### 5. Bring the workers back
+### 6. Bring the workers back
 
 Only once the execution layer has caught up:
 
 ```bash
-docker compose --profile frontend-w${NUM_WORKERS} up -d   # same N you were running before
+docker compose --profile frontend-w${NUM_WORKERS} up -d --no-build   # same N as before
 ```
 
 ## Verify
@@ -199,7 +240,7 @@ Only `reth_data` is removed. Everything else survives and must **not** be recrea
 
 | Artifact | Kind | Why it stays |
 |---|---|---|
-| `kaspad_data` | named volume | L1 chain and ATAN state. reth replays L2 from it — removing it turns a 12-hour job into a multi-day one |
+| `kaspad_data` | named volume | L1 chain and ATAN state. reth replays L2 from it — removing it turns a 24-hour job into a multi-day one |
 | `keys/jwt.hex` | host bind mount | Shared engine-API secret. kaspad reads the same file; regenerating it desyncs the pair |
 | `traefik_certs` | named volume | Let's Encrypt `acme.json`; re-issuing risks rate limits |
 | `network-params/` | host bind mount | Rewritten by the EL at boot |

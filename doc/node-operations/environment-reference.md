@@ -18,6 +18,13 @@ Every image tag is pinned centrally in the per-network version files
 (`versions.mainnet.env`, `versions.galleon-testnet.env`). Setup appends them into `.env`;
 nothing hardcodes a tag in compose.
 
+Compose reads `.env`, never `versions.<network>.env`. Setup copies the pins across **once**, and
+nothing re-syncs them afterwards — so a `git pull` that bumps a version file leaves your node on the
+old tag until you edit `.env` by hand. `docker compose up -d` will not warn: it finds the old image
+already present locally and starts it. See
+[Reth Upgrade 1.9.3 → 2.5.1](upgrade-reth-1.9-to-2.5.md#4-sync-the-image-version-pins-into-env) for
+the drift check.
+
 | Variable | Where | Description |
 |----------|-------|-------------|
 | `KASPAD_VERSION` | `versions.*.env` | Image tag for `igranetwork/kaspad`. Tracks the upstream rusty-kaspa release — see the note below |
@@ -86,7 +93,7 @@ nothing hardcodes a tag in compose.
 
     To move a node off this profile, wipe the reth volume with the procedure in
     [Reth Upgrade 1.9.3 → 2.5.1](upgrade-reth-1.9-to-2.5.md#3-remove-only-the-reth-volume) — same
-    wipe, same 12+ hours with the L2 RPC offline. **Never `docker compose down -v`**, on any
+    wipe, same 24+ hours with the L2 RPC offline. **Never `docker compose down -v`**, on any
     network: it also destroys `kaspad_data` (the L1 chain and ATAN data) and, on production,
     `traefik_certs`. On devnet `down -v` is worse than useless — it destroys the L1 chain and does
     *not* touch the reth bind mount. Clear that by hand instead:

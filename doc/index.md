@@ -12,7 +12,7 @@ Choose your deployment guide:
 ## Operations
 
 - **[Node Operations](node-operations/index.md)** - Worker config, wallet API, balance monitoring, health checks, ATAN-only mode, and external CPU mining
-- **[Reth Upgrade: 1.9.3 → 2.5.1](node-operations/upgrade-reth-1.9-to-2.5.md)** - Drop the execution-layer database and resync when `RETH_VERSION` moves to the `2.5.1-igra.<n>` line; kaspad data is preserved (12+ hours, L2 RPC offline)
+- **[Reth Upgrade: 1.9.3 → 2.5.1](node-operations/upgrade-reth-1.9-to-2.5.md)** - Drop the execution-layer database and resync when `RETH_VERSION` moves to the `2.5.1-igra.<n>` line; kaspad data is preserved (24+ hours, L2 RPC offline)
 - **[Kaspa Wallet Guide](kaspa-wallet.md)** - Wallet setup and management for all networks
 - **[Log Management](log-management.md)** - Automated log cleanup for servers
 
