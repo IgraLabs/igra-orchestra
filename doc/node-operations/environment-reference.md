@@ -18,6 +18,13 @@ Every image tag is pinned centrally in the per-network version files
 (`versions.mainnet.env`, `versions.galleon-testnet.env`). Setup appends them into `.env`;
 nothing hardcodes a tag in compose.
 
+Compose reads `.env`, never `versions.<network>.env`. Setup copies the pins across **once**, and
+nothing re-syncs them afterwards — so a `git pull` that bumps a version file leaves your node on the
+old tag until you edit `.env` by hand. `docker compose up -d` will not warn: it finds the old image
+already present locally and starts it. See
+[Reth Upgrade 1.9.3 → 2.5.1](upgrade-reth-1.9-to-2.5.md#4-sync-the-image-version-pins-into-env) for
+the drift check.
+
 | Variable | Where | Description |
 |----------|-------|-------------|
 | `KASPAD_VERSION` | `versions.*.env` | Image tag for `igranetwork/kaspad`. Tracks the upstream rusty-kaspa release — see the note below |
@@ -49,6 +56,106 @@ nothing hardcodes a tag in compose.
     `node-health-check-client`, and `atan-uploader` still use IGRA's own numbering. Note
     also that kaspad currently dual-publishes the same commit as both `2.0.1-igra.1` and
     `3.1.0`, so a live 3.x channel still exists on that side during the migration.
+
+## Execution Layer
+
+| Variable | Where | Description |
+|----------|-------|-------------|
+| `IGRA_RETH_PRUNE_DISTANCE_BLOCKS` | `.env` | Optional. Opt-in bounded-history (pruned) execution layer; omit or leave empty for archive mode, the default. Recommended `600000` (~7 days); minimum `10064`, maximum `9223372036854775807`. Plain decimal digits only — no `_` separators, no leading zeros, no surrounding whitespace; a malformed value stops the container before it writes anything. Needs a reth image that supports the profile, first released as `2.5.1-igra.2` |
+
+!!! note "Requires reth `2.5.1-igra.2`"
+
+    Both networks pin `2.5.1-igra.2`, the first release with the bounded-history profile. Any
+    older image ignores this variable and stays archive **silently** — it does not warn, so a node
+    left on an earlier pin looks configured for pruning while behaving as an archive node.
+
+    That silence has a delayed cost. If you uncomment the variable while still pinned to an older
+    image, nothing happens and it looks inert — but your next `RETH_VERSION` bump is the moment the
+    launcher first reads it, finds a populated volume with no sentinel, and refuses to start. Set
+    the variable and move to a supporting image in the same step, on a volume you intend to prune.
+
+    The devnet and dev stacks build reth from source rather than pulling a tag, so what gates
+    them is the branch they build (`RETH_VERSION=devnet`, `RETH_BRANCH`), not a version number.
+
+!!! danger "The pruning distance is fixed when the data volume is created"
+
+    The value is stamped into the reth data volume on first start. Once stamped, changing or
+    removing it is **refused** — the launcher exits and the container restart-loops. Unsetting the
+    variable is not a rollback, because reth keeps pruning from its persisted `reth.toml`. Going
+    back to archive means a fresh volume and a full resync.
+
+    Turning the profile *on* for a node that already has chain data is refused by default. There is
+    **no environment variable** for it — see "Adopting a volume that already has a chain" below.
+
+    A pruned node cannot serve bodies, receipts, or existence for anything older than the
+    boundary, and that limit reaches end users through its public RPC. Do not put one behind an
+    endpoint that advertises full history, and do not use one as a Blockscout backend.
+
+    To move a node off this profile, wipe the reth volume with the procedure in
+    [Reth Upgrade 1.9.3 → 2.5.1](upgrade-reth-1.9-to-2.5.md#3-remove-only-the-reth-volume) — same
+    wipe, same 24+ hours with the L2 RPC offline. **Never `docker compose down -v`**, on any
+    network: it also destroys `kaspad_data` (the L1 chain and ATAN data) and, on production,
+    `traefik_certs`. On devnet `down -v` is worse than useless — it destroys the L1 chain and does
+    *not* touch the reth bind mount. Clear that by hand instead:
+    `sudo rm -rf data/reth && mkdir -p data/reth` (reth writes it as root; re-creating it yourself
+    stops Docker from re-making it root-owned, which would block reth from writing).
+
+    Full operator detail ships inside the reth image at `/app/igra-README.md`. Read it without a
+    running container — which is the case during a restart loop. `RETH_VERSION` is not exported to
+    your shell, so resolve the tag from the version file the way the rest of the repo does:
+
+    ```bash
+    docker run --rm --entrypoint cat \
+      igranetwork/reth:$(grep '^RETH_VERSION=' .env | cut -d= -f2) \
+      /app/igra-README.md
+    ```
+
+### Adopting a volume that already has a chain
+
+By default the launcher refuses to enable the profile on a populated data directory. To authorize
+one specific volume, create the sentinel file `.igra-adopt-this-volume` inside it and start again
+with `IGRA_RETH_PRUNE_DISTANCE_BLOCKS` set as usual.
+
+The authorization is a file rather than a variable on purpose: it lives inside the volume, so it
+cannot authorize a different one, and the launcher **deletes it once used**, so it cannot authorize
+a later one. A variable left in `.env` would do neither — `DATA_DIR` is a fixed path whose contents
+change.
+
+The file is at `/app/data/.igra-adopt-this-volume` **as the container sees it**. That path does not
+exist on the host, so create it through the volume.
+
+Production stacks use a network-derived named volume, so derive the name rather than typing it:
+
+```bash
+PROJECT="$(docker compose config --format json | jq -r '.name')"
+# no jq? PROJECT="igra-orchestra-$(grep -E '^NETWORK=' .env | cut -d= -f2)"
+
+# Fail loudly on a wrong name: `docker run -v` CREATES a missing named volume,
+# so without this a mistargeted adoption silently succeeds against an empty one.
+docker volume inspect "${PROJECT}_reth_data" >/dev/null
+
+docker run --rm -v "${PROJECT}_reth_data:/d" alpine touch /d/.igra-adopt-this-volume
+docker compose --profile backend up -d execution-layer
+```
+
+The devnet stack bind-mounts `./data/reth`, so the file is an ordinary host file:
+
+```bash
+touch data/reth/.igra-adopt-this-volume
+```
+
+!!! danger "Adoption deletes history irreversibly"
+
+    The first prune pass removes everything below the retention boundary. Unsetting the distance
+    afterwards is not a rollback — reth keeps pruning from its persisted `reth.toml`. Snapshot the
+    volume first if the history matters.
+
+    The volume **must already be storage v2**. A v1 volume needs `reth db migrate-v2` first; the
+    launcher cannot tell the two apart, because `rocksdb/` exists on both, so this is your
+    assertion rather than a check it performs.
+
+    Retention stays coarser than the configured distance until the volume's pre-existing static
+    files age out — they were written at a larger size than a fresh pruned volume uses.
 
 ## Health Check
 
