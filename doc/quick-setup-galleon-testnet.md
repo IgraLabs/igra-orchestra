@@ -216,6 +216,9 @@ Verify services are healthy:
 docker compose ps
 ```
 
+Traefik's API/dashboard are disabled. Container health requires loopback
+`127.0.0.1:8082/ping` and at least one healthy RPC backend; ping is not published.
+
 **Node Health Check:**
 The node-health-check-client reports sync status and consensus to the monitoring dashboard.
 Check its logs:
@@ -281,6 +284,17 @@ docker compose --profile frontend-w5 up -d --no-build
 ```
 
 ## Maintenance
+
+**Traefik upgrade:** Review local Compose/Traefik overrides for management exposure
+and retire old Traefik 8080 monitors/firewall rules. Recreate with your active frontend
+profile (`frontend-w5` below); `restart` does not apply command/port changes:
+
+```bash
+docker compose --profile frontend-w5 up -d --no-deps --force-recreate traefik
+```
+
+Recreation briefly interrupts traffic and keeps `traefik_certs`. Afterwards, check
+normal RPC calls, public `/health`, and `docker compose ps`.
 
 Restart frontend services without touching backend:
 ```bash
