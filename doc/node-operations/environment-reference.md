@@ -157,6 +157,77 @@ touch data/reth/.igra-adopt-this-volume
     Retention stays coarser than the configured distance until the volume's pre-existing static
     files age out — they were written at a larger size than a fresh pruned volume uses.
 
+## Logging
+
+`LOG_LEVEL` is the single knob. Every Rust service in the stack reads it, and
+each one also accepts a `<SERVICE>_LOG_LEVEL` override that defaults back to it,
+so you only set the override while debugging one service.
+
+| Variable | Where | Description |
+|----------|-------|-------------|
+| `LOG_LEVEL` | `.env` | Log level for every Rust service (default: `info`). Accepts a bare level (`warn`) or directive syntax (`info,kaspa_atan_core=trace`) |
+| `KASPAD_LOG_LEVEL` | `.env` | Optional kaspad-only override. Also applies to `docker-compose.devnet.yml`, `docker-compose.atan.yml` and `docker-compose.devnet-atan-import.yml` |
+| `RPC_PROVIDER_LOG_LEVEL` | `.env` | Optional rpc-provider-only override (applies to all 20 replicas) |
+| `KASWALLET_LOG_LEVEL` | `.env` | Optional kaswallet-only override (applies to all 20 replicas) |
+| `NODE_HEALTH_CHECK_LOG_LEVEL` | `.env` | Optional node-health-check-client-only override |
+| `TRAEFIK_LOG_LEVEL` | `.env` | Traefik log level (default: `WARN`). Go levels only — `DEBUG`, `INFO`, `WARN`, `ERROR`. Not directive syntax, and not covered by `LOG_LEVEL` |
+| `LOGGING_DRIVER` | `.env` | Docker log driver (default: `json-file`) |
+| `ENABLE_PERF_DIAGNOSTICS` | `.env` | Passes `--igra-enable-perf-diagnostics` to kaspad |
+| `ENABLE_EVENT_LOGGING` | `.env` | Passes `--igra-enable-event-logging` to kaspad; writes NDJSON into `./logs/kaspad/` |
+
+### `LOG_LEVEL` vs `RUST_LOG`
+
+`RUST_LOG` is the variable the Rust binaries actually read — its name is fixed
+upstream (`EnvFilter::try_from_default_env()`; kaspad's `DEFAULT_LOGGER_ENV`).
+Compose derives it per service:
+
+```yaml
+RUST_LOG: ${<SERVICE>_LOG_LEVEL:-${LOG_LEVEL:-info}}
+```
+
+**Do not set `RUST_LOG` in `.env`** — it is container-internal and has no
+effect there. If you are upgrading from a version that used `RUST_LOG` as the
+operator knob, rename that line to `LOG_LEVEL`; otherwise the stack falls back
+to `info`.
+
+The trailing `:-info` is deliberate: `tracing`'s `EnvFilter` treats an empty
+string as an empty filter, i.e. *log nothing*. The nested default makes an
+empty value impossible to propagate.
+
+`RUST_LOG` is still the right variable for a one-off `docker exec` into a
+running container — see
+[ATAN verification](atan-verification.md).
+
+### Coverage
+
+| Service | Honors `LOG_LEVEL`? | Notes |
+|---|---|---|
+| `kaspad` | yes | log4rs directive syntax |
+| `rpc-provider-*` | yes | |
+| `kaswallet-*` | yes | Env only. The daemon's `--logs-level` flag is deliberately not passed: it is a clap enum accepting a bare level, so a directive string would make it exit at startup |
+| `node-health-check-client` | yes | |
+| `traefik` | no | Uses `TRAEFIK_LOG_LEVEL` (Go levels) |
+| `execution-layer` | **no** | The reth image hardcodes its own filter and ignores the environment. Tracked separately on the Execution Layer board |
+| `atan-uploader` | no | Python, fixed at `INFO` |
+| `wallet-balance-api` | no | Shell script |
+
+### kaspad filter syntax
+
+kaspad builds its filter in three steps: `root_level(info)`, then
+`parse_env(RUST_LOG)`, then `parse_expression(--loglevel)`. The last step wins
+for the **root** level and is a no-op for per-module targets.
+
+`--loglevel` defaults to `info` even when the flag is absent
+(`kaspad/src/args.rs`), so that default would silently overwrite any root level
+`LOG_LEVEL` set — `LOG_LEVEL=warn` would leave kaspad at `info`. The entrypoints
+therefore pass `--loglevel="$RUST_LOG"` explicitly, giving both steps the same
+resolved value.
+
+This is safe for kaspad specifically: its `--loglevel` is a free-form string fed
+to the same parser, and its own help text documents `<subsystem>=<level>,...`
+syntax. Do not copy the pattern to kaswallet, whose equivalent flag is a
+restricted enum (see the Coverage table).
+
 ## Health Check
 
 | Variable | Where | Description |

@@ -28,6 +28,21 @@ die() {
     exit 1
 }
 
+# The operator-facing log knob was renamed RUST_LOG -> LOG_LEVEL (ENG-1263).
+# A leftover RUST_LOG line is now inert, so warn rather than let the node come
+# up quieter than the operator asked for.
+warn_legacy_rust_log() {
+    local file="${1:-.env}"
+
+    [[ -f "$file" ]] || return 0
+    grep -qE '^[[:space:]]*(export[[:space:]]+)?RUST_LOG=' "$file" || return 0
+
+    echo "WARN: $file sets RUST_LOG, which is no longer read. Rename it to LOG_LEVEL" >&2
+    echo "      (or a per-service <SERVICE>_LOG_LEVEL); logging defaults to info until you do." >&2
+    echo "      See doc/node-operations/environment-reference.md#logging" >&2
+    return 0
+}
+
 read_env_value() {
     local file="$1"
     local var="$2"
@@ -588,6 +603,8 @@ run_setup() {
     else
         template_has_placeholders=false
     fi
+
+    warn_legacy_rust_log .env
 
     # Preserve same-network pre-launch .env files so operators can fill placeholders.
     if [[ -f .env && "$template_has_placeholders" == "true" && "$existing_network" == "$template_network" ]]; then

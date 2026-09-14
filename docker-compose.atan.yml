@@ -41,7 +41,7 @@ services:
       - NETWORK
       - TX_ID_PREFIX
       - IGRA_LANE_ID
-      - RUST_LOG=${RUST_LOG:-info,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace}
+      - RUST_LOG=${KASPAD_LOG_LEVEL:-${LOG_LEVEL:-info}}
     entrypoint:
       - sh
       - -ec
@@ -119,7 +119,7 @@ services:
           ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
         fi
 
-        exec /app/kaspad $$ARGS
+        exec /app/kaspad $$ARGS --loglevel="$$RUST_LOG"
     volumes:
       - kaspad_data:/app/data/
       - ./logs/kaspad/:/app/logs/

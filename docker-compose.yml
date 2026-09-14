@@ -18,7 +18,7 @@ x-default-logging: &default-logging
   driver: "${LOGGING_DRIVER:-json-file}"
   options:
     max-size: "1g"
-    max-file: "500"
+    max-file: "10"
     compress: "true"
     tag: "igra-orchestra-${NETWORK}/{{.Name}}/{{.ID}}"
 
@@ -39,7 +39,7 @@ x-dependency-watch-volume: &dependency-watch-volume ./scripts/lib/watch-dependen
 x-parse-network-slug-volume: &parse-network-slug-volume ./scripts/lib/parse-network-slug.sh:/app/parse-network-slug.sh:ro
 
 x-rpc-provider-environment: &rpc-provider-environment
-  RUST_LOG: ${RUST_LOG}
+  RUST_LOG: ${RPC_PROVIDER_LOG_LEVEL:-${LOG_LEVEL:-info}}
   SERVER_HOST: "0.0.0.0"
   SERVER_PORT: 8535
   EL_URL: http://execution-layer:8545
@@ -128,7 +128,7 @@ x-kaswallet-runtime: &kaswallet-runtime
   expose:
     - "8082"
   environment:
-    - RUST_LOG
+    - RUST_LOG=${KASWALLET_LOG_LEVEL:-${LOG_LEVEL:-info}}
     - NETWORK
     - KASPAD_HOST
     - KASPAD_GRPC_PORT
@@ -151,7 +151,7 @@ x-kaswallet-runtime: &kaswallet-runtime
       # Sets KASPA_FAMILY and KASPA_NETSUFFIX from NETWORK.
       . /app/parse-network-slug.sh
 
-      ARGS="--logs-level=$$RUST_LOG --keys /app/keys/keys.json --server grpc://$$KASPAD_HOST:$$KASPAD_GRPC_PORT --listen 0.0.0.0:8082"
+      ARGS="--keys /app/keys/keys.json --server grpc://$$KASPAD_HOST:$$KASPAD_GRPC_PORT --listen 0.0.0.0:8082"
       if [ "$$KASPA_FAMILY" = "mainnet" ]; then
         ARGS="--enable-mainnet-pre-launch $$ARGS"
       else
@@ -228,7 +228,7 @@ services:
       - IGRA_ENABLE
       - POST_FORK_LOCK_SCRIPT_PUBKEY
       - LOCK_SCRIPT_FORK_DAA_SCORE
-      - RUST_LOG=info,kaspa_viaduct=trace,kaspa_igra_adapter=trace,kaspa_atan_core=trace,kaspa_atan_server=trace,kaspa_atan_storage=trace,kaspa_atan_validation=trace,kaspa_atan_client=trace,kaspa_atan_importer=trace
+      - RUST_LOG=${KASPAD_LOG_LEVEL:-${LOG_LEVEL:-info}}
     entrypoint:
       - sh
       - -ec
@@ -332,7 +332,7 @@ services:
 
         exec sh /app/watch-dependencies.sh \
           --tcp execution-layer execution-layer 8545 \
-          -- /app/kaspad $$ARGS
+          -- /app/kaspad $$ARGS --loglevel="$$RUST_LOG"
     volumes:
       - kaspad_data:/app/data/
       - ./logs/kaspad/:/app/logs/  # Event logs when ENABLE_EVENT_LOGGING=true
@@ -417,6 +417,7 @@ services:
     container_name: node-health-check-client
     networks:
       - igra-network
+    logging: *default-logging
     # Gate startup on execution-layer: this client polls execution-layer:8545 and,
     # if started in parallel on `compose up`, races reth's boot and goes stale.
     # required:false keeps the standalone node-health-check-client profile working.
@@ -425,6 +426,7 @@ services:
         condition: service_healthy
         required: false
     environment:
+      - RUST_LOG=${NODE_HEALTH_CHECK_LOG_LEVEL:-${LOG_LEVEL:-info}}
       - NODE_RPC_URL=http://execution-layer:8545
       - MONITOR_URL=http://${NODE_HEALTH_CHECK_URL}:8081
       - NODE_ID=${NODE_ID}
