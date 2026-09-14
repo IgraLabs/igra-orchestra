@@ -2,6 +2,10 @@
 
 Automated log cleanup system for Ubuntu servers to prevent disk exhaustion from Docker syslog and compressed logs.
 
+This page covers cleanup of logs already on disk. To reduce how much the stack
+writes in the first place, see
+[Environment Reference → Logging](node-operations/environment-reference.md#logging).
+
 ## Quick Start
 
 ```bash

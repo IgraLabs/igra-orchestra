@@ -57,7 +57,7 @@ services:
       # cases). Set NODE1_PEER=<host[:port]> explicitly to opt back into peering.
       - NODE1_PEER=${NODE1_PEER:-}
       - ATAN_IMPORT_DIR=${ATAN_IMPORT_DIR:-/import-src/kaspa-devnet/datadir/atan/${TX_ID_PREFIX:-97b1}/chain_block_lists}
-      - RUST_LOG=${RUST_LOG:-info,kaspa_atan_core=info,kaspa_atan_server=info,kaspa_atan_storage=info,kaspa_atan_validation=info,kaspa_atan_import_core=info}
+      - RUST_LOG=${KASPAD_LOG_LEVEL:-${LOG_LEVEL:-info}}
     entrypoint:
       - sh
       - -ec

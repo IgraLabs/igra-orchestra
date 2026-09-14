@@ -306,6 +306,20 @@ The `wallet-api` profile starts a lightweight HTTP service that queries all runn
 
 This project uses a `.env` file to manage environment variables. A `.env.dev.example` file is provided with defaults.
 
+### Log Level
+
+`LOG_LEVEL` (default: `info`) sets the log level for every Rust service —
+kaspad, rpc-provider, kaswallet and node-health-check-client. It accepts a bare
+level (`warn`) or directive syntax (`info,kaspa_atan_core=trace`).
+
+To turn up one service without touching the rest, set the matching
+`KASPAD_LOG_LEVEL`, `RPC_PROVIDER_LOG_LEVEL`, `KASWALLET_LOG_LEVEL` or
+`NODE_HEALTH_CHECK_LOG_LEVEL`; each defaults back to `LOG_LEVEL`.
+
+Do not set `RUST_LOG` in `.env` — it is container-internal and has no effect
+there. See
+[Environment Reference → Logging](doc/node-operations/environment-reference.md#logging).
+
 ### Logging Driver
 
 By default, Docker logs use the `json-file` driver. You can change this by setting the `LOGGING_DRIVER` environment variable (e.g., to `syslog` on Linux).
@@ -378,7 +392,9 @@ The recommended way to run the IGRA Orchestra stack is:
 
 ### Accessing Logs
 
-By default, container logs use the `json-file` driver (configurable via the `LOGGING_DRIVER` environment variable, see Configuration section). Logs are tagged with `igra-orchestra-${NETWORK}/{{.Name}}/{{.ID}}`.
+By default, container logs use the `json-file` driver (configurable via the `LOGGING_DRIVER` environment variable, see Configuration section). Logs are tagged with `igra-orchestra-${NETWORK}/{{.Name}}/{{.ID}}` and rotate at 1 GB x 10 files per container.
+
+Docker applies rotation settings when a container is **created**, so changing them only takes effect after `docker compose up -d --force-recreate`, and already-rotated files are not removed retroactively.
 
 With the default `json-file` driver, use standard `docker logs` commands. If using `syslog`, see the section below.
 
