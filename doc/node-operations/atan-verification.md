@@ -77,10 +77,12 @@ docker run --rm -v "$VOL":/app/data:ro \
 ```
 
 !!! warning "Quiet the logs"
-    `kaspa-atan-verify` honours `RUST_LOG`. The deployed node sets `RUST_LOG` to **trace** for the ATAN
-    crates, which makes the validator log **one line per block** (hundreds of thousands per period). Always
-    pass `-e RUST_LOG=warn,kaspa_atan_verify=info` so you get just the per-period `PASS`/`FAIL` lines. This
-    matters most for `docker exec` (which inherits the live container's `RUST_LOG`).
+    `kaspa-atan-verify` honours `RUST_LOG`, and without a filter it logs **one line per block**
+    (hundreds of thousands per period). Always pass `-e RUST_LOG=warn,kaspa_atan_verify=info` so you
+    get just the per-period `PASS`/`FAIL` lines. This matters most for `docker exec`, which inherits
+    the live container's `RUST_LOG` — so if the node runs with a `KASPAD_LOG_LEVEL` that pins the
+    ATAN crates to `trace`, the verifier inherits that too. See
+    [Logging](environment-reference.md#logging).
 
 !!! tip "Quick alternative: exec into the running node"
     Because the verifier is part of the kaspad image, you can also run it inside the live container (the
