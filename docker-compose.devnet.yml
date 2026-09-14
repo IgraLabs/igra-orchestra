@@ -199,10 +199,10 @@ services:
         if [ "$$IGRA_ENABLED" = "true" ]; then
           exec sh /app/watch-dependencies.sh \
             --tcp execution-layer execution-layer 8545 \
-            -- /app/kaspad $$ARGS
+            -- /app/kaspad $$ARGS --loglevel="$$RUST_LOG"
         else
           # ATAN-only / L2-off: no execution layer to wait for.
-          exec /app/kaspad $$ARGS
+          exec /app/kaspad $$ARGS --loglevel="$$RUST_LOG"
         fi
     volumes:
       - kaspad_data:/app/data/

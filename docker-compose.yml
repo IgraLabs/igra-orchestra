@@ -332,7 +332,7 @@ services:
 
         exec sh /app/watch-dependencies.sh \
           --tcp execution-layer execution-layer 8545 \
-          -- /app/kaspad $$ARGS
+          -- /app/kaspad $$ARGS --loglevel="$$RUST_LOG"
     volumes:
       - kaspad_data:/app/data/
       - ./logs/kaspad/:/app/logs/  # Event logs when ENABLE_EVENT_LOGGING=true

@@ -127,7 +127,7 @@ services:
           exit 1
         fi
 
-        exec /app/kaspad $$ARGS
+        exec /app/kaspad $$ARGS --loglevel="$$RUST_LOG"
     networks:
       - node1_net
     volumes:

@@ -119,7 +119,7 @@ services:
           ARGS="$$ARGS --addpeer=$$KASPAD_ADD_PEER"
         fi
 
-        exec /app/kaspad $$ARGS
+        exec /app/kaspad $$ARGS --loglevel="$$RUST_LOG"
     volumes:
       - kaspad_data:/app/data/
       - ./logs/kaspad/:/app/logs/

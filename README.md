@@ -394,7 +394,9 @@ The recommended way to run the IGRA Orchestra stack is:
 
 By default, container logs use the `json-file` driver (configurable via the `LOGGING_DRIVER` environment variable, see Configuration section). Logs are tagged with `igra-orchestra-${NETWORK}/{{.Name}}/{{.ID}}` and rotate at 1 GB x 10 files per container.
 
-Docker applies rotation settings when a container is **created**, so changing them only takes effect after `docker compose up -d --force-recreate`, and already-rotated files are not removed retroactively.
+Docker applies rotation settings when a container is **created**. Compose includes `logging:` in each service's config hash, so a plain `docker compose up -d` recreates the affected containers automatically — no `--force-recreate` needed. Already-rotated files are not removed retroactively.
+
+> **This release recreates the whole stack.** The `LOG_LEVEL` rename and the `max-file` change touch every service, so the first `docker compose up -d` after pulling recreates all containers. Recreation discards each old container's `docker logs` history; export anything you still need first.
 
 With the default `json-file` driver, use standard `docker logs` commands. If using `syslog`, see the section below.
 

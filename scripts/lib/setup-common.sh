@@ -35,9 +35,12 @@ warn_legacy_rust_log() {
     local file="${1:-.env}"
 
     [[ -f "$file" ]] || return 0
-    grep -qE '^[[:space:]]*RUST_LOG=' "$file" || return 0
+    grep -qE '^[[:space:]]*(export[[:space:]]+)?RUST_LOG=' "$file" || return 0
 
-    error "$file sets RUST_LOG, which is no longer read. Rename it to LOG_LEVEL (or a per-service <SERVICE>_LOG_LEVEL); logging defaults to info until you do. See doc/node-operations/environment-reference.md#logging"
+    echo "WARN: $file sets RUST_LOG, which is no longer read. Rename it to LOG_LEVEL" >&2
+    echo "      (or a per-service <SERVICE>_LOG_LEVEL); logging defaults to info until you do." >&2
+    echo "      See doc/node-operations/environment-reference.md#logging" >&2
+    return 0
 }
 
 read_env_value() {
