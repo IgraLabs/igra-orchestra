@@ -516,7 +516,9 @@ docker run --rm -v ./logs:/app/logs --entrypoint /app/igra-tx-parser igranetwork
 
 ## DoS Hygiene (ENG-1020)
 
-Traefik applies per-real-IP rate limiting, concurrent in-flight caps, request-body size caps, and entry-point read/write/idle timeouts on every public entry point (`rpc`, `websecure`, `web`, `explorer_*`, `el_stats`). The `wallet-api`, `health`, `health-http`, and `web-redirect` routers are intentionally left untouched.
+Traefik configures read/write/idle timeouts per public entry point (`rpc`, `websecure`, `web`, `explorer_*`, `el_stats`). Per-real-IP rate limits, concurrent in-flight caps, and request-body size caps apply through middleware on the routers that attach them; health and wallet routes retain their own middleware.
+
+HTTPS on port 443 serves explicit `GET /health` and optional wallet routes; unmatched paths return 404. HTTP on port 80 retains HTTPS redirection except for explicitly routed `GET /health`. JSON-RPC and WebSocket traffic remain on TLS port 8545.
 
 Tunable env vars (all optional, defaults shown):
 

@@ -972,13 +972,8 @@ services:
       - "traefik.http.routers.web-redirect.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
       - "traefik.http.routers.web-redirect.entrypoints=web"
       - "traefik.http.routers.web-redirect.middlewares=redirect-to-https"
-      # Define a router for websecure (HTTPS) — low priority so specific path routers win
-      - "traefik.http.routers.websecure-router.rule=Host(`${IGRA_ORCHESTRA_DOMAIN}`)"
-      - "traefik.http.routers.websecure-router.entrypoints=websecure"
-      - "traefik.http.routers.websecure-router.priority=1"
-      - "traefik.http.routers.websecure-router.tls=true"
-      - "traefik.http.routers.websecure-router.tls.certresolver=myresolver"
-      - "traefik.http.routers.websecure-router.middlewares=rpc-rate-limit,rpc-in-flight,rpc-buffering@file"
+      # Unmatched HTTPS paths intentionally return 404. A catch-all here can route
+      # back to Traefik's HTTP entrypoint and create a self-redirect loop.
     healthcheck:
       <<: *default-healthcheck
       test:

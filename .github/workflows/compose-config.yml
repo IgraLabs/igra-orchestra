@@ -91,6 +91,47 @@ jobs:
         run: |
           set -e
           python3 scripts/ci/test-compose-invariants.py compose.json
+      - name: Assert HTTPS fallthrough and health/RPC routing
+        run: |
+          python3 - <<'PY'
+          import json
+
+          with open("compose.json", encoding="utf-8") as fh:
+              services = json.load(fh)["services"]
+
+          host_rule = services["rpc-provider-0"]["labels"]["traefik.http.routers.rpc0.rule"]
+          assert host_rule.startswith("Host(`") and host_rule.endswith("`)"), host_rule
+          health_rule = f"{host_rule} && PathPrefix(`/health`) && Method(`GET`)"
+          for name, service in services.items():
+              labels = service.get("labels", {})
+              assert not any(key.startswith("traefik.http.routers.websecure-router.") for key in labels), \
+                  f"{name}: websecure-router labels can recreate the HTTPS self-redirect loop"
+              if name.startswith("rpc-provider-"):
+                  for key, expected in {
+                      "routers.rpc0.rule": host_rule,
+                      "routers.rpc0.entrypoints": "rpc",
+                      "routers.rpc0.tls": "true",
+                      "services.rpc0.loadbalancer.server.port": "8535",
+                      "routers.health.rule": health_rule,
+                      "routers.health.entrypoints": "websecure",
+                      "routers.health.tls": "true",
+                      "routers.health.service": "rpc0",
+                      "routers.health-http.rule": health_rule,
+                      "routers.health-http.entrypoints": "web",
+                      "routers.health-http.service": "rpc0",
+                  }.items():
+                      assert labels.get(f"traefik.http.{key}") == expected, f"{name}: {key} must be {expected!r}"
+
+          labels = services["traefik"]["labels"]
+          for key, expected in {
+              "routers.web-redirect.rule": host_rule,
+              "routers.web-redirect.entrypoints": "web",
+              "routers.web-redirect.middlewares": "redirect-to-https",
+              "middlewares.redirect-to-https.redirectscheme.scheme": "https",
+              "middlewares.redirect-to-https.redirectscheme.permanent": "true",
+          }.items():
+              assert labels.get(f"traefik.http.{key}") == expected, f"traefik: {key} must be {expected!r}"
+          PY
       - name: Render docker-compose.atan config
         run: |
           docker compose -f docker-compose.atan.yml --profile atan-uploader config -q
