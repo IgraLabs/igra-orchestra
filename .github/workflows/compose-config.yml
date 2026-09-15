@@ -9,6 +9,11 @@ on:
       - '.env.*.example'
       - 'versions.*.env'
       - 'scripts/**/*.sh'
+      - 'scripts/ci/*.py'
+      # Compose merges these without -f, so a PR touching only an override file
+      # still changes the rendered configuration this workflow asserts on.
+      - 'docker-compose*.y*ml'
+      - 'compose*.y*ml'
       # Mounted into Traefik at /etc/traefik, so it can change the proxy's
       # effective configuration without touching docker-compose.yml.
       - 'config/traefik/**'
@@ -80,123 +85,20 @@ jobs:
               exit 1
             fi
           done
-      - name: Assert parser mounts, wallet suffix handling and private Traefik health
-        run: |
-          docker compose --profile backend --profile frontend-w5 config --format json > compose.json
-          python3 - <<'PY'
-          import json
-          import sys
-
-          with open("compose.json", encoding="utf-8") as fh:
-              services = json.load(fh)["services"]
-
-          parser_users = ["kaspad", *(name for name in services if name.startswith("kaswallet-"))]
-          missing = []
-          for name in parser_users:
-              service = services[name]
-              targets = {volume.get("target") for volume in service.get("volumes", [])}
-              if "/app/parse-network-slug.sh" not in targets:
-                  missing.append(name)
-
-          if missing:
-              print("missing parser mount:", ", ".join(sorted(missing)), file=sys.stderr)
-              sys.exit(1)
-
-          kaswallet_entrypoint = "\n".join(services["kaswallet-0"].get("entrypoint", []))
-          if "--testnet-suffix=$$KASPA_NETSUFFIX" not in kaswallet_entrypoint:
-              print("kaswallet entrypoint does not propagate KASPA_NETSUFFIX", file=sys.stderr)
-              sys.exit(1)
-          if "--subnetwork-id=$$IGRA_LANE_ID" not in kaswallet_entrypoint:
-              print("kaswallet entrypoint does not forward IGRA_LANE_ID as --subnetwork-id", file=sys.stderr)
-              sys.exit(1)
-          if "IGRA_LANE_ID must be set" not in kaswallet_entrypoint:
-              print("kaswallet entrypoint is missing the IGRA_LANE_ID fail-fast guard", file=sys.stderr)
-              sys.exit(1)
-
-          kaspad_entrypoint = "\n".join(services["kaspad"].get("entrypoint", []))
-          if "--igra-lane-id=$$IGRA_LANE_ID" not in kaspad_entrypoint:
-              print("kaspad entrypoint does not forward IGRA_LANE_ID as --igra-lane-id", file=sys.stderr)
-              sys.exit(1)
-          if "IGRA_LANE_ID must be set" not in kaspad_entrypoint:
-              print("kaspad entrypoint is missing the IGRA_LANE_ID fail-fast guard", file=sys.stderr)
-              sys.exit(1)
-          if "TX_ID_PREFIX must be set" not in kaspad_entrypoint:
-              print("kaspad entrypoint is missing the TX_ID_PREFIX fail-fast guard", file=sys.stderr)
-              sys.exit(1)
-
-          # Traefik management stays disabled; ping must not create a :8080 entrypoint.
-          PING_PORT = 8099
-          PING_ADDRESS = f"127.0.0.1:{PING_PORT}"
-          PUBLIC_PORTS = {"80", "443", "8001", "8010", "8545", "9001"}
-
-          traefik = services["traefik"]
-          # watch-dependencies.sh execs `traefik "$@"`, so flags appended after `traefik`
-          # in the entrypoint reach Traefik's argv just like command flags do.
-          traefik_args = [arg.lower() for arg in traefik.get("entrypoint", []) + traefik["command"]]
-
-          # Each of these recreates Traefik's internal :8080 entrypoint (static_config.go).
-          for flag in ("--api", "--providers.rest", "--metrics.prometheus", "--entrypoints.traefik"):
-              assert not any(arg.split("=", 1)[0] == flag or arg.startswith(flag + ".")
-                             for arg in traefik_args), f"Traefik management flags must be absent: {flag}"
-          assert not any(key.upper() == "TRAEFIK_API" or key.upper().startswith("TRAEFIK_API_")
-                         for key in traefik.get("environment", {})), "Traefik API environment must be absent"
-          assert "network_mode" not in traefik, "traefik must stay on its own compose networks"
-
-          # Pin what makes ping safe — enabled, on its own entrypoint, loopback-only — while
-          # tolerating case and any additional --entrypoints.ping.* tuning.
-          ping_args = [arg for arg in traefik_args if arg.startswith(("--ping", "--entrypoints.ping."))]
-          assert {"--ping", "--ping=true"} & set(ping_args), "ping must be enabled"
-          assert [arg for arg in ping_args if arg.startswith("--ping.entrypoint=")] == \
-              ["--ping.entrypoint=ping"], "ping must use its own entrypoint, not the default :8080 one"
-          assert [arg for arg in ping_args if arg.startswith("--entrypoints.ping.address=")] == \
-              [f"--entrypoints.ping.address={PING_ADDRESS}"], f"ping must listen only on {PING_ADDRESS}"
-
-          for service in services.values():
-              for key, value in service.get("labels", {}).items():
-                  if key.lower().startswith("traefik."):
-                      assert not any(internal in value.lower() for internal in ("api@internal", "ping@internal")), \
-                          "management services must not be routed"
-
-          # Allowlist rather than a denylist: a new management listener on any unexpected
-          # port must fail here even when its flags are ones we did not think to forbid.
-          published = sorted(str(port["published"]) for port in traefik.get("ports", []) if port.get("published"))
-          assert set(published) == PUBLIC_PORTS, \
-              f"traefik may publish only {sorted(PUBLIC_PORTS)}; got {published}"
-          for port in traefik.get("ports", []):
-              bounds = [int(part) for part in str(port.get("target", 0)).split("-")]
-              assert not any(bounds[0] <= private <= bounds[-1] for private in (8080, PING_PORT)), \
-                  "management ports must not be targeted, including in ranges"
-
-          backend_urls = [f"http://rpc-provider-{index}:8535/health" for index in range(20)]
-          probe = "wget --quiet --spider --tries=1 --timeout=2 "
-          expected_health = probe + f"http://{PING_ADDRESS}/ping && ( " + " || ".join(
-              probe + url for url in backend_urls
-          ) + " )"
-          health = traefik["healthcheck"]
-          assert not health.get("disable", False), "traefik healthcheck must stay enabled"
-          assert len(health["test"]) == 2 and health["test"][0] == "CMD-SHELL", "preserve shell healthcheck"
-          assert " ".join(health["test"][1].split()) == expected_health, "health requires ping AND any of 20 backends"
-          PY
-      - name: Assert config/traefik carries no management surface
+      - name: Assert compose invariants across every profile
         run: |
           set -e
-          # `docker compose config` renders mount paths, not file contents. A static
-          # /etc/traefik/traefik.yml would replace the CLI static configuration
-          # wholesale — Traefik's file, flag and env loaders are mutually exclusive —
-          # so the dashboard could come back without touching this Compose file.
-          for static in config/traefik/traefik.yml config/traefik/traefik.yaml config/traefik/traefik.toml; do
-            if [ -e "$static" ]; then
-              echo "FAIL: $static is a static Traefik config file; it would override the Compose flags" >&2
-              exit 1
-            fi
-          done
-          # Static `api:` blocks are covered by the file check above; match only the
-          # dynamic-config forms, so a service legitimately named `api` is not flagged.
-          if grep -rniE 'api@internal|ping@internal|api\.insecure' config/traefik; then
-            echo "FAIL: config/traefik must not enable or route the Traefik management API" >&2
-            exit 1
-          fi
-          echo "ok: config/traefik carries no management surface"
+          python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
+          # '*' renders every profile: a narrower selection hides 16 of the 23
+          # services carrying Traefik labels from the management-route sweep.
+          docker compose --profile '*' config --format json > compose.json
+          python3 scripts/ci/assert-compose-invariants.py compose.json
+      - name: Self-test the compose invariant guard
+        run: |
+          set -e
+          # The guard is security-relevant, so prove it still rejects the bypasses
+          # it was written for instead of trusting that it passes the good config.
+          python3 scripts/ci/test-compose-invariants.py compose.json
       - name: Render docker-compose.atan config
         run: |
           docker compose -f docker-compose.atan.yml --profile atan-uploader config -q
