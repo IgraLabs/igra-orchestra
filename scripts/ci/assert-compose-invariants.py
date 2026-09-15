@@ -33,7 +33,6 @@ DENIED_FLAGS = (
     "entrypoints.ping.http.tls",
 )
 
-# Values that must be exactly these, because dropping them widens exposure silently.
 PINNED_FLAGS = {
     "providers.docker.exposedbydefault": "false",
     "providers.file.directory": "/etc/traefik",
@@ -116,7 +115,6 @@ def check_traefik_invocation(traefik):
         require([v for n, v in flags if n == name] == [want],
                 f"{name} must be set exactly once to {want}")
 
-    # Ping must be enabled exactly once, on its own entrypoint, bound to loopback.
     # paerser keeps the last value for scalars, so a duplicate silently overrides.
     enable = [v for n, v in flags if n == "ping"]
     require(enable in ([None], ["true"]),

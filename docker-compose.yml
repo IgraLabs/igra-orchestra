@@ -874,9 +874,6 @@ services:
       - traefik
     command:
       - "--ping=true"
-      # Explicit private entrypoint avoids ping creating the default :8080 listener.
-      # Port 8099 is unused elsewhere in the stack. 8082 belongs to kaswallet-0 (published
-      # on the host) and 8090 to wallet-api, so either would make this probe ambiguous.
       - "--ping.entrypoint=ping"
       - "--entrypoints.ping.address=127.0.0.1:8099"
       - "--providers.docker=true"

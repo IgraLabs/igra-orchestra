@@ -10,12 +10,8 @@ on:
       - 'versions.*.env'
       - 'scripts/**/*.sh'
       - 'scripts/ci/*.py'
-      # Compose merges these without -f, so a PR touching only an override file
-      # still changes the rendered configuration this workflow asserts on.
       - 'docker-compose*.y*ml'
       - 'compose*.y*ml'
-      # Mounted into Traefik at /etc/traefik, so it can change the proxy's
-      # effective configuration without touching docker-compose.yml.
       - 'config/traefik/**'
       - '.github/workflows/compose-config.yml'
   push:
@@ -89,15 +85,11 @@ jobs:
         run: |
           set -e
           python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
-          # '*' renders every profile: a narrower selection hides 16 of the 23
-          # services carrying Traefik labels from the management-route sweep.
           docker compose --profile '*' config --format json > compose.json
           python3 scripts/ci/assert-compose-invariants.py compose.json
       - name: Self-test the compose invariant guard
         run: |
           set -e
-          # The guard is security-relevant, so prove it still rejects the bypasses
-          # it was written for instead of trusting that it passes the good config.
           python3 scripts/ci/test-compose-invariants.py compose.json
       - name: Render docker-compose.atan config
         run: |
