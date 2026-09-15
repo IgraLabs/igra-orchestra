@@ -216,8 +216,13 @@ Verify services are healthy:
 docker compose ps
 ```
 
-Traefik's API/dashboard are disabled. Container health requires loopback
-`127.0.0.1:8082/ping` and at least one healthy RPC backend; ping is not published.
+Traefik's API/dashboard are disabled. Container health requires `127.0.0.1:8099/ping`
+**inside the traefik container** plus at least one healthy RPC backend; ping is not
+published, so probe it from the container rather than the host:
+
+```bash
+docker compose exec traefik wget -qO- http://127.0.0.1:8099/ping
+```
 
 **Node Health Check:**
 The node-health-check-client reports sync status and consensus to the monitoring dashboard.
