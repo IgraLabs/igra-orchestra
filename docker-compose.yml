@@ -873,8 +873,9 @@ services:
       - --
       - traefik
     command:
-      - "--api.dashboard=true"
-      - "--api.insecure=true"
+      - "--ping=true"
+      - "--ping.entrypoint=ping"
+      - "--entrypoints.ping.address=127.0.0.1:8099"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       # File provider for middlewares the docker provider fails to resolve
@@ -929,7 +930,6 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "8080:8080"
       - "8001:8001"
       - "8010:8010"
       - "8545:8545"
@@ -984,7 +984,7 @@ services:
       test:
         - CMD-SHELL
         - >
-          wget --quiet --spider --tries=1 --timeout=2 http://localhost:8080 &&
+          wget --quiet --spider --tries=1 --timeout=2 http://127.0.0.1:8099/ping &&
           (
             wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-0:8535/health ||
             wget --quiet --spider --tries=1 --timeout=2 http://rpc-provider-1:8535/health ||

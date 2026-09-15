@@ -24,3 +24,6 @@ rehearsals/
 .idea/
 letsencrypt/
 site/
+
+# Python bytecode from scripts/ci
+__pycache__/

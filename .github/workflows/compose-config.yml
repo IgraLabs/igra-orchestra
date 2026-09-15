@@ -9,6 +9,10 @@ on:
       - '.env.*.example'
       - 'versions.*.env'
       - 'scripts/**/*.sh'
+      - 'scripts/ci/*.py'
+      - 'docker-compose*.y*ml'
+      - 'compose*.y*ml'
+      - 'config/traefik/**'
       - '.github/workflows/compose-config.yml'
   push:
     branches: [main]
@@ -77,50 +81,16 @@ jobs:
               exit 1
             fi
           done
-      - name: Assert parser mounts and wallet suffix handling are present
+      - name: Assert compose invariants across every profile
         run: |
-          docker compose --profile backend --profile frontend-w5 config --format json > compose.json
-          python3 - <<'PY'
-          import json
-          import sys
-
-          with open("compose.json", encoding="utf-8") as fh:
-              services = json.load(fh)["services"]
-
-          parser_users = ["kaspad", *(name for name in services if name.startswith("kaswallet-"))]
-          missing = []
-          for name in parser_users:
-              service = services[name]
-              targets = {volume.get("target") for volume in service.get("volumes", [])}
-              if "/app/parse-network-slug.sh" not in targets:
-                  missing.append(name)
-
-          if missing:
-              print("missing parser mount:", ", ".join(sorted(missing)), file=sys.stderr)
-              sys.exit(1)
-
-          kaswallet_entrypoint = "\n".join(services["kaswallet-0"].get("entrypoint", []))
-          if "--testnet-suffix=$$KASPA_NETSUFFIX" not in kaswallet_entrypoint:
-              print("kaswallet entrypoint does not propagate KASPA_NETSUFFIX", file=sys.stderr)
-              sys.exit(1)
-          if "--subnetwork-id=$$IGRA_LANE_ID" not in kaswallet_entrypoint:
-              print("kaswallet entrypoint does not forward IGRA_LANE_ID as --subnetwork-id", file=sys.stderr)
-              sys.exit(1)
-          if "IGRA_LANE_ID must be set" not in kaswallet_entrypoint:
-              print("kaswallet entrypoint is missing the IGRA_LANE_ID fail-fast guard", file=sys.stderr)
-              sys.exit(1)
-
-          kaspad_entrypoint = "\n".join(services["kaspad"].get("entrypoint", []))
-          if "--igra-lane-id=$$IGRA_LANE_ID" not in kaspad_entrypoint:
-              print("kaspad entrypoint does not forward IGRA_LANE_ID as --igra-lane-id", file=sys.stderr)
-              sys.exit(1)
-          if "IGRA_LANE_ID must be set" not in kaspad_entrypoint:
-              print("kaspad entrypoint is missing the IGRA_LANE_ID fail-fast guard", file=sys.stderr)
-              sys.exit(1)
-          if "TX_ID_PREFIX must be set" not in kaspad_entrypoint:
-              print("kaspad entrypoint is missing the TX_ID_PREFIX fail-fast guard", file=sys.stderr)
-              sys.exit(1)
-          PY
+          set -e
+          python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
+          docker compose --profile '*' config --format json > compose.json
+          python3 scripts/ci/assert-compose-invariants.py compose.json
+      - name: Self-test the compose invariant guard
+        run: |
+          set -e
+          python3 scripts/ci/test-compose-invariants.py compose.json
       - name: Render docker-compose.atan config
         run: |
           docker compose -f docker-compose.atan.yml --profile atan-uploader config -q
