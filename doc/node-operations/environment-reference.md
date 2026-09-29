@@ -65,9 +65,10 @@ the drift check.
 
 !!! note "Requires reth `2.5.1-igra.2`"
 
-    Both networks pin `2.5.1-igra.2`, the first release with the bounded-history profile. Any
-    older image ignores this variable and stays archive **silently** — it does not warn, so a node
-    left on an earlier pin looks configured for pruning while behaving as an archive node.
+    Both networks pin a `2.5.1-igra.<n>` revision at or above `.2`, the first release with the
+    bounded-history profile. Images older than `2.5.1-igra.2` ignore this variable and stay archive
+    **silently** — they do not warn, so a node left on an earlier pin looks configured for pruning
+    while behaving as an archive node.
 
     That silence has a delayed cost. If you uncomment the variable while still pinned to an older
     image, nothing happens and it looks inert — but your next `RETH_VERSION` bump is the moment the
