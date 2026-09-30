@@ -171,6 +171,58 @@ jobs:
               sys.exit(1)
           PY
 
+      - name: Assert uploader process health in both rendered entrypoints
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from unittest.mock import patch
+
+          previous = None
+          for filename in ("compose.json", "compose-atan.json"):
+              service = json.loads(Path(filename).read_text())["services"]["atan-uploader"]
+              health = service["healthcheck"]
+              assert not health.get("disable", False), filename
+              assert {key: health[key] for key in ("interval", "timeout", "retries", "start_period")} == {
+                  "interval": "10s", "timeout": "2s", "retries": 3, "start_period": "5s"
+              }, filename
+              assert not any(service.get(key) for key in ("entrypoint", "command", "init", "pid", "user", "working_dir")), filename
+              test = health["test"]
+              assert len(test) == 4 and test[:3] == ["CMD", "python", "-c"], filename
+              assert previous is None or test == previous, "uploader probes differ"
+              previous = test
+              for cmdline, expected in (
+                  (b"python\0main.py\0", 0),
+                  (b"", 1),
+                  (b"python\0main.py", 1),
+                  (b"python main.py\0", 1),
+                  (b"python\0-u\0main.py\0", 1),
+                  (b"python\0main.py\0extra\0", 1),
+                  (b"python3\0main.py\0", 1),
+                  (br"python\0main.py\0", 1),
+                  (b"sh\0-c\0pgrep -f atan-uploader > /dev/null || exit 1\0", 1),
+                  (b"python\0-c\0import time; time.sleep(600)\0atan-uploader\0", 1),
+              ):
+                  with patch.object(Path, "read_bytes", autospec=True, return_value=cmdline) as read:
+                      try:
+                          exec(test[3], {})
+                      except SystemExit as result:
+                          assert result.code == expected, (filename, cmdline, result.code)
+                      else:
+                          raise AssertionError("healthcheck must exit")
+                      read.assert_called_once_with(Path("/proc/1/cmdline"))
+              for error in (FileNotFoundError, PermissionError):
+                  with patch.object(Path, "read_bytes", autospec=True, side_effect=error) as read:
+                      try:
+                          exec(test[3], {})
+                      except error:
+                          pass
+                      else:
+                          raise AssertionError("proc read failures must fail healthcheck")
+                      read.assert_called_once_with(Path("/proc/1/cmdline"))
+              print(f"PASS {filename}: uploader exec probe, timing and PID 1 contract")
+          PY
+
   slug-parser-tests:
     name: NETWORK slug parser - reject malformed inputs
     runs-on: ubuntu-latest

@@ -152,4 +152,4 @@ services:
       - kaspad_data:/app/data/
     healthcheck:
       <<: *default-healthcheck
-      test: ["CMD-SHELL", "pgrep -f atan-uploader > /dev/null || exit 1"]
+      test: ["CMD", "python", "-c", "import sys; from pathlib import Path; sys.exit(Path('/proc/1/cmdline').read_bytes() != b'python\\0main.py\\0')"]
