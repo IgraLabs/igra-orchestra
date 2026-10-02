@@ -45,6 +45,10 @@ shell/CLI values take precedence over the file.
 Environment variables:
   MINING_ADDRESS          Reward address; must be a devnet address (kaspadev:...).
   MINING_THREADS          CPU miner threads (positive integer). Default: 1.
+  MINING_MIN_BLOCK_INTERVAL_MS
+                          Minimum interval between mined blocks, in ms. Passed
+                          as --min-block-interval-ms when a positive integer;
+                          0 disables the throttle. Default: 150.
   KASPAD_GRPC_PORT        Devnet kaspad gRPC port on the host. Default: 16610.
   KASPAD_RPC_HOST         Host the miner dials. Default: 127.0.0.1 (NOT the
                           compose-internal KASPAD_HOST, which is unreachable here).
@@ -86,6 +90,7 @@ source "$SCRIPT_DIR/../lib/devnet-env.sh"
 
 resolve MINING_ADDRESS ""
 resolve MINING_THREADS 1
+resolve MINING_MIN_BLOCK_INTERVAL_MS 150
 resolve KASPAD_GRPC_PORT 16610
 # Host loopback, not the compose-internal KASPAD_HOST (=kaspad).
 resolve KASPAD_RPC_HOST 127.0.0.1
@@ -111,6 +116,8 @@ is_positive_int "$MINING_THREADS" || \
     die "MINING_THREADS must be a positive integer (got: '${MINING_THREADS:-<unset>}')"
 is_port "$KASPAD_GRPC_PORT" || \
     die "KASPAD_GRPC_PORT must be an integer in 1-65535 (got: '${KASPAD_GRPC_PORT:-<unset>}')"
+is_uint "$MINING_MIN_BLOCK_INTERVAL_MS" || \
+    die "MINING_MIN_BLOCK_INTERVAL_MS must be a non-negative integer in ms, 0 disables (got: '${MINING_MIN_BLOCK_INTERVAL_MS:-<unset>}')"
 
 # --- clone + build (unless SKIP_BUILD reuses an existing binary) ---
 build_miner() {
@@ -141,6 +148,20 @@ build_miner() {
             warn "existing clone remote ($have_remote) != MINER_REPO_URL ($MINER_REPO_URL); using the existing checkout. Remove $MINER_DIR to re-clone."
         if [ -z "$MINER_BRANCH" ] && [ "$have_head" != "$MINER_COMMIT" ]; then
             warn "existing clone is at $have_head, not the pinned $MINER_COMMIT; using it as-is. Remove $MINER_DIR to re-clone at the pin."
+        fi
+    fi
+
+    # Apply the min-block-interval throttle patch (idempotent). Keeps devnet block
+    # production under viaduct's per-window cap. See scripts/dev/patches/.
+    PATCH_FILE="$SCRIPT_DIR/patches/cpuminer-min-block-interval.patch"
+    if [ -f "$PATCH_FILE" ]; then
+        if git -C "$MINER_DIR" apply --reverse --check "$PATCH_FILE" 2>/dev/null; then
+            log "min-block-interval patch already applied"
+        elif git -C "$MINER_DIR" apply --check "$PATCH_FILE" 2>/dev/null; then
+            git -C "$MINER_DIR" apply "$PATCH_FILE"
+            log "applied min-block-interval patch"
+        else
+            warn "min-block-interval patch does not apply cleanly; miner will run WITHOUT the rate cap"
         fi
     fi
 
@@ -177,6 +198,14 @@ fi
 # network flag to pick a default port, which we always set explicitly with -p.
 args=(-a "$MINING_ADDRESS" -s "$KASPAD_RPC_HOST" -p "$KASPAD_GRPC_PORT" -t "$MINING_THREADS")
 [ "$MINE_WHEN_NOT_SYNCED" = "true" ] && args+=(--mine-when-not-synced)
+# Throttle block production to stay under viaduct's per-window cap; 0 disables.
+if [ "$MINING_MIN_BLOCK_INTERVAL_MS" -gt 0 ]; then
+    if "$BIN" --help 2>&1 | grep -q -- '--min-block-interval-ms'; then
+        args+=(--min-block-interval-ms "$MINING_MIN_BLOCK_INTERVAL_MS")
+    else
+        warn "$BIN predates the min-block-interval patch; running WITHOUT the rate cap. Rebuild (unset SKIP_BUILD) to apply it."
+    fi
+fi
 
 log "Starting cpuminer -> $KASPAD_RPC_HOST:$KASPAD_GRPC_PORT (address ${MINING_ADDRESS}, ${MINING_THREADS} threads)"
 log "Press Ctrl+C to stop."
