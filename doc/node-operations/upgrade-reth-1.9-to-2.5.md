@@ -30,6 +30,7 @@ docker volume rm "${PROJECT}_reth_data"
 git fetch origin && git checkout main && git pull --ff-only
 diff <(grep -E '^[A-Z_]+_VERSION=' versions.mainnet.env | sort) \
      <(grep -E '^[A-Z_]+_VERSION=' .env | sort)      # edit .env until this prints nothing
+docker compose --profile '*' config --images | sort -u  # every igranetwork/ line must match .env
 docker compose config -q && docker compose --profile backend pull
 
 # 5. Bring the backend up and let it resync (24+ hours)
@@ -176,12 +177,16 @@ value from `versions.<network>.env` — copy the full string, and do not "correc
 looks like a downgrade (see [Image Versions](environment-reference.md#image-versions)). Re-run
 the `diff` until it prints nothing.
 
-Validate and fetch the new images before starting anything:
+Validate, confirm nothing replaces the pins, and fetch the new images before starting anything:
 
 ```bash
-docker compose config -q                      # renders cleanly
-docker compose --profile backend pull         # fetch the new tags now, not mid-resync
+docker compose config -q                                # renders cleanly
+docker compose --profile '*' config --images | sort -u  # each igranetwork/ line must match .env
+docker compose --profile backend pull                   # fetch the new images now, not mid-resync
 ```
+
+If an image line does not match `.env`, an override or an exported `*_VERSION` is replacing the pin
+(see [Image Versions](environment-reference.md#image-versions)).
 
 ### 5. Start the backend and resync
 

@@ -247,29 +247,10 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
     log ""
     log "Pulling pre-built images from Docker Hub..."
 
-    # Select the per-network version file and reject unsafe/mixed-case NETWORK values.
+    # Pins come from .env, with no versions-file fallback; an exported *_VERSION still wins, as it does for
+    # Compose. Unsupported NETWORK values were rejected at startup.
     if [[ -z "${NETWORK:-}" ]]; then
         panic "NETWORK is not set. Configure it in .env or export it before running with USE_PREBUILT_IMAGES=true."
-    fi
-    case "$NETWORK" in
-        mainnet)
-            versions_file="$PROJECT_DIR/versions.mainnet.env"
-            ;;
-        testnet-10|testnet)
-            # Transitional alias for Galleon.
-            versions_file="$PROJECT_DIR/versions.galleon-testnet.env"
-            ;;
-        *)
-            panic "Unsupported NETWORK='$NETWORK'. Set NETWORK to lowercase 'mainnet' or 'testnet-10' (legacy 'testnet' is also accepted as an alias for 'testnet-10')."
-            ;;
-    esac
-
-    if [[ -f "$versions_file" ]]; then
-        log "Loading default image versions from $(basename "$versions_file") (NETWORK=$NETWORK)"
-        # Preserve values already rendered into .env.
-        load_env_file "$versions_file" preserve
-    else
-        panic "Version file not found: $versions_file (NETWORK=$NETWORK)"
     fi
 
     placeholder_matches="$(find_unresolved_placeholders "$PROJECT_DIR/.env")"
@@ -278,7 +259,8 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
         panic "Replace all TODO_* placeholders in .env before pulling images."
     fi
 
-    # Fail before docker pull if required tags or health-check values are unresolved.
+    # Fail before docker pull if required pins or health-check values are unresolved.
+    pin_re='^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}@sha256:[0-9a-f]{64}$'
     for required_var in \
         KASPAD_VERSION RETH_VERSION RPC_PROVIDER_VERSION KASWALLET_VERSION \
         NODE_HEALTH_CHECK_VERSION ATAN_UPLOADER_VERSION \
@@ -289,22 +271,26 @@ if [[ "$USE_PREBUILT_IMAGES" == "true" ]]; then
         if [[ -z "$value" || "$value" == TODO_* ]]; then
             panic "$required_var is unset or still a TODO_* placeholder. Replace it in .env before re-running."
         fi
+        if [[ "$required_var" == *_VERSION && ! "$value" =~ $pin_re ]]; then
+            panic "$required_var must be <tag>@sha256:<digest> in .env (see doc/node-operations/environment-reference.md#image-versions)."
+        fi
     done
 
-    # Pull and tag images (versions from .env, falling back to the selected versions.*.env)
-    # Format: "image_name:version:local_tag"
+    # Pull and tag images (versions from .env)
+    # Format: "image_name|version|local_tag" (version is <tag>@sha256:<digest>, which contains ':')
     images=(
-        "kaspad:${KASPAD_VERSION}:kaspad"
-        "reth:${RETH_VERSION}:execution-layer"
-        "rpc-provider:${RPC_PROVIDER_VERSION}:rpc-provider"
-        "kaswallet:${KASWALLET_VERSION}:kaswallet"
+        "kaspad|${KASPAD_VERSION}|kaspad"
+        "reth|${RETH_VERSION}|execution-layer"
+        "rpc-provider|${RPC_PROVIDER_VERSION}|rpc-provider"
+        "kaswallet|${KASWALLET_VERSION}|kaswallet"
     )
     for entry in "${images[@]}"; do
-        IFS=':' read -r image version local_tag <<< "$entry"
+        IFS='|' read -r image version local_tag <<< "$entry"
         log "Pulling igranetwork/${image}:${version}..."
         if docker pull "igranetwork/${image}:${version}"; then
             log "Tagging as ${local_tag}..."
-            docker tag "igranetwork/${image}:${version}" "${local_tag}"
+            docker tag "igranetwork/${image}:${version}" "${local_tag}" \
+                || panic "Failed to tag igranetwork/${image}:${version} as ${local_tag}"
             log "✓ ${local_tag} ready"
         else
             panic "Failed to pull igranetwork/${image}:${version}. Make sure the image exists on Docker Hub."

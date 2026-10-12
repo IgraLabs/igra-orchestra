@@ -149,9 +149,12 @@ docker compose --profile backend up -d
 
 ### For Developers (Building from Source)
 
+Source builds use plain `local` tags for kaspad, reth, kaswallet and rpc-provider (set in `.env.dev.example`). Docker refuses to tag a local build with a digest, and a digest pin would make Compose pull the published image instead of your build. Deployed nodes keep the `<tag>@sha256:<digest>` pins (see [Image Versions](#image-versions)).
+
 ```bash
-# 1. Copy environment file
+# 1. Copy the environment file and append the published pins of the two images that are always pulled
 cp .env.dev.example .env
+grep -E '^(NODE_HEALTH_CHECK|ATAN_UPLOADER)_VERSION=' versions.mainnet.env >> .env
 # Keep USE_PREBUILT_IMAGES=false (default)
 
 # 2. Setup all repositories (including proprietary)
@@ -337,7 +340,7 @@ Docker Compose will automatically pick up this variable when you run `docker com
 
 ### Image Versions
 
-Docker image versions are centrally pinned in per-network version files: `versions.mainnet.env` and `versions.galleon-testnet.env`. These files are used by `docker-compose.yml`, setup scripts, and deployment tools. Update versions there when upgrading services.
+Docker images are pinned in the per-network version files `versions.mainnet.env` and `versions.galleon-testnet.env` as `<tag>@sha256:<digest>`, for example `KASWALLET_VERSION=3.1.0@sha256:3c7b0f7d…`. Setup copies them into `.env`, the only place Compose takes image versions from, so compose override files must not set `image:`. Setup rejects tag-only pins, and CI checks that every digest is the one its tag resolves to on Docker Hub. To bump an image, look up its digest with `docker buildx imagetools inspect igranetwork/<image>:<tag> --format '{{.Manifest.Digest}}'` and update both version files (and `.env.atan.example` for kaspad and the uploader). See [Environment Reference](doc/node-operations/environment-reference.md#image-versions).
 
 `KASPAD_VERSION` and `RETH_VERSION` use the `<upstream>-igra.<n>` scheme: the version **is** the upstream rusty-kaspa / reth release the image is built from, and `.<n>` is the IGRA revision on that base. IGRA no longer maintains a separate version line for these two — the old independent numbering (`2.3`, `3.0`) collided with upstream version numbers. So **a lower number can be newer**: `2.1.0-igra.1` supersedes the retired `3.0` line and the leftover `3.1.0`/`3.1`/`3` tags (an older build), and bare `2.1.0` or `2.1` is a different, far older image. These are semver pre-release versions, so an igra release gets no floating `2.1`/`2.5` alias — pin the full string. The other services (`kaswallet`, `rpc-provider`, `node-health-check-client`, `atan-uploader`) still use IGRA's own numbering. See [Environment Reference](doc/node-operations/environment-reference.md#image-versions).
 

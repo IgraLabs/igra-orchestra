@@ -223,6 +223,19 @@ jobs:
               print(f"PASS {filename}: uploader exec probe, timing and PID 1 contract")
           PY
 
+  image-pins:
+    name: image pins are exact and match Docker Hub
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Self-test pin checks, compose consumption and setup validation
+        run: python3 scripts/ci/test-image-pins.py
+      - name: Every pin is <tag>@sha256:<digest> and its tag resolves to that digest
+        run: python3 scripts/ci/check-image-pins.py
+
   slug-parser-tests:
     name: NETWORK slug parser - reject malformed inputs
     runs-on: ubuntu-latest

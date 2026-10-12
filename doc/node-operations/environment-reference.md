@@ -14,9 +14,9 @@ All operational variables across the stack.
 
 ## Image Versions
 
-Every image tag is pinned centrally in the per-network version files
-(`versions.mainnet.env`, `versions.galleon-testnet.env`). Setup appends them into `.env`;
-nothing hardcodes a tag in compose.
+The six published IGRA images are pinned as `<tag>@sha256:<digest>`. Setup copies the defaults from the
+per-network version files (`versions.mainnet.env`, `versions.galleon-testnet.env`) into `.env`, and `.env` is
+the only place Compose takes them from. Third-party images such as `traefik:v3` keep their own tags.
 
 Compose reads `.env`, never `versions.<network>.env`. Setup copies the pins across **once**, and
 nothing re-syncs them afterwards — so a `git pull` that bumps a version file leaves your node on the
@@ -27,12 +27,35 @@ the drift check.
 
 | Variable | Where | Description |
 |----------|-------|-------------|
-| `KASPAD_VERSION` | `versions.*.env` | Image tag for `igranetwork/kaspad`. Tracks the upstream rusty-kaspa release — see the note below |
-| `RETH_VERSION` | `versions.*.env` | Image tag for `igranetwork/reth`. Tracks the upstream reth release — see the note below |
-| `KASWALLET_VERSION` | `versions.*.env` | Image tag for `igranetwork/kaswallet` |
-| `RPC_PROVIDER_VERSION` | `versions.*.env` | Image tag for `igranetwork/rpc-provider` |
-| `NODE_HEALTH_CHECK_VERSION` | `versions.*.env` | Image tag for `igranetwork/node-health-check-client` |
-| `ATAN_UPLOADER_VERSION` | `versions.*.env` | Image tag for `igranetwork/atan-uploader` |
+| `KASPAD_VERSION` | `.env` (default from `versions.*.env`) | Image reference `<tag>@sha256:<digest>` for `igranetwork/kaspad`. Tracks the upstream rusty-kaspa release — see the note below |
+| `RETH_VERSION` | `.env` (default from `versions.*.env`) | Image reference `<tag>@sha256:<digest>` for `igranetwork/reth`. Tracks the upstream reth release — see the note below |
+| `KASWALLET_VERSION` | `.env` (default from `versions.*.env`) | Image reference `<tag>@sha256:<digest>` for `igranetwork/kaswallet` |
+| `RPC_PROVIDER_VERSION` | `.env` (default from `versions.*.env`) | Image reference `<tag>@sha256:<digest>` for `igranetwork/rpc-provider` |
+| `NODE_HEALTH_CHECK_VERSION` | `.env` (default from `versions.*.env`) | Image reference `<tag>@sha256:<digest>` for `igranetwork/node-health-check-client` |
+| `ATAN_UPLOADER_VERSION` | `.env` (default from `versions.*.env`) | Image reference `<tag>@sha256:<digest>` for `igranetwork/atan-uploader` |
+
+!!! warning "Pins are exact digests, and only `.env` sets them"
+
+    Each pin is `<tag>@sha256:<index digest>`. Docker runs the digest; the tag names the release, so use the
+    patch tag (`3.1.0`), never a floating alias (`3.1`) that moves with the next patch release. Look a digest
+    up with:
+
+    ```bash
+    docker buildx imagetools inspect igranetwork/kaspad:2.1.0-igra.1 --format '{{.Manifest.Digest}}'
+    ```
+
+    No compose file other than `docker-compose.yml` (or `docker-compose.atan.yml`) may set `image:`, whether
+    it comes in through `COMPOSE_FILE`, `-f`, or an auto-loaded `docker-compose.override.yml`: Compose
+    silently runs that image instead of your pin. An exported `*_VERSION` shell variable also beats `.env`, so
+    unset it; sourcing a versions file keeps an earlier export. Check what will actually run (add
+    `-f docker-compose.atan.yml` on an ATAN-only node):
+
+    ```bash
+    docker compose --profile '*' config --images | sort -u   # each igranetwork/ line must match .env
+    ```
+
+    Keep `--profile '*'`: every service sits behind a profile, so without it nothing is printed. Warnings
+    about unset `W<N>_` variables come from workers you do not run.
 
 !!! note "kaspad and reth version numbers track the upstream client"
 
@@ -107,7 +130,7 @@ the drift check.
 
     Full operator detail ships inside the reth image at `/app/igra-README.md`. Read it without a
     running container — which is the case during a restart loop. `RETH_VERSION` is not exported to
-    your shell, so resolve the tag from the version file the way the rest of the repo does:
+    your shell, so read the pin from `.env`:
 
     ```bash
     docker run --rm --entrypoint cat \
