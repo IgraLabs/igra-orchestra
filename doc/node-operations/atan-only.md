@@ -20,9 +20,10 @@ Run kaspad saving finality periods without the full IGRA execution layer stack. 
    e.g. `97b10000` — kaspad requires it, but it is not part of the ATAN
    import URL, which uses the network-specific `TX_ID_PREFIX`.
 
-3. Start kaspad with ATAN:
+3. Check that both images come from `.env`, then start kaspad with ATAN:
 
     ```bash
+    docker compose -f docker-compose.atan.yml --profile '*' config --images   # must match .env
     docker compose -f docker-compose.atan.yml up -d
     ```
 
