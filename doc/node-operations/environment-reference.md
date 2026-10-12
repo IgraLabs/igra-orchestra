@@ -44,18 +44,22 @@ the drift check.
 
     Three consequences:
 
-    - **A lower number can be newer.** `2.0.1-igra.1` supersedes the retired `3.0` line.
+    - **A lower number can be newer.** `2.1.0-igra.1` supersedes the retired `3.0` line.
       Do not "correct" a pin back to `3.0`.
-    - **Never shorten the tag.** Bare `2.0.1` is a different, far older image — pinning it
-      is a real downgrade of several months.
+    - **Never shorten the tag.** Bare `2.1.0` and `2.1` are different, far older images
+      from the retired line — pinning either is a real downgrade of several months.
     - **There is no floating minor alias.** These are semver *pre-release* versions, so
-      `docker/metadata-action` publishes no `2.0` or `2.5` tag to follow. Pin the full
-      string.
+      `docker/metadata-action` derives no `2.1` or `2.5` tag from an igra release (the
+      `kaspad:2.1` that exists is the retired-line image above). Pin the full string.
 
     This applies to **kaspad and reth only**. `kaswallet`, `rpc-provider`,
     `node-health-check-client`, and `atan-uploader` still use IGRA's own numbering. Note
-    also that kaspad currently dual-publishes the same commit as both `2.0.1-igra.1` and
-    `3.1.0`, so a live 3.x channel still exists on that side during the migration.
+    also that kaspad's `3.1.0` tag (and its `3.1`/`3` aliases) is the older `2.0.1-igra.1`
+    commit, dual-published during the migration. IGRA releases do not move it, so it now
+    lags the pin.
+
+    Rolling back kaspad: restore a pre-upgrade `kaspad_data` volume snapshot. Re-pinning an
+    older `KASPAD_VERSION` on a volume that a newer image has already opened is not qualified.
 
 ## Execution Layer
 

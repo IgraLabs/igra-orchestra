@@ -69,9 +69,9 @@ Single-node devnet with finality configurable at setup time via
 `FINALITY_PERIOD_SECONDS` (default 600s → `finality_depth` 6000 at 10 BPS),
 overriding kaspad's 12-hour devnet default.
 
-Built from source: configurable finality uses kaspad's `--override-params-file`,
-available on the `rusty-kaspa-private` v3.0 line only. `setup-devnet.sh` builds
-kaspad, reth, kaswallet and rpc-provider locally and starts the stack.
+Built from source: configurable finality uses kaspad's `--override-params-file`
+(on `rusty-kaspa-private` `master`). `setup-devnet.sh` builds kaspad, reth,
+kaswallet and rpc-provider locally and starts the stack.
 
 `setup-devnet.sh` validates the full configuration and fails fast with a clear
 error summary before any image build or `docker compose up`. Build-time and
@@ -82,8 +82,8 @@ source-revision manifest (branch/SHA/dirty for all four built repos) to
 20, are retained).
 
 ```bash
-# clone sources (kaspad/kaswallet/rpc-provider on v3.0, reth on production):
-KASPAD_BRANCH=v3.0 KASWALLET_BRANCH=v3.0 IGRA_RPC_PROVIDER_BRANCH=v3.0 RETH_BRANCH=production \
+# clone sources (kaspad on master, reth on igra/v2.5.1, kaswallet/rpc-provider on main):
+KASPAD_BRANCH=master KASWALLET_BRANCH=main IGRA_RPC_PROVIDER_BRANCH=main RETH_BRANCH=igra/v2.5.1 \
   ./scripts/dev/setup-repos.sh
 
 # build from source and bring the stack up:
@@ -194,7 +194,7 @@ Follow these steps before the first run:
     # OR
     cp .env.galleon-testnet.example .env && cat versions.galleon-testnet.env >> .env
     # Edit .env and add/modify lines like these:
-    # RETH_BRANCH=production
+    # RETH_BRANCH=igra/v2.5.1
     # KASWALLET_BRANCH=feature/new-api
     # IGRA_RPC_PROVIDER_BRANCH=main
     # KASPAD_BRANCH=for-wallet
@@ -339,7 +339,7 @@ Docker Compose will automatically pick up this variable when you run `docker com
 
 Docker image versions are centrally pinned in per-network version files: `versions.mainnet.env` and `versions.galleon-testnet.env`. These files are used by `docker-compose.yml`, setup scripts, and deployment tools. Update versions there when upgrading services.
 
-`KASPAD_VERSION` and `RETH_VERSION` use the `<upstream>-igra.<n>` scheme: the version **is** the upstream rusty-kaspa / reth release the image is built from, and `.<n>` is the IGRA revision on that base. IGRA no longer maintains a separate version line for these two — the old independent numbering (`2.3`, `3.0`) collided with upstream version numbers. So **a lower number can be newer**: `2.0.1-igra.1` supersedes the retired `3.0` line, and bare `2.0.1` is a different, far older image. These are semver pre-release versions, so no floating `2.0`/`2.5` alias is published — pin the full string. The other services (`kaswallet`, `rpc-provider`, `node-health-check-client`, `atan-uploader`) still use IGRA's own numbering. See [Environment Reference](doc/node-operations/environment-reference.md#image-versions).
+`KASPAD_VERSION` and `RETH_VERSION` use the `<upstream>-igra.<n>` scheme: the version **is** the upstream rusty-kaspa / reth release the image is built from, and `.<n>` is the IGRA revision on that base. IGRA no longer maintains a separate version line for these two — the old independent numbering (`2.3`, `3.0`) collided with upstream version numbers. So **a lower number can be newer**: `2.1.0-igra.1` supersedes the retired `3.0` line and the leftover `3.1.0`/`3.1`/`3` tags (an older build), and bare `2.1.0` or `2.1` is a different, far older image. These are semver pre-release versions, so an igra release gets no floating `2.1`/`2.5` alias — pin the full string. The other services (`kaswallet`, `rpc-provider`, `node-health-check-client`, `atan-uploader`) still use IGRA's own numbering. See [Environment Reference](doc/node-operations/environment-reference.md#image-versions).
 
 ## Running the Stack
 

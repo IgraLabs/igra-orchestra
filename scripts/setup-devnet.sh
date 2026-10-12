@@ -92,11 +92,10 @@ fi
 generate_devnet_overrides "$FINALITY_PERIOD_SECONDS" "$TOCCATA_ACTIVATION_DAA_SCORE"
 warn_if_finality_baked
 
-# Build the stack from source. kaspad's --override-params-file is only on the
-# rusty-kaspa-private v3.0 line, which is not published to Docker Hub. Clone the
-# sources first with:
-#   KASPAD_BRANCH=v3.0 KASWALLET_BRANCH=v3.0 IGRA_RPC_PROVIDER_BRANCH=v3.0 \
-#     ./scripts/dev/setup-repos.sh
+# Build the stack from source (kaspad needs --override-params-file, on
+# rusty-kaspa-private master). Clone the sources first with:
+#   KASPAD_BRANCH=master KASWALLET_BRANCH=main IGRA_RPC_PROVIDER_BRANCH=main \
+#     RETH_BRANCH=igra/v2.5.1 ./scripts/dev/setup-repos.sh
 build_devnet_stack() {
     local repos_dir="$SCRIPT_DIR/../build/repos"
     local missing=()
@@ -108,13 +107,13 @@ build_devnet_stack() {
     done
     if (( ${#missing[@]} > 0 )); then
         echo "ERROR: source repos not found under build/repos: ${missing[*]}" >&2
-        echo "       Clone them first (kaspad/kaswallet/rpc-provider on v3.0):" >&2
-        echo "         KASPAD_BRANCH=v3.0 KASWALLET_BRANCH=v3.0 IGRA_RPC_PROVIDER_BRANCH=v3.0 \\" >&2
-        echo "           ./scripts/dev/setup-repos.sh" >&2
+        echo "       Clone them first:" >&2
+        echo "         KASPAD_BRANCH=master KASWALLET_BRANCH=main IGRA_RPC_PROVIDER_BRANCH=main \\" >&2
+        echo "           RETH_BRANCH=igra/v2.5.1 ./scripts/dev/setup-repos.sh" >&2
         exit 1
     fi
 
-    # --override-params-file exists only on the v3.0 line; without it kaspad
+    # Older kaspad sources lack --override-params-file; without it kaspad
     # crash-loops on the unknown argument at runtime.
     local kaspad_args="$repos_dir/rusty-kaspa-private/kaspad/src/args.rs"
     if [[ ! -f "$kaspad_args" ]]; then
@@ -124,8 +123,8 @@ build_devnet_stack() {
     fi
     if ! grep -q 'override-params-file' "$kaspad_args"; then
         echo "ERROR: kaspad sources do not support --override-params-file." >&2
-        echo "       Check out v3.0 in build/repos/rusty-kaspa-private:" >&2
-        echo "         (cd build/repos/rusty-kaspa-private && git checkout v3.0)" >&2
+        echo "       Check out master in build/repos/rusty-kaspa-private:" >&2
+        echo "         (cd build/repos/rusty-kaspa-private && git fetch origin && git checkout master)" >&2
         exit 1
     fi
 

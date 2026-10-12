@@ -24,7 +24,7 @@ x-dependency-watch-volume: &dependency-watch-volume ./scripts/lib/watch-dependen
 
 services:
   kaspad:
-    # Built from source (rusty-kaspa-private v3.0) for --override-params-file.
+    # Built from source (rusty-kaspa-private master) for --override-params-file.
     build:
       context: build/repos/rusty-kaspa-private
       dockerfile: build/Dockerfile.kaspad
