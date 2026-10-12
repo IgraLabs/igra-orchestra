@@ -58,6 +58,9 @@ the drift check.
     commit, dual-published during the migration. IGRA releases do not move it, so it now
     lags the pin.
 
+    Rolling back kaspad: restore a pre-upgrade `kaspad_data` volume snapshot. Re-pinning an
+    older `KASPAD_VERSION` on a volume that a newer image has already opened is not qualified.
+
 ## Execution Layer
 
 | Variable | Where | Description |

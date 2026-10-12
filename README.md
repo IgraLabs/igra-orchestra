@@ -69,9 +69,9 @@ Single-node devnet with finality configurable at setup time via
 `FINALITY_PERIOD_SECONDS` (default 600s → `finality_depth` 6000 at 10 BPS),
 overriding kaspad's 12-hour devnet default.
 
-Built from source: configurable finality uses kaspad's `--override-params-file`,
-available on the `rusty-kaspa-private` v3.0 line only. `setup-devnet.sh` builds
-kaspad, reth, kaswallet and rpc-provider locally and starts the stack.
+Built from source: configurable finality uses kaspad's `--override-params-file`
+(on `rusty-kaspa-private` `master`). `setup-devnet.sh` builds kaspad, reth,
+kaswallet and rpc-provider locally and starts the stack.
 
 `setup-devnet.sh` validates the full configuration and fails fast with a clear
 error summary before any image build or `docker compose up`. Build-time and
@@ -82,8 +82,8 @@ source-revision manifest (branch/SHA/dirty for all four built repos) to
 20, are retained).
 
 ```bash
-# clone sources (kaspad/kaswallet/rpc-provider on v3.0, reth on production):
-KASPAD_BRANCH=v3.0 KASWALLET_BRANCH=v3.0 IGRA_RPC_PROVIDER_BRANCH=v3.0 RETH_BRANCH=production \
+# clone sources (kaspad on master, reth on igra/v2.5.1, kaswallet/rpc-provider on main):
+KASPAD_BRANCH=master KASWALLET_BRANCH=main IGRA_RPC_PROVIDER_BRANCH=main RETH_BRANCH=igra/v2.5.1 \
   ./scripts/dev/setup-repos.sh
 
 # build from source and bring the stack up:
@@ -194,7 +194,7 @@ Follow these steps before the first run:
     # OR
     cp .env.galleon-testnet.example .env && cat versions.galleon-testnet.env >> .env
     # Edit .env and add/modify lines like these:
-    # RETH_BRANCH=production
+    # RETH_BRANCH=igra/v2.5.1
     # KASWALLET_BRANCH=feature/new-api
     # IGRA_RPC_PROVIDER_BRANCH=main
     # KASPAD_BRANCH=for-wallet
