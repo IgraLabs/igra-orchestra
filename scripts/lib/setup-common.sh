@@ -94,7 +94,8 @@ refresh_image_versions_from_env() {
 
     for var in KASPAD_VERSION RETH_VERSION RPC_PROVIDER_VERSION KASWALLET_VERSION NODE_HEALTH_CHECK_VERSION ATAN_UPLOADER_VERSION; do
         value="$(read_env_value "$env_file" "$var")"
-        if [[ -n "$value" ]]; then
+        # Published networks take every pin from .env; devnet keeps its locally built sentinel.
+        if [[ "${VERSIONS_FILE:-}" != versions.devnet.env || -n "$value" ]]; then
             printf -v "$var" '%s' "$value"
         fi
     done
@@ -104,18 +105,25 @@ refresh_image_versions_from_env() {
 }
 
 validate_required_image_versions() {
-    local missing=()
+    local missing=() unpinned=()
     local var value
+    # Docker tag (max 128 chars) plus the multi-arch index digest. Devnet builds its images locally.
+    local pin_re='^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}@sha256:[0-9a-f]{64}$'
 
     for var in KASPAD_VERSION RETH_VERSION RPC_PROVIDER_VERSION KASWALLET_VERSION NODE_HEALTH_CHECK_VERSION ATAN_UPLOADER_VERSION; do
         value="${!var:-}"
         if [[ -z "$value" || "$value" == TODO_* ]]; then
             missing+=("$var")
+        elif [[ "${VERSIONS_FILE:-}" != versions.devnet.env && ! "$value" =~ $pin_re ]]; then
+            unpinned+=("$var")
         fi
     done
 
     if [[ ${#missing[@]} -gt 0 ]]; then
         die "Required image versions are missing or still TODO placeholders: ${missing[*]}. Fill them in .env before re-running setup."
+    fi
+    if [[ ${#unpinned[@]} -gt 0 ]]; then
+        die "Image versions must be pinned as <tag>@sha256:<digest>: ${unpinned[*]}. Copy them from ${VERSIONS_FILE:-the versions file} into .env (see doc/node-operations/environment-reference.md#image-versions)."
     fi
 }
 
