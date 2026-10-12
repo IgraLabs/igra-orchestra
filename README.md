@@ -149,9 +149,12 @@ docker compose --profile backend up -d
 
 ### For Developers (Building from Source)
 
+Source builds use plain `local` tags for kaspad, reth, kaswallet and rpc-provider (set in `.env.dev.example`). Docker refuses to tag a local build with a digest, and a digest pin would make Compose pull the published image instead of your build. Deployed nodes keep the `<tag>@sha256:<digest>` pins (see [Image Versions](#image-versions)).
+
 ```bash
-# 1. Copy environment file
+# 1. Copy the environment file and append the published pins of the two images that are always pulled
 cp .env.dev.example .env
+grep -E '^(NODE_HEALTH_CHECK|ATAN_UPLOADER)_VERSION=' versions.mainnet.env >> .env
 # Keep USE_PREBUILT_IMAGES=false (default)
 
 # 2. Setup all repositories (including proprietary)
