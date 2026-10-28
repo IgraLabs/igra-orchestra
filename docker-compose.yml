@@ -35,10 +35,18 @@ x-default-service: &default-service
 
 x-service-restart-policy: &service-restart-policy "${SERVICE_RESTART_POLICY:-no}"
 x-dependency-watch-volume: &dependency-watch-volume ./scripts/lib/watch-dependencies.sh:/app/watch-dependencies.sh:ro
+# watch-dependencies.sh settings. Empty means the script's own default; kaspad
+# and kaswallet use list-style environments and name them individually.
+x-dependency-watch-environment: &dependency-watch-environment
+  DEPENDENCY_CHECK_INTERVAL_SECONDS: ${DEPENDENCY_CHECK_INTERVAL_SECONDS:-}
+  DEPENDENCY_TCP_TIMEOUT_SECONDS: ${DEPENDENCY_TCP_TIMEOUT_SECONDS:-}
+  DEPENDENCY_HTTP_TIMEOUT_SECONDS: ${DEPENDENCY_HTTP_TIMEOUT_SECONDS:-}
+  DEPENDENCY_FAILURE_THRESHOLD: ${DEPENDENCY_FAILURE_THRESHOLD:-}
 # Shared NETWORK slug parser for kaspad/kaswallet entrypoints.
 x-parse-network-slug-volume: &parse-network-slug-volume ./scripts/lib/parse-network-slug.sh:/app/parse-network-slug.sh:ro
 
 x-rpc-provider-environment: &rpc-provider-environment
+  <<: *dependency-watch-environment
   RUST_LOG: ${RPC_PROVIDER_LOG_LEVEL:-${LOG_LEVEL:-info}}
   SERVER_HOST: "0.0.0.0"
   SERVER_PORT: 8535
@@ -132,6 +140,10 @@ x-kaswallet-runtime: &kaswallet-runtime
     - NETWORK
     - KASPAD_HOST
     - KASPAD_GRPC_PORT
+    - DEPENDENCY_CHECK_INTERVAL_SECONDS
+    - DEPENDENCY_TCP_TIMEOUT_SECONDS
+    - DEPENDENCY_HTTP_TIMEOUT_SECONDS
+    - DEPENDENCY_FAILURE_THRESHOLD
     # Operator-facing 4-byte lane namespace (e.g. 97b10000). The entrypoint
     # forwards it to kaswallet-daemon as --subnetwork-id (and hard-fails if
     # unset), mirroring the kaspad --igra-lane-id pattern below so all lane-id
@@ -228,6 +240,10 @@ services:
       - IGRA_ENABLE
       - POST_FORK_LOCK_SCRIPT_PUBKEY
       - LOCK_SCRIPT_FORK_DAA_SCORE
+      - DEPENDENCY_CHECK_INTERVAL_SECONDS
+      - DEPENDENCY_TCP_TIMEOUT_SECONDS
+      - DEPENDENCY_HTTP_TIMEOUT_SECONDS
+      - DEPENDENCY_FAILURE_THRESHOLD
       - RUST_LOG=${KASPAD_LOG_LEVEL:-${LOG_LEVEL:-info}}
     entrypoint:
       - sh
@@ -857,6 +873,7 @@ services:
     restart: *service-restart-policy
     profiles: ["frontend-w1", "frontend-w2", "frontend-w3", "frontend-w4", "frontend-w5", "frontend-w6", "frontend-w7", "frontend-w8", "frontend-w9", "frontend-w10", "frontend-w11", "frontend-w12", "frontend-w13", "frontend-w14", "frontend-w15", "frontend-w16", "frontend-w17", "frontend-w18", "frontend-w19", "frontend-w20"]
     container_name: traefik
+    environment: *dependency-watch-environment
     # Block startup until at least one rpc-provider replica is HTTP-ready
     # (its healthcheck now probes /health, not just TCP). This eliminates the
     # boot race where watch-dependencies.sh would give up before rpc-provider
