@@ -483,8 +483,10 @@ print_summary() {
     echo "NOTE: kaswallet services may NOT start until kaspad completes IBD sync."
     echo "      This typically takes 4-6 hours for initial sync."
     echo
-    echo "Core services exit when a required upstream dependency disappears."
-    echo "Mainnet templates restart them automatically; testnet and dev do not."
+    echo "Core services exit when a required upstream dependency stays unavailable for"
+    echo "DEPENDENCY_FAILURE_THRESHOLD consecutive checks (default 3). Docker restarts them"
+    echo "only if SERVICE_RESTART_POLICY allows it (unless-stopped in the mainnet and Galleon"
+    echo "templates); when it is no or missing from .env, they stay down."
     echo
     echo "Useful commands:"
     echo "  docker compose logs -f kaspad                   # Monitor kaspad sync progress"
