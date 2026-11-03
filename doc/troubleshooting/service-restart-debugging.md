@@ -7,7 +7,7 @@ Use this guide when a service unexpectedly exits, keeps restarting, or appears t
 There are two layers involved:
 
 1. `scripts/lib/watch-dependencies.sh`
-   This wrapper waits for declared dependencies before starting the real process. If a dependency disappears later, it stops the child process and exits with status `1`.
+   This wrapper waits for declared dependencies before starting the real process. While the process runs, a failed check is logged and retried; after `DEPENDENCY_FAILURE_THRESHOLD` (default 3) consecutive failed checks it stops the child and exits with status `1`. See [Dependency Watchdog](#dependency-watchdog).
 
 2. Docker restart policy
    Most core services in `docker-compose.yml` use `SERVICE_RESTART_POLICY`.
@@ -17,6 +17,14 @@ Default behavior by environment:
 - Mainnet: `SERVICE_RESTART_POLICY=unless-stopped`
 - Galleon testnet: `SERVICE_RESTART_POLICY=unless-stopped`
 - Dev: `SERVICE_RESTART_POLICY=no`
+- Not set in `.env`: Compose falls back to `no`
+
+A missing `SERVICE_RESTART_POLICY` line and an explicit `no` behave the same: after the watchdog stops a service, it stays down until someone starts it. Check what a node actually runs with:
+
+```bash
+docker inspect -f '{{.Name}} {{.HostConfig.RestartPolicy.Name}}' \
+  kaspad execution-layer traefik $(docker ps -a --format '{{.Names}}' | grep -E '^(kaswallet|rpc-provider)-')
+```
 
 Two services currently pin `restart: unless-stopped` directly in Compose:
 
@@ -104,6 +112,76 @@ docker events --since 30m --filter container=rpc-provider-0
 
 This helps confirm whether Docker restarted the container or whether it simply stayed up and kept polling for dependencies.
 
+## Dependency Watchdog
+
+### What a check is
+
+- `--tcp` opens a TCP connection to the host and port, then closes it. It does not send JSON-RPC, and it does not touch the Engine API (port 8551). A passing check only means the port accepted a connection.
+- `--http` and `--http-any` request the URL with `wget --spider` and pass on a successful response.
+- A check round tests every declared dependency in order. The round fails at the first dependency that fails.
+
+### When the child is stopped
+
+- Before the child starts, the wrapper waits as long as it takes for one fully successful round.
+- Once the child runs, a failed round is logged and retried. After `DEPENDENCY_FAILURE_THRESHOLD` consecutive failed rounds the wrapper sends the child `SIGTERM`, waits for it to exit, and exits with status `1`.
+- One fully successful round resets the count. Failures of different dependencies in consecutive rounds still count together.
+- `DEPENDENCY_FAILURE_THRESHOLD=1` restores the old behaviour of stopping on the first failed check.
+
+Why the threshold exists: on a loaded node, a single probe once overran its 2 s deadline while the dependency kept running, and stopping on the first failure turned that into a restart cascade (kaspad needs about 90 s to shut down, and every kaswallet followed it). What delayed that probe (CPU scheduling, memory paging, I/O or the network) was never established.
+
+The default of 3 matches the Compose healthchecks' `retries: 3`. It tolerates up to two failed rounds followed by a success, while a dependency that stays down still stops the service. It is a provisional value: confirm it during staged validation before relying on it.
+
+### Settings
+
+Set these in `.env`. Compose passes them to kaspad, every kaswallet and rpc-provider, and traefik. They take effect when the containers are recreated (see [Rolling Out Watchdog Changes](#rolling-out-watchdog-changes)). Values are whole numbers; an invalid value falls back to the default and is reported once at startup. The devnet compose file does not pass them through, so devnet always uses the defaults.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DEPENDENCY_CHECK_INTERVAL_SECONDS` | 5 | Pause after each check round |
+| `DEPENDENCY_TCP_TIMEOUT_SECONDS` | 2 | Deadline for one TCP connect |
+| `DEPENDENCY_HTTP_TIMEOUT_SECONDS` | 2 | `wget` timeout for one HTTP request |
+| `DEPENDENCY_FAILURE_THRESHOLD` | 3 | Consecutive failed rounds before the child is stopped |
+
+### How long until a stop
+
+The interval is a pause after each round, not a fixed schedule. With the defaults and one TCP dependency:
+
+- A refused connection fails at once, so the third failed round comes about 10 s after the first.
+- A connection that never completes uses its full 2 s deadline each round, so the stop comes about 16 s after the first failed round starts.
+- Host scheduling delays add to both.
+
+For traefik's `--http-any`, a round where every backend hangs costs about `configured workers × DEPENDENCY_HTTP_TIMEOUT_SECONDS`. Backends that are not configured fail fast on name resolution.
+
+### Log lines
+
+| Line | Meaning |
+|---|---|
+| `watching dependencies for <command>: check every 5s, ...` | Effective settings, printed once at start |
+| `<reason>; waiting before starting <command>` | The child has not started; logged at the first failure and whenever the reason changes |
+| `still waiting: <reason> (N failed checks)` | Reminder every 60 failed checks while waiting to start |
+| `dependencies ready; starting <command>` | Startup gating passed |
+| `<reason>; check 1/3 failed, retrying` | First failure of a streak while the child runs; repeats of the same reason are not logged |
+| `<reason>; check 2/3 failed, retrying` | A later failure in the same streak whose reason differs from the previous one |
+| `dependencies ready again after N failed check(s)` | The streak ended without a stop |
+| `<reason>; check 3/3 failed, stopping <command>` | The wrapper stopped the child |
+
+Runtime failure lines end with `host pressure avg10: cpu=... memory=... io=...` where the kernel exposes `/proc/pressure`.
+
+### Failure reasons
+
+A reason looks like `execution-layer is unavailable at execution-layer:8545 (tcp connect refused)`.
+
+| Reason | Meaning |
+|---|---|
+| `tcp connect refused` | Nothing listens on the port, for example the service is restarting |
+| `name resolution failed` | The name does not resolve, for example the container is stopped or removed |
+| `no tcp connect within Ns` | No connection before the deadline. Either the dependency did not answer, or the probe itself could not run in time on a loaded host; check the `host pressure` values on the same line |
+| `took Xms against a Ns deadline, watcher was delayed` | Appended when a probe ended long after its deadline. The probe is killed at the deadline, so the watcher or the probe was not scheduled on time: suspect host CPU, memory or I/O pressure rather than the dependency |
+| `http connect refused`, `http request timed out`, `http error HTTP/1.1 503 ...` | BusyBox `wget` (traefik) results |
+| `wget exit N` | GNU `wget` prints nothing with `--quiet`; only its exit status is known |
+
+Limitations: a name lookup that hangs, a TCP connect that hangs, and a probe starved of CPU before it connects all end as `no tcp connect within Ns`. The `watcher was delayed` note only appears when the check overruns its deadline by more than 500 ms, so its absence does not rule out host pressure.
+
 ## How To Tell What Happened
 
 ### Service is waiting for a dependency
@@ -112,8 +190,8 @@ Typical signals:
 
 - `docker compose ps` shows the container as `Up`
 - `restart_count=0`
-- logs repeatedly show `[watch-dependencies] ... unavailable ...`
-- you do not see the real application startup logs yet
+- logs show `[watch-dependencies] ... waiting before starting ...`, then `still waiting: ...` reminders
+- logs do not show `dependencies ready; starting ...` yet
 
 This means the wrapper is still running and the child command has not started.
 
@@ -123,9 +201,9 @@ Typical signals:
 
 - `docker compose ps` shows `Exited`
 - `restart_count=0`
-- logs end with a dependency-loss message from `watch-dependencies.sh`
+- logs end with `[watch-dependencies] ... check 3/3 failed, stopping ...`
 
-This is expected when restart policy is `no`.
+This is expected when the restart policy is `no` or `SERVICE_RESTART_POLICY` is missing from `.env`.
 
 ### Service restarted after an error
 
@@ -168,11 +246,12 @@ If you switch to `LOGGING_DRIVER=syslog`, persistence depends on the host loggin
 
 ## Common Signatures
 
-### `[watch-dependencies] execution-layer is unavailable at execution-layer:8545`
+### `[watch-dependencies] execution-layer is unavailable at execution-layer:8545 (...)`
 
 Meaning:
 
-- the wrapper could not reach the execution layer TCP endpoint
+- a TCP connect to the execution layer failed; the reason in brackets says how (see [Failure reasons](#failure-reasons))
+- `check 1/3 failed, retrying`: the service keeps running; a following `dependencies ready again` line means it recovered
 
 What to check:
 
@@ -182,11 +261,11 @@ docker compose logs --timestamps --since 15m execution-layer
 docker inspect -f 'restart_count={{.RestartCount}} status={{.State.Status}}' execution-layer
 ```
 
-### `[watch-dependencies] rpc-backends has no healthy endpoints in ...`
+### `[watch-dependencies] rpc-backends has no healthy endpoints (20 checked, first ...)`
 
 Meaning:
 
-- none of the configured RPC health URLs responded successfully
+- none of the RPC health URLs responded successfully; the line names the first URL and why it failed
 
 What to check:
 
@@ -212,23 +291,39 @@ Correct pattern:
 ./scripts/lib/watch-dependencies.sh -- /bin/true
 ```
 
-### Repeated dependency messages every few seconds
+### `[watch-dependencies] ignoring invalid <setting>=<value>; using N`
 
 Meaning:
 
-- the wrapper is still polling and has not started the child process yet
+- a setting is not a positive whole number, so the default applies. `<setting>` is the variable name, or `check interval` for `DEPENDENCY_CHECK_INTERVAL_SECONDS` and `--interval`
 
-The poll interval is controlled by:
+## Rolling Out Watchdog Changes
+
+Changing the watchdog settings, or the Compose file that passes them, recreates kaspad, every kaswallet and rpc-provider, and traefik. Docker's default stop timeout is 10 s, and kaspad can need about 90 s to shut down cleanly, so give it time:
 
 ```bash
-DEPENDENCY_CHECK_INTERVAL_SECONDS
+# N is the node's worker count, the same frontend-wN profile the node already runs.
+docker compose --profile backend --profile frontend-w<N> up -d --no-build --timeout 120
 ```
 
-Optional timeout knobs:
+Stage the rollout:
+
+1. CI: `scripts/ci/test-watch-dependencies.sh` and the Compose checks pass.
+2. One node first. Read back the effective settings (`docker logs kaspad 2>&1 | grep 'watching dependencies'`) and the restart policy (command above). Then watch the `check k/3 failed, retrying`, `ready again` and `stopping` lines, `RestartCount`, and host pressure for an agreed period.
+3. Expand to the remaining nodes only if no unexpected stops occurred.
+
+Roll back by setting `DEPENDENCY_FAILURE_THRESHOLD=1` in `.env` and recreating the containers with the same `docker compose --profile backend --profile frontend-w<N> up -d --no-build --timeout 120`, which restores stop-on-first-failure. To return to the previous script entirely, revert the change and recreate.
+
+To check process cleanup with the wrapper as PID 1, as in the containers, run it locally, never on a live node:
 
 ```bash
-DEPENDENCY_TCP_TIMEOUT_SECONDS
-DEPENDENCY_HTTP_TIMEOUT_SECONDS
+docker run -d --name watch-pid1 \
+  -v "$PWD/scripts/lib/watch-dependencies.sh:/app/watch-dependencies.sh:ro" \
+  debian:bookworm-slim sh /app/watch-dependencies.sh --tcp dep 127.0.0.1 1 -- sleep infinity
+sleep 30; docker top watch-pid1   # only the wrapper (PID 1) and at most one probe or sleep
+docker stop watch-pid1            # returns at once
+docker inspect -f '{{.State.ExitCode}}' watch-pid1   # 143
+docker rm watch-pid1
 ```
 
 ## Recommended Debug Flow

@@ -11,6 +11,10 @@ All operational variables across the stack.
 | `W{N}_KASWALLET_PASSWORD` | `.env` | Wallet password for worker N |
 | `WALLET_API_BASICAUTH` | `.env` | BasicAuth credentials for wallet balance API (htpasswd format, `$$`-escaped) |
 | `RPC_READ_ONLY` | `.env` | Transaction submission enabled by default (`false`); set to `true` for read-only RPC |
+| `SERVICE_RESTART_POLICY` | `.env` | Docker restart policy for core services. The mainnet and Galleon templates set `unless-stopped`, the dev template `no`; when unset, Compose uses `no` |
+| `DEPENDENCY_FAILURE_THRESHOLD` | `.env` | Consecutive failed dependency checks before a running core service is stopped (default: 3; 1 stops on the first failure) |
+| `DEPENDENCY_CHECK_INTERVAL_SECONDS` | `.env` | Pause after each dependency check round, in seconds (default: 5) |
+| `DEPENDENCY_TCP_TIMEOUT_SECONDS`, `DEPENDENCY_HTTP_TIMEOUT_SECONDS` | `.env` | Per-probe timeouts in seconds (default: 2). See [Service Restart Debugging](../troubleshooting/service-restart-debugging.md#dependency-watchdog) |
 
 ## Image Versions
 

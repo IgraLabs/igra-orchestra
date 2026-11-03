@@ -91,6 +91,42 @@ jobs:
         run: |
           set -e
           python3 scripts/ci/test-compose-invariants.py compose.json
+      - name: Assert watchdog settings reach every watched service
+        run: |
+          set -e
+          # Distinct values, so a missing or misspelled pass-through cannot
+          # match a default by accident.
+          DEPENDENCY_FAILURE_THRESHOLD=4 DEPENDENCY_CHECK_INTERVAL_SECONDS=11 \
+          DEPENDENCY_TCP_TIMEOUT_SECONDS=7 DEPENDENCY_HTTP_TIMEOUT_SECONDS=9 \
+            docker compose --profile '*' config --format json > compose-watch.json
+          python3 - compose-watch.json <<'PY'
+          import json, sys
+          services = json.load(open(sys.argv[1]))["services"]
+          expected = {
+              "DEPENDENCY_FAILURE_THRESHOLD": "4",
+              "DEPENDENCY_CHECK_INTERVAL_SECONDS": "11",
+              "DEPENDENCY_TCP_TIMEOUT_SECONDS": "7",
+              "DEPENDENCY_HTTP_TIMEOUT_SECONDS": "9",
+          }
+          watched = sorted(
+              name for name, service in services.items()
+              if "watch-dependencies.sh" in " ".join(service.get("entrypoint") or [])
+          )
+          missing = {"kaspad", "kaswallet-0", "rpc-provider-0", "traefik"} - set(watched)
+          if missing:
+              sys.exit(f"FAIL: expected watched services not found: {sorted(missing)}")
+          wrong = [
+              (name, key, (services[name].get("environment") or {}).get(key))
+              for name in watched
+              for key, value in expected.items()
+              if (services[name].get("environment") or {}).get(key) != value
+          ]
+          if wrong:
+              sys.exit(f"FAIL: {len(wrong)} watchdog settings not passed through, e.g. {wrong[:8]}")
+          if services["rpc-provider-3"]["environment"].get("KASWALLET_HOST") != "kaswallet-3":
+              sys.exit("FAIL: merging the watchdog settings dropped rpc-provider-3's own environment")
+          print(f"ok: {len(watched)} watched services receive the watchdog settings")
+          PY
       - name: Assert HTTPS fallthrough and health/RPC routing
         run: |
           python3 - <<'PY'
@@ -236,6 +272,28 @@ jobs:
       - name: Every pin is <tag>@sha256:<digest> and its tag resolves to that digest
         run: python3 scripts/ci/check-image-pins.py
 
+  watch-dependencies-tests:
+    name: watch-dependencies lifecycle (${{ matrix.shell }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # dash runs the watcher in the Debian-based images; BusyBox ash (and its
+        # wget applet) runs it in traefik.
+        shell: ["sh", "busybox sh"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install BusyBox
+        if: matrix.shell == 'busybox sh'
+        run: sudo apt-get update && sudo apt-get install -y busybox
+      - name: Run the lifecycle tests
+        env:
+          WATCH_SHELL: ${{ matrix.shell }}
+        run: bash scripts/ci/test-watch-dependencies.sh scripts/lib/watch-dependencies.sh
+
   slug-parser-tests:
     name: NETWORK slug parser - reject malformed inputs
     runs-on: ubuntu-latest
@@ -308,6 +366,7 @@ jobs:
             scripts/lib/parse-network-slug.sh \
             scripts/lib/setup-common.sh \
             scripts/lib/watch-dependencies.sh \
+            scripts/ci/test-watch-dependencies.sh \
             scripts/setup-mainnet.sh \
             scripts/setup-galleon-testnet.sh \
             scripts/dev/setup-repos.sh \
